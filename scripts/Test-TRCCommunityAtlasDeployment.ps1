@@ -2,6 +2,8 @@
 param(
     [ValidateRange(1024, 65535)]
     [int]$Port = 9095,
+    [ValidateRange(1024, 65535)]
+    [int]$ReconfiguredPort = 9096,
     [string]$NodePath = '',
     [string]$TestRoot = ''
 )
@@ -18,9 +20,14 @@ $installRoot = Join-Path $TestRoot 'program'
 $dataRoot = Join-Path $TestRoot 'instance\data'
 $installerPath = Join-Path $PSScriptRoot 'Install-TRCCommunityAtlas.ps1'
 
-$existing = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $Port) | Select-Object -First 1
-if ($existing) {
-    throw "Le port de test $Port est deja occupe. Aucun deploiement n'a ete lance."
+if ($Port -eq $ReconfiguredPort) {
+    throw 'Le port initial et le port de reconfiguration doivent etre differents.'
+}
+foreach ($candidatePort in @($Port, $ReconfiguredPort)) {
+    $existing = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $candidatePort) | Select-Object -First 1
+    if ($existing) {
+        throw "Le port de test $candidatePort est deja occupe. Aucun deploiement n'a ete lance."
+    }
 }
 
 $arguments = @{
@@ -37,6 +44,8 @@ if ($NodePath) {
 }
 
 $deployment = $null
+$runningDeployment = $null
+$reconfiguredDeployment = $null
 try {
     $deploymentJson = & $installerPath @arguments
     $deployment = $deploymentJson | ConvertFrom-Json
@@ -57,10 +66,62 @@ try {
         throw 'Le repertoire de donnees configure ne correspond pas au repertoire isole demande.'
     }
 
+    $databasePath = Join-Path $dataRoot 'atlas.sqlite'
+    Stop-Process -Id ([int]$deployment.processId)
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 200
+        $initialListener = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $Port) | Select-Object -First 1
+    } while ($initialListener -and (Get-Date) -lt $deadline)
+    $databaseHashBefore = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+
+    $runningJson = & $installerPath @arguments
+    $runningDeployment = $runningJson | ConvertFrom-Json
+    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status" -TimeoutSec 5 | Out-Null
+
+    $reconfigurationArguments = @{
+        InstallRoot = $installRoot
+        DataRoot = $dataRoot
+        Port = $ReconfiguredPort
+        BindAddress = '127.0.0.1'
+        SkipAutostart = $true
+        SkipShortcuts = $true
+        Json = $true
+    }
+    if ($NodePath) {
+        $reconfigurationArguments.NodePath = $NodePath
+    }
+    $reconfiguredJson = & $installerPath @reconfigurationArguments
+    $reconfiguredDeployment = $reconfiguredJson | ConvertFrom-Json
+    $reconfiguredStatus = Invoke-RestMethod -Uri "http://127.0.0.1:$ReconfiguredPort/api/status" -TimeoutSec 5
+    $reconfiguredConfig = Get-Content -LiteralPath $reconfiguredDeployment.configPath -Raw | ConvertFrom-Json
+    if ($reconfiguredStatus.version -ne $deployment.version -or [int]$reconfiguredConfig.port -ne $ReconfiguredPort) {
+        throw 'La reconfiguration du port Atlas n a pas ete appliquee.'
+    }
+    $installedConfigurator = Join-Path $installRoot 'scripts\Configure-TRCCommunityAtlas.ps1'
+    $rememberedConfiguration = (& $installedConfigurator -DefaultsOnly | ConvertFrom-Json)
+    if ([int]$rememberedConfiguration.port -ne $ReconfiguredPort -or [IO.Path]::GetFullPath([string]$rememberedConfiguration.dataRoot) -ne [IO.Path]::GetFullPath($dataRoot)) {
+        throw 'Le configurateur installe ne recharge pas la configuration active.'
+    }
+    Stop-Process -Id ([int]$reconfiguredDeployment.processId)
+    $deadline = (Get-Date).AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 200
+        $reconfiguredListener = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $ReconfiguredPort) | Select-Object -First 1
+    } while ($reconfiguredListener -and (Get-Date) -lt $deadline)
+    $databaseHashAfter = (Get-FileHash -LiteralPath $databasePath -Algorithm SHA256).Hash
+    if ($databaseHashBefore -ne $databaseHashAfter) {
+        throw 'La reconfiguration a modifie la base SQLite.'
+    }
+
     [pscustomobject]@{
         Result = 'PASS'
         Version = $status.version
         Url = $deployment.url
+        ReconfiguredUrl = $reconfiguredDeployment.url
+        Reconfiguration = 'PASS'
+        ConfiguratorReload = 'PASS'
+        DatabasePreserved = $true
         Initialized = [bool]$status.initialized
         Storage = $status.storage
         ProcessId = [int]$deployment.processId
@@ -70,12 +131,15 @@ try {
     }
 }
 finally {
-    if ($deployment -and $deployment.processId) {
-        Stop-Process -Id ([int]$deployment.processId) -ErrorAction SilentlyContinue
+    $processToStop = if ($reconfiguredDeployment -and $reconfiguredDeployment.processId) { $reconfiguredDeployment.processId } elseif ($runningDeployment -and $runningDeployment.processId) { $runningDeployment.processId } elseif ($deployment -and $deployment.processId) { $deployment.processId } else { $null }
+    if ($processToStop) {
+        Stop-Process -Id ([int]$processToStop) -ErrorAction SilentlyContinue
         $deadline = (Get-Date).AddSeconds(10)
         do {
             Start-Sleep -Milliseconds 200
-            $listener = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $Port) | Select-Object -First 1
-        } while ($listener -and (Get-Date) -lt $deadline)
+            $listeners = @($Port, $ReconfiguredPort) | ForEach-Object {
+                netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $_) | Select-Object -First 1
+            } | Where-Object { $_ }
+        } while ($listeners -and (Get-Date) -lt $deadline)
     }
 }

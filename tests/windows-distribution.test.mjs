@@ -10,9 +10,10 @@ const source = (relativePath) => fs.readFileSync(path.join(root, relativePath), 
 test("the Windows installer keeps program and instance data separate", () => {
   const wrapper = source("Install-Atlas.cmd");
   const installer = source("scripts/Install-TRCCommunityAtlas.ps1");
+  const configurator = source("scripts/Configure-TRCCommunityAtlas.ps1");
 
+  assert.match(wrapper, /Configure-TRCCommunityAtlas\.ps1/);
   assert.match(wrapper, /Install-TRCCommunityAtlas\.ps1/);
-  assert.match(wrapper, /-OpenBrowser/);
   assert.match(installer, /Programs\\TRC Community Atlas/);
   assert.match(installer, /TRC Community Atlas\\data/);
   assert.match(installer, /--data/);
@@ -20,6 +21,10 @@ test("the Windows installer keeps program and instance data separate", () => {
   assert.match(installer, /LogonType S4U/);
   assert.doesNotMatch(installer, /192\.168\.50\.|Administrateur\.AD-01/);
   assert.doesNotMatch(installer, /New-NetFirewallRule|Set-DnsClient|netsh/);
+  assert.match(configurator, /NumericUpDown/);
+  assert.match(configurator, /Tester le port/);
+  assert.match(configurator, /aucun serveur ni port de base de donnees/);
+  assert.match(configurator, /AllowedOrigin = \$origins/);
 });
 
 test("the portable package includes a runtime, a hash and a real port 9095 deployment test", () => {
@@ -32,8 +37,11 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(builder, /SHA256SUMS\.txt/);
   assert.match(builder, /Compress-Archive/);
   assert.match(deploymentTest, /\[int\]\$Port = 9095/);
+  assert.match(deploymentTest, /\[int\]\$ReconfiguredPort = 9096/);
   assert.match(deploymentTest, /api\/status/);
   assert.match(deploymentTest, /Result = 'PASS'/);
+  assert.match(deploymentTest, /DatabasePreserved = \$true/);
+  assert.match(deploymentTest, /ConfiguratorReload = 'PASS'/);
   assert.match(workflow, /Test-TRCCommunityAtlasDeployment\.ps1/);
   assert.match(workflow, /-Port 9095/);
   assert.match(workflow, /actions\/upload-artifact@v7/);

@@ -35,7 +35,7 @@ jobs:
       - name: Run Atlas test suite
         run: npm test
 
-      - name: Test a clean Windows deployment on port 9095
+      - name: Test deployment on port 9095 and reconfiguration to 9096
         shell: pwsh
         run: |
           ./scripts/Test-TRCCommunityAtlasDeployment.ps1 `

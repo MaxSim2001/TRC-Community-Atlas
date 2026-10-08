@@ -1,5 +1,18 @@
 # Notes de version — TRC Community Atlas
 
+## 0.13.1 — Configuration complète du déploiement
+
+- configurateur Windows graphique ouvert par `Installer-Atlas.cmd`;
+- choix du port Atlas, de l’adresse d’écoute, des origines HTTPS, des dossiers,
+  du canal et des options de démarrage;
+- vérification locale de la disponibilité du port sans exploration du réseau;
+- rappel intégré que SQLite est un fichier local sans port supplémentaire;
+- reconfiguration contrôlée d’une instance active avec conservation vérifiée de
+  la base SQLite;
+- raccourci distinct « Configurer TRC Community Atlas » dans le menu Démarrer;
+- refus des dossiers de données UNC afin d’éviter un SQLite sur partage réseau;
+- test automatisé du passage du port 9095 au port 9096.
+
 ## 0.13.0 — Installation Windows simplifiée
 
 - ajout de `Installer-Atlas.cmd` pour une installation guidée en un double-clic;

@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Version actuelle : **0.13.0**.
+Version actuelle : **0.13.1**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -15,15 +15,24 @@ l’artéfact d’une exécution GitHub Actions réussie :
 
 1. décompresser complètement le fichier ZIP;
 2. double-cliquer sur `Installer-Atlas.cmd`;
-3. laisser Atlas démarrer en arrière-plan;
-4. créer le premier compte administrateur et activer son MFA dans le navigateur.
+3. choisir dans le configurateur le port, l’accès local ou réseau, les dossiers,
+   les origines HTTPS et les options de démarrage;
+4. cliquer sur **Installer Atlas**;
+5. créer le premier compte administrateur et activer son MFA dans le navigateur.
 
 L’installation utilisateur par défaut place le programme dans
 `%LOCALAPPDATA%\Programs\TRC Community Atlas` et les données dans
 `%LOCALAPPDATA%\TRC Community Atlas\data`. Relancer l’installateur répare le
 programme sans effacer les comptes, le MFA, le coffre ou les pièces jointes.
 Atlas crée aussi un raccourci dans le menu Démarrer et se relance en arrière-plan
-au démarrage de Windows ou à la connexion, selon les droits disponibles.
+au démarrage de Windows ou à la connexion, selon les droits disponibles. Le
+raccourci **Configurer TRC Community Atlas** permet ensuite de modifier ces
+choix; un changement de port conserve la même base de données.
+
+Atlas utilise un seul port HTTP pour l’interface Web et son API. SQLite est un
+fichier local et ne demande ni serveur, ni compte, ni port de base de données.
+Avec un proxy inverse, le public utilise généralement le port HTTPS `443`, puis
+le proxy transmet vers l’unique port Atlas choisi dans le configurateur.
 
 Le paquet GitHub Actions est encore destiné aux essais. La Release stable signée
 et le mécanisme de mise à jour avec sauvegarde et retour arrière seront publiés
@@ -152,5 +161,6 @@ En récupération hors bande, exécuter d’abord `atlas-break-glass.mjs` avec `
 - Aucun lien ni aucune dépendance à TRC Account.
 - TRC RMM demeure autonome; son connecteur et son SSO seront des options configurables et désactivées par défaut.
 - Aucun service Internet ni télémétrie. La future vérification de version GitHub sera le seul appel sortant prévu, manuel par défaut et configurable.
-- Port local par défaut : `9092`, modifiable avec `-Port`.
+- Un seul port Atlas, `9092` par défaut, configurable graphiquement ou avec
+  `-Port`; la base SQLite locale n’ouvre aucun port supplémentaire.
 

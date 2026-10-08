@@ -8,7 +8,11 @@ echo   TRC Community Atlas - Installation Windows
 echo ============================================================
 echo.
 
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Install-TRCCommunityAtlas.ps1" -OpenBrowser %*
+if "%~1"=="" (
+  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Configure-TRCCommunityAtlas.ps1"
+) else (
+  powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\Install-TRCCommunityAtlas.ps1" %*
+)
 set "ATLAS_EXIT=%ERRORLEVEL%"
 
 echo.

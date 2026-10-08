@@ -11,6 +11,8 @@ param(
 
     [string[]]$AllowedOrigin = @(),
     [string]$NodePath = '',
+    [ValidateSet('stable', 'beta')]
+    [string]$Channel = 'stable',
     [switch]$SkipAutostart,
     [switch]$SkipShortcuts,
     [switch]$SkipStart,
@@ -106,6 +108,43 @@ if (-not $DataRoot) {
 $sourceRoot = [IO.Path]::GetFullPath($sourceRoot)
 $InstallRoot = [IO.Path]::GetFullPath($InstallRoot)
 $DataRoot = [IO.Path]::GetFullPath($DataRoot)
+if ($DataRoot.StartsWith('\\')) {
+    throw 'Le dossier de donnees doit etre sur un disque local. SQLite ne doit pas etre installe sur un partage reseau.'
+}
+$instanceRoot = Split-Path -Parent $DataRoot
+$configDirectory = Join-Path $instanceRoot 'config'
+$logsDirectory = Join-Path $instanceRoot 'logs'
+$configPath = Join-Path $configDirectory 'instance.json'
+$previousConfiguration = $null
+$previousConfigPath = $null
+$configCandidates = [Collections.Generic.List[string]]::new()
+foreach ($pointerPath in @((Join-Path $sourceRoot 'instance-location.json'), (Join-Path $InstallRoot 'instance-location.json'))) {
+    if (-not (Test-Path -LiteralPath $pointerPath -PathType Leaf)) {
+        continue
+    }
+    try {
+        $pointer = Get-Content -LiteralPath $pointerPath -Raw | ConvertFrom-Json
+        if ($pointer.configPath) {
+            $configCandidates.Add([string]$pointer.configPath)
+        }
+    }
+    catch {
+        throw "Le pointeur de configuration Atlas est illisible : $pointerPath"
+    }
+}
+$configCandidates.Add($configPath)
+foreach ($candidateConfigPath in ($configCandidates | Select-Object -Unique)) {
+    if (Test-Path -LiteralPath $candidateConfigPath -PathType Leaf) {
+        try {
+            $previousConfiguration = Get-Content -LiteralPath $candidateConfigPath -Raw | ConvertFrom-Json
+            $previousConfigPath = $candidateConfigPath
+            break
+        }
+        catch {
+            throw "La configuration Atlas existante est illisible : $candidateConfigPath"
+        }
+    }
+}
 $sourceServerPath = Join-Path $sourceRoot 'server.mjs'
 if (-not (Test-Path -LiteralPath $sourceServerPath -PathType Leaf)) {
     throw "Le paquet Atlas est incomplet : server.mjs est introuvable dans $sourceRoot."
@@ -130,6 +169,28 @@ foreach ($origin in $AllowedOrigin) {
 }
 
 $runtimeSource = Resolve-NodeRuntime -RequestedPath $NodePath -SourceRoot $sourceRoot
+
+if ($previousConfiguration -and $previousConfiguration.port -and $previousConfiguration.installRoot) {
+    $previousPort = [int]$previousConfiguration.port
+    $previousServer = Join-Path ([string]$previousConfiguration.installRoot) 'server.mjs'
+    $previousListener = Get-ListeningProcessId -ListenerPort $previousPort
+    if ($previousListener -and ($previousPort -ne $Port -or [IO.Path]::GetFullPath([string]$previousConfiguration.installRoot) -ne $InstallRoot)) {
+        $previousProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $previousListener" -ErrorAction SilentlyContinue
+        if (-not $previousProcess -or $previousProcess.CommandLine -notlike "*$previousServer*") {
+            throw "L'ancien port Atlas $previousPort est maintenant utilise par un autre processus ($previousListener). Arretez-le avant de reconfigurer Atlas."
+        }
+        Write-Step "Arret de l'ancienne instance Atlas sur le port $previousPort avant la reconfiguration."
+        Stop-Process -Id $previousListener
+        $deadline = (Get-Date).AddSeconds(15)
+        do {
+            Start-Sleep -Milliseconds 250
+        } while ((Get-ListeningProcessId -ListenerPort $previousPort) -and (Get-Date) -lt $deadline)
+        if (Get-ListeningProcessId -ListenerPort $previousPort) {
+            throw "L'ancienne instance Atlas sur le port $previousPort ne s'est pas arretee correctement."
+        }
+    }
+}
+
 $existingListener = Get-ListeningProcessId -ListenerPort $Port
 if ($existingListener) {
     $expectedServer = Join-Path $InstallRoot 'server.mjs'
@@ -186,24 +247,35 @@ if ([IO.Path]::GetFullPath($runtimeSource) -ne [IO.Path]::GetFullPath($runtimeTa
     Copy-Item -LiteralPath $runtimeSource -Destination $runtimeTarget -Force
 }
 
-$instanceRoot = Split-Path -Parent $DataRoot
-$configDirectory = Join-Path $instanceRoot 'config'
-$logsDirectory = Join-Path $instanceRoot 'logs'
 New-Item -ItemType Directory -Path $configDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $logsDirectory -Force | Out-Null
-$configPath = Join-Path $configDirectory 'instance.json'
+$installedAt = (Get-Date).ToUniversalTime().ToString('o')
+if ($previousConfiguration -and $previousConfiguration.installedAt) {
+    $installedAt = [string]$previousConfiguration.installedAt
+}
+$taskName = 'TRC Community Atlas'
 $configuration = [ordered]@{
     schemaVersion = 1
     version = $version
-    installedAt = (Get-Date).ToUniversalTime().ToString('o')
+    installedAt = $installedAt
+    updatedAt = (Get-Date).ToUniversalTime().ToString('o')
     installRoot = $InstallRoot
     dataRoot = $DataRoot
     bindAddress = $BindAddress
     port = $Port
     allowedOrigins = @($AllowedOrigin)
-    channel = 'stable'
+    channel = $Channel
+    autostart = -not $SkipAutostart
+    shortcut = -not $SkipShortcuts
+    taskName = $taskName
 }
 $configuration | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $configPath -Encoding UTF8
+$instancePointer = [ordered]@{
+    schemaVersion = 1
+    configPath = $configPath
+    dataRoot = $DataRoot
+}
+$instancePointer | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $InstallRoot 'instance-location.json') -Encoding UTF8
 
 $installedServerPath = Join-Path $InstallRoot 'server.mjs'
 $serverArguments = @(
@@ -217,7 +289,6 @@ foreach ($origin in $AllowedOrigin) {
 }
 $argumentLine = $serverArguments -join ' '
 
-$taskName = "TRC Community Atlas - $Port"
 $autostartMode = 'Desactive pour ce deploiement'
 if (-not $SkipAutostart) {
     Write-Step 'Configuration du demarrage automatique en arriere-plan.'
@@ -251,6 +322,20 @@ if (-not $SkipAutostart) {
         -Description "TRC Community Atlas $version - demarrage local en arriere-plan" `
         -Force | Out-Null
 }
+else {
+    $configuredTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if ($configuredTask) {
+        Disable-ScheduledTask -TaskName $taskName | Out-Null
+        $autostartMode = 'Desactive; la tache Atlas existante a ete conservee mais desactivee'
+    }
+}
+
+if ($previousConfiguration -and $previousConfiguration.taskName -and [string]$previousConfiguration.taskName -ne $taskName) {
+    $legacyTask = Get-ScheduledTask -TaskName ([string]$previousConfiguration.taskName) -ErrorAction SilentlyContinue
+    if ($legacyTask) {
+        Disable-ScheduledTask -TaskName ([string]$previousConfiguration.taskName) | Out-Null
+    }
+}
 
 $browserHost = $BindAddress
 if ($browserHost -eq '0.0.0.0' -or $browserHost -eq '::') {
@@ -271,6 +356,14 @@ if (-not $SkipShortcuts) {
         'IconIndex=0'
         "IconFile=$env:SystemRoot\System32\shell32.dll"
     ) | Set-Content -LiteralPath $shortcutPath -Encoding ASCII
+
+    $configurationShortcutPath = Join-Path $programsDirectory 'Configurer TRC Community Atlas.lnk'
+    $shell = New-Object -ComObject WScript.Shell
+    $configurationShortcut = $shell.CreateShortcut($configurationShortcutPath)
+    $configurationShortcut.TargetPath = Join-Path $InstallRoot 'Install-Atlas.cmd'
+    $configurationShortcut.WorkingDirectory = $InstallRoot
+    $configurationShortcut.Description = 'Modifier le port, les dossiers et le demarrage de TRC Community Atlas'
+    $configurationShortcut.Save()
 }
 
 $atlasProcess = $null
@@ -324,6 +417,7 @@ $result = [ordered]@{
     storage = if ($status) { [string]$status.storage } else { $null }
     autostart = $autostartMode
     taskName = if ($SkipAutostart) { $null } else { $taskName }
+    channel = $Channel
 }
 
 if ($Json) {

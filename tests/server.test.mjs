@@ -35,7 +35,7 @@ function totp(secret) {
 test("local setup, explicit public origin, mandatory MFA, workspace revision and account management", async (context) => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), "trc-atlas-test-"));
   const sessionClock = { now: Date.now() };
-  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.13.0", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
+  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.13.1", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
   let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   let address = server.address();
@@ -66,7 +66,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   let result = await request("/api/status");
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.13.0");
+  assert.equal(result.payload.version, "0.13.1");
   assert.equal(result.payload.storage, "uninitialized");
   assert.match(result.response.headers.get("content-security-policy"), /default-src 'self'/);
 

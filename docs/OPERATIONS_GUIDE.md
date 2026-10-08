@@ -1,6 +1,23 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.13.0
+Version du guide : 0.13.1
+
+## Port et configuration de l’instance
+
+Atlas utilise un seul port pour son interface et son API. SQLite est un fichier
+local et n’ouvre aucun port de base de données. Le port par défaut est `9092`.
+
+Ouvrir **Configurer TRC Community Atlas** dans le menu Démarrer pour relire et
+modifier l’adresse d’écoute, le port, les origines HTTPS, les dossiers, le canal
+ou le démarrage automatique. Un changement de port arrête uniquement le
+processus Atlas identifié, conserve le même dossier `data` et relance le contrôle
+de santé sur la nouvelle adresse. Aucun pare-feu, DNS ou proxy n’est modifié.
+
+L’état enregistré se trouve dans
+`%LOCALAPPDATA%\TRC Community Atlas\config\instance.json` avec les emplacements
+par défaut. Une installation utilisant un dossier de données personnalisé garde
+son fichier `instance.json` à côté de ce dossier et le programme conserve un
+pointeur local vers cette configuration.
 
 ## Configuration initiale du domaine
 

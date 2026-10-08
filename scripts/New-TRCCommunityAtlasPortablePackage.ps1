@@ -60,12 +60,17 @@ TRC Community Atlas $version
 
 1. Decompressez completement cette archive.
 2. Double-cliquez sur Installer-Atlas.cmd.
-3. Atlas demarre en arriere-plan et ouvre l'assistant initial dans votre navigateur.
+3. Choisissez le port, les dossiers et les options dans le configurateur.
+4. Cliquez sur Installer Atlas.
+5. Atlas demarre en arriere-plan et ouvre l'assistant initial dans votre navigateur.
 
 Par defaut :
 - adresse locale : http://127.0.0.1:9092/
 - programme : %LOCALAPPDATA%\Programs\TRC Community Atlas
 - donnees : %LOCALAPPDATA%\TRC Community Atlas\data
+
+Atlas utilise un seul port pour l'interface et l'API.
+SQLite est un fichier local et ne demande aucun port de base de donnees.
 
 Le runtime Node.js est inclus. Aucun compte en ligne ni telemetrie ne sont requis.
 "@ | Set-Content -LiteralPath (Join-Path $packageRoot 'COMMENCER-ICI.txt') -Encoding UTF8
