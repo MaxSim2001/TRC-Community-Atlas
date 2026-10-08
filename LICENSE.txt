@@ -1,0 +1,21 @@
+TRC Community Atlas — avis de licence
+
+TRC Community Atlas est offert selon la licence PolyForm Noncommercial 1.0.0.
+Les conditions officielles et intégrales sont incorporées par référence et
+disponibles à l'adresse suivante :
+
+https://polyformproject.org/licenses/noncommercial/1.0.0
+
+Required Notice: Copyright 2026 TheRisingCloud. All rights reserved.
+
+Cette licence autorise les usages, modifications et redistributions permis à
+des fins non commerciales. Elle n'accorde aucun droit d'exploitation
+commerciale. Toute licence commerciale distincte nécessite l'autorisation
+écrite préalable de TheRisingCloud.
+
+La disponibilité du code source ne fait pas de ce projet un logiciel « open
+source » au sens de l'Open Source Initiative, puisque l'usage commercial est
+restreint.
+
+Les composants tiers conservent leurs propres licences, indiquées dans les avis
+qui les accompagnent.

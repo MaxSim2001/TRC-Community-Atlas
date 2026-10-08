@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">TRC Atlas layered knowledge logo</title>
+  <desc id="desc">Three separated knowledge layers in white and cyan on a deep navy rounded square.</desc>
+
+  <rect width="512" height="512" rx="76" fill="#060A12"/>
+
+  <path fill="#F7F9FC" d="M256 104 379 172 256 239 133 172 256 104Z"/>
+
+  <path fill="#45E1E5" d="M133 253 198 218 256 251 314 218 379 253 256 322 133 253Z"/>
+
+  <path fill="#F7F9FC" d="M133 337 198 302 256 335 314 302 379 337 256 404 133 337Z"/>
+</svg>

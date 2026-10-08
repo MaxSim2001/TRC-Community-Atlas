@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr" data-trc-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QA — File Sharing Atlas</title>
+  <link rel="stylesheet" href="/public/assets/styles.css" />
+</head>
+<body>
+  <div class="console-layout">
+    <aside class="sidebar" id="atlas-navigation">
+      <div class="sidebar-brand"><div class="brand"><img class="atlas-logo sidebar-logo" src="/public/assets/trc-atlas-layers-logo.svg" alt="" /><span><span class="brand-name"><strong>TRC</strong><span>Atlas</span></span><span class="brand-community">Community</span></span></div></div>
+      <div class="instance-card"><span class="instance-initial">A</span><div><strong>Atlas QA</strong><span>Instance locale</span></div><span class="status-dot good"></span></div>
+      <nav aria-label="Navigation principale">
+        <button class="nav-item"><span>Vue d’ensemble</span></button>
+        <button class="nav-item"><span>Organisations</span></button>
+        <div class="nav-group">APPS &amp; SERVICES</div>
+        <button class="nav-item module-link active"><span>File Sharing</span><strong class="nav-count">9</strong><span class="nav-dot"></span></button>
+        <button class="nav-item module-link"><span>LAN</span><strong class="nav-count">5</strong></button>
+        <button class="nav-item module-link"><span>Licensing</span><strong class="nav-count">1</strong></button>
+      </nav>
+      <div class="sidebar-bottom"><div class="local-note"><span>100 % local · aucune télémétrie</span></div><div class="sidebar-user"><span class="avatar">QA</span><div><strong>Technicien QA</strong><span>Administrateur</span></div></div></div>
+    </aside>
+    <div class="content-shell">
+      <header class="topbar"><div class="global-search"><div class="global-search-field"><input type="search" placeholder="Rechercher dans Compagnie Démo…" /></div></div></header>
+      <main id="main-content">
+        <div class="page record-editor-page file-sharing-editor-page">
+          <div class="record-editor-breadcrumbs"><button type="button">Compagnie Démo</button><span>›</span><button type="button">File Sharing</button><span>›</span><span>Nouveau partage</span></div>
+          <form class="record-editor-shell">
+            <header class="record-editor-heading"><div><p class="eyebrow">FILE SHARING</p><h1>Créer un partage de fichiers</h1><p>Documentez le partage, les serveurs qui l’hébergent et ses accès sans quitter l’organisation active.</p></div><button class="icon-button" type="button" aria-label="Fermer">×</button></header>
+            <div class="record-editor-body">
+              <section class="record-editor-section">
+                <header><span class="record-editor-section-icon">▤</span><div><h2>Serveur de fichiers / partage</h2><p>Les chemins et lecteurs restent de la documentation; Atlas ne se connecte pas au serveur.</p></div></header>
+                <div class="record-editor-fields">
+                  <label class="span-2"><span class="field-label">Nom du partage <strong>*</strong></span><input value="Ventes" /><small>Nom court et reconnaissable dans la recherche Atlas.</small></label>
+                  <label class="span-2">Description du partage<textarea rows="3">Documents et informations de l’équipe des ventes.</textarea></label>
+                  <div class="file-sharing-server-picker span-2"><label>Serveurs</label><div class="file-sharing-server-search"><input placeholder="Rechercher une configuration dans Compagnie Démo…" value="srv" /></div><small>Associez les configurations qui hébergent ce partage. Atlas créera automatiquement les liens inverses.</small><div class="file-sharing-server-results" role="listbox"><button type="button"><span class="type-icon">▣</span><span><strong>SRV-FICHIERS-01</strong><small>Serveur · 10.20.4.12</small></span><span>+</span></button></div><div class="file-sharing-selected-servers"><span class="file-sharing-server-chip"><span>▣</span><span><strong>SRV-FICHIERS-02</strong><small>Serveur · 10.20.4.13</small></span><button type="button">×</button></span></div><p class="file-sharing-server-count">12 configurations disponibles dans cette organisation.</p></div>
+                  <label>Lecteur mappé<input value="S:\\" /><small>Lettre utilisée sur les postes, si applicable.</small></label>
+                  <label>Chemin du partage<input value="\\\\SRV-FICHIERS-01\\Ventes" /><small>Chemin UNC, SMB ou NFS présenté aux utilisateurs.</small></label>
+                  <label class="span-2">Chemin sur le disque<input value="D:\\Partages\\Ventes" /><small>Emplacement local sur le serveur qui héberge les données.</small></label>
+                </div>
+              </section>
+              <section class="record-editor-section security-documentation-section">
+                <header><span class="record-editor-section-icon">◇</span><div><h2>Sécurité</h2><p>Distinguez l’accès à la fiche Atlas des permissions réellement appliquées au partage.</p></div></header>
+                <div class="record-editor-fields"><div class="file-sharing-access-summary span-2"><span>◇</span><span><strong>Tous les comptes Atlas autorisés pour Compagnie Démo peuvent consulter cette fiche.</strong><small>Les droits Atlas n’ajoutent, ne retirent et ne testent aucune permission sur le serveur.</small></span></div><label class="span-2">Groupes ou utilisateurs autorisés sur le partage<textarea rows="4">DOMAINE\\Ventes-RW
+DOMAINE\\Direction-RO</textarea><small>Documentation uniquement — un groupe ou utilisateur par ligne.</small></label></div>
+              </section>
+            </div>
+            <footer class="record-editor-actions"><button class="secondary" type="button">Annuler</button><button class="primary" type="button">Créer le partage</button></footer>
+          </form>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

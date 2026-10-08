@@ -1,0 +1,47 @@
+{
+  "id": "/",
+  "name": "TRC Community Atlas",
+  "short_name": "TRC Atlas",
+  "description": "Documentation et inventaire IT communautaires, gratuits et self-hosted.",
+  "lang": "fr-CA",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090f1d",
+  "theme_color": "#080f1d",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/assets/trc-atlas-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/trc-atlas-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/trc-atlas-layers-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Vue d’ensemble",
+      "short_name": "Aperçu",
+      "url": "/#/dashboard",
+      "icons": [{ "src": "/assets/trc-atlas-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Organisations",
+      "short_name": "Organisations",
+      "url": "/#/organizations",
+      "icons": [{ "src": "/assets/trc-atlas-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Atlas local state: never publish accounts, MFA, sessions, vaults or databases.
+data/
+runtime/
+backups/
+logs/
+
+# Local dependencies, secrets and operator configuration.
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+*.trcatlas
+
+# Generated QA and visual-review artefacts.
+.qa-*/
+.visual-qa*/
+.pwa-visual-qa/
+qa-security-data/
+
+# Operating-system and editor files.
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+

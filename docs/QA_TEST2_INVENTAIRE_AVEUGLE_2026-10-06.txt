@@ -1,0 +1,503 @@
+TRC COMMUNITY ATLAS — JEU D’ESSAI À L’AVEUGLE TEST2
+Date de préparation : 2026-10-06
+Statut : DONNÉES ENTIÈREMENT FICTIVES — NE JAMAIS UTILISER EN PRODUCTION
+
+OBJECTIF
+Créer une organisation de démonstration MSP complète sans adapter préalablement
+les informations aux champs d’Atlas. Le contenu ci-dessous représente ce qu’un
+technicien souhaiterait normalement documenter. Après sa rédaction, les données
+seront saisies dans Atlas afin d’identifier les champs manquants, les modules mal
+adaptés et les interfaces difficiles à utiliser.
+
+==========================================================================
+1. ORGANISATION
+==========================================================================
+
+Nom légal : [TEST2] Groupe Aubépine Distribution inc.
+Nom usuel : Aubépine Distribution
+Code client : T2-AUB
+Statut : Actif
+Secteur : Distribution alimentaire spécialisée
+Nombre d’employés : 128
+Nombre d’utilisateurs TI : 117
+Fuseau principal : America/Toronto
+Langue de service : Français
+Responsable de compte technique : Camille Gagnon (fictif)
+Gestionnaire de compte : Louis Fortin (fictif)
+Heures de soutien : lun-ven 07:00-18:00, urgence 24/7
+Criticité client : Élevée — entrepôt et expédition actifs six jours sur sept
+Notes : Migration M365 terminée en septembre 2026. Remplacement du pare-feu de
+Québec prévu pour janvier 2027. Aucun renseignement de ce dossier n’est réel.
+
+==========================================================================
+2. EMPLACEMENTS
+==========================================================================
+
+SITE T2-MTL-HQ
+Nom : Siège social Montréal
+Adresse : 2100 boulevard Exemple, Montréal (Québec) H0H 0H0
+Fuseau : America/Toronto
+Type : Bureau principal et salle de serveurs
+Heures : 06:30-19:00
+Accès : Réception, badge visiteur obligatoire
+Sous-réseau principal : 10.77.0.0/24
+VLAN : 10 Gestion, 20 Serveurs, 30 Utilisateurs, 40 Voix, 50 Invités
+Contact sur place : Élodie Caron — 514-555-0101 — elodie.caron@example.test
+
+SITE T2-LAV-WH
+Nom : Entrepôt Laval
+Adresse : 88 rue Démonstration, Laval (Québec) H0H 0H0
+Fuseau : America/Toronto
+Type : Entrepôt, terminaux RF et expédition
+Heures : 05:00-23:00
+Accès : Quai 3, appeler le superviseur avant déplacement
+Sous-réseau principal : 10.77.10.0/24
+VLAN : 10 Gestion, 30 Opérations, 40 Voix, 60 Scanners, 70 Caméras
+Contact sur place : Karim Haddad — 450-555-0102 — karim.haddad@example.test
+
+SITE T2-QC-BR
+Nom : Bureau Québec
+Adresse : 450 avenue Fictive, Québec (Québec) H0H 0H0
+Fuseau : America/Toronto
+Type : Bureau satellite
+Heures : 08:00-17:00
+Accès : Stationnement visiteurs à l’arrière
+Sous-réseau principal : 10.77.20.0/24
+VLAN : 10 Gestion, 30 Utilisateurs, 40 Voix, 50 Invités
+Contact sur place : Maude Roy — 418-555-0103 — maude.roy@example.test
+
+==========================================================================
+3. CONTACTS
+==========================================================================
+
+T2-CONTACT-001 — Élodie Caron — Directrice des opérations
+Courriel : elodie.caron@example.test | Téléphone : 514-555-0101
+Site : T2-MTL-HQ | Décisionnaire : Oui | Urgence : Oui
+
+T2-CONTACT-002 — Nicolas Tremblay — Contrôleur financier
+Courriel : nicolas.tremblay@example.test | Téléphone : 514-555-0104
+Site : T2-MTL-HQ | Décisionnaire : Oui | Urgence : Non
+
+T2-CONTACT-003 — Karim Haddad — Superviseur entrepôt
+Courriel : karim.haddad@example.test | Téléphone : 450-555-0102
+Site : T2-LAV-WH | Décisionnaire : Non | Urgence : Oui
+
+T2-CONTACT-004 — Maude Roy — Responsable bureau Québec
+Courriel : maude.roy@example.test | Téléphone : 418-555-0103
+Site : T2-QC-BR | Décisionnaire : Non | Urgence : Oui
+
+T2-CONTACT-005 — Sonia Beaulieu — Ressources humaines
+Courriel : sonia.beaulieu@example.test | Téléphone : 514-555-0105
+Site : T2-MTL-HQ | Décisionnaire : Non | Données sensibles RH : Oui
+
+==========================================================================
+4. CONFIGURATIONS ET ÉQUIPEMENTS
+==========================================================================
+
+T2-MTL-DC01 — Serveur physique — Dell PowerEdge R550 fictif
+Site : T2-MTL-HQ | Rôle : Contrôleur de domaine principal, DNS, DHCP
+OS : Windows Server 2022 Standard | IP : 10.77.20.10
+Numéro de série : TEST2-R550-0001 | Garantie : 2028-04-30
+Propriétaire : Équipe Infrastructure | Criticité : Critique
+
+T2-MTL-DC02 — Machine virtuelle
+Site : T2-MTL-HQ | Hôte : T2-MTL-HV01 | Rôle : AD secondaire, DNS
+OS : Windows Server 2022 Standard | IP : 10.77.20.11
+CPU/RAM/Disque : 4 vCPU / 12 Go / 120 Go | Criticité : Critique
+
+T2-MTL-HV01 — Hyperviseur physique — Dell PowerEdge R750 fictif
+Site : T2-MTL-HQ | Plateforme : Proxmox VE 8.2
+IP gestion : 10.77.10.21 | RAM : 256 Go | Stockage : 7,6 To RAID10
+Numéro de série : TEST2-R750-0001 | Garantie : 2029-02-28
+Criticité : Critique
+
+T2-MTL-HV02 — Hyperviseur physique — Dell PowerEdge R750 fictif
+Site : T2-MTL-HQ | Plateforme : Proxmox VE 8.2
+IP gestion : 10.77.10.22 | RAM : 256 Go | Stockage : 7,6 To RAID10
+Numéro de série : TEST2-R750-0002 | Garantie : 2029-02-28
+Criticité : Critique
+
+T2-MTL-FS01 — Machine virtuelle
+Site : T2-MTL-HQ | Hôte : T2-MTL-HV01 | Rôle : Fichiers et impression
+OS : Windows Server 2022 | IP : 10.77.20.20
+CPU/RAM/Disque : 8 vCPU / 32 Go / 3,2 To | Criticité : Élevée
+
+T2-MTL-SQL01 — Machine virtuelle
+Site : T2-MTL-HQ | Hôte : T2-MTL-HV02 | Rôle : SQL ERP
+OS : Windows Server 2022 | SQL Server 2022 Standard | IP : 10.77.20.30
+CPU/RAM/Disque : 12 vCPU / 64 Go / 1,5 To | Criticité : Critique
+
+T2-MTL-ERP01 — Machine virtuelle
+Site : T2-MTL-HQ | Hôte : T2-MTL-HV02 | Rôle : Application ERP Aubépine
+OS : Windows Server 2022 | IP : 10.77.20.31
+CPU/RAM/Disque : 8 vCPU / 32 Go / 300 Go | Criticité : Critique
+
+T2-MTL-BKP01 — Serveur de sauvegarde
+Site : T2-MTL-HQ | Logiciel : Veeam Backup & Replication 12
+OS : Windows Server 2022 | IP : 10.77.20.40 | Dépôt : 24 To
+Fenêtre : 20:00-05:00 | Rétention : 30 jours + 12 mensuelles
+Criticité : Critique
+
+T2-MTL-NAS01 — NAS fictif
+Site : T2-MTL-HQ | Modèle : Synology RS3621RPxs | IP : 10.77.20.41
+Capacité utile : 32 To | RAID : RAID6 | Garantie : 2027-11-30
+Criticité : Élevée
+
+T2-MTL-FW01 — Pare-feu
+Site : T2-MTL-HQ | Modèle : FortiGate 100F fictif | HA : Primaire
+IP gestion : 10.77.10.1 | WAN : 192.0.2.18/30
+Version : FortiOS 7.4.x fictive | Contrat : 2027-06-30 | Criticité : Critique
+
+T2-LAV-FW01 — Pare-feu
+Site : T2-LAV-WH | Modèle : FortiGate 80F fictif
+IP gestion : 10.77.10.1 | WAN : 198.51.100.42/30
+VPN site-à-site : T2-MTL-FW01 | Contrat : 2027-06-30
+
+T2-QC-FW01 — Pare-feu
+Site : T2-QC-BR | Modèle : FortiGate 60F fictif
+IP gestion : 10.77.20.1 | WAN : 203.0.113.55/30
+VPN site-à-site : T2-MTL-FW01 | Fin de vie prévue : 2027-01-31
+
+T2-MTL-SW01 — Commutateur cœur — Aruba 6200F fictif
+Site : T2-MTL-HQ | IP : 10.77.10.11 | Ports : 48 | PoE : Oui
+Empilement : T2-MTL-SW02 | Garantie : 2028-09-30
+
+T2-MTL-SW02 — Commutateur cœur — Aruba 6200F fictif
+Site : T2-MTL-HQ | IP : 10.77.10.12 | Ports : 48 | PoE : Oui
+Empilement : T2-MTL-SW01 | Garantie : 2028-09-30
+
+T2-LAV-SW01 — Commutateur entrepôt — Aruba 6100 fictif
+Site : T2-LAV-WH | IP : 10.77.10.11 | Ports : 48 | PoE : Oui
+
+T2-MTL-AP01 — Point d’accès Wi-Fi — Aruba AP-515 fictif
+Site : T2-MTL-HQ | IP : 10.77.10.51 | Emplacement : Réception
+SSID : AUB-STAFF, AUB-GUEST | Contrôleur : Aruba Central fictif
+
+T2-LAV-AP01 — Point d’accès Wi-Fi — Aruba AP-515 fictif
+Site : T2-LAV-WH | IP : 10.77.10.51 | Emplacement : Allée A
+SSID : AUB-WH, AUB-GUEST | Criticité : Élevée
+
+T2-MTL-UPS01 — UPS — APC Smart-UPS SRT fictif
+Site : T2-MTL-HQ | IP : 10.77.10.61 | Capacité : 6000 VA
+Dernier test batteries : 2026-08-15 | Remplacement prévu : 2027-08-15
+
+T2-LAP-001 — Portable Windows
+Utilisateur : Élodie Caron | Site : T2-MTL-HQ | Modèle : Lenovo T14 fictif
+OS : Windows 11 Pro | Série : TEST2-T14-0001 | Garantie : 2028-03-31
+Chiffrement : BitLocker | EDR : SentinelOne fictif
+
+T2-LAP-002 — Portable Windows
+Utilisateur : Nicolas Tremblay | Site : T2-MTL-HQ | Modèle : Dell Latitude fictif
+OS : Windows 11 Pro | Série : TEST2-LAT-0002 | Garantie : 2028-03-31
+Chiffrement : BitLocker | EDR : SentinelOne fictif
+
+==========================================================================
+5. RÉSEAU, INTERNET ET VPN
+==========================================================================
+
+WAN-MTL-PRIMARY — Fibre fictive 1 Gbit/s symétrique
+Fournisseur : Fibres Exemple inc. | Circuit : TEST2-FIBRE-MTL-001
+IP : 192.0.2.18/30 | Passerelle : 192.0.2.17 | DNS : 192.0.2.53
+SLA : 4 h | Téléphone panne : 1-800-555-0200
+
+WAN-LAV-PRIMARY — Fibre fictive 500/500 Mbit/s
+Fournisseur : Réseau Démo inc. | Circuit : TEST2-FIBRE-LAV-001
+IP : 198.51.100.42/30 | Passerelle : 198.51.100.41
+
+WAN-QC-PRIMARY — Câble affaires fictif 400/100 Mbit/s
+Fournisseur : Télécom Exemple | Compte : TEST2-QC-0042
+IP : 203.0.113.55/30 | Passerelle : 203.0.113.54
+
+VPN-MTL-LAV — IPsec IKEv2 — 10.77.0.0/16 vers 10.77.10.0/24
+Chiffrement : AES-256-GCM | DH : groupe 19 | Supervision : Oui
+
+VPN-MTL-QC — IPsec IKEv2 — 10.77.0.0/16 vers 10.77.20.0/24
+Chiffrement : AES-256-GCM | DH : groupe 19 | Supervision : Oui
+
+==========================================================================
+6. ACTIVE DIRECTORY ET MICROSOFT 365
+==========================================================================
+
+Domaine AD : ad.aubepine-distribution.test
+Niveau fonctionnel : Windows Server 2016
+Contrôleurs : T2-MTL-DC01, T2-MTL-DC02
+Synchronisation : Microsoft Entra Connect fictif sur T2-MTL-DC02
+UPN principal : aubepine-distribution.test
+Unités d’organisation : Utilisateurs, Postes, Serveurs, Groupes, Comptes-Service
+Groupes critiques : GG-ERP-Users, GG-Finance, GG-Warehouse-RF, GG-VPN-Users
+
+Tenant M365 : aubepinedistribution.onmicrosoft.test
+Licences : 92 Business Premium, 25 F3, 5 Visio Plan 2
+Administrateurs globaux : 2 comptes infonuagiques dédiés
+MFA : obligatoire pour tous
+Accès conditionnel : blocage authentification héritée, MFA hors emplacement fiable
+Courriel : Exchange Online | Domaine accepté : aubepine-distribution.test
+SharePoint : /sites/Operations, /sites/Finance, /sites/RH
+Teams : Direction, Opérations, Entrepôt, Projets
+
+==========================================================================
+7. SAUVEGARDE ET CONTINUITÉ
+==========================================================================
+
+POL-BKP-001 — Serveurs virtuels
+Source : cluster Proxmox | Cible : T2-MTL-BKP01 puis copie immuable fictive
+Horaire : quotidien 20:00 | Rétention : 30 quotidiens, 12 mensuels
+RPO : 24 h | RTO : 8 h | Chiffrement : Oui
+Dernier test de restauration : 2026-09-12 — réussi
+
+POL-BKP-002 — Microsoft 365
+Source : Exchange, OneDrive, SharePoint, Teams
+Produit : SaaS Backup fictif | Horaire : 4 fois par jour
+Rétention : 7 ans | Dernier test : 2026-08-22 — réussi
+
+POL-BKP-003 — SQL ERP
+Complet : quotidien 22:00 | Différentiel : toutes les 6 h | Journaux : 15 min
+RPO : 15 min | RTO : 4 h | Vérification DBCC : hebdomadaire
+
+==========================================================================
+8. PARTAGES DE FICHIERS
+==========================================================================
+
+T2-SHARE-COMMON
+Nom : Commun | Serveur : T2-MTL-FS01 | Lecteur : S:\
+Chemin UNC : \\T2-MTL-FS01\Commun | Chemin disque : D:\Shares\Commun
+Accès : Tous les employés en modification, stagiaires en lecture
+
+T2-SHARE-FINANCE
+Nom : Finance | Serveur : T2-MTL-FS01 | Lecteur : F:\
+Chemin UNC : \\T2-MTL-FS01\Finance | Chemin disque : D:\Shares\Finance
+Accès : GG-Finance seulement | Données sensibles : Oui
+
+T2-SHARE-WAREHOUSE
+Nom : Entrepôt | Serveur : T2-MTL-FS01 | Lecteur : W:\
+Chemin UNC : \\T2-MTL-FS01\Warehouse | Chemin disque : D:\Shares\Warehouse
+Accès : GG-Warehouse-RF et superviseurs
+
+==========================================================================
+9. IMPRESSION
+==========================================================================
+
+T2-MTL-PRN01 — Réception
+Serveur : T2-MTL-FS01 | File : \\T2-MTL-FS01\PRN-Reception
+Modèle : Brother MFC-L8900 fictif | IP : 10.77.30.51
+Déploiement : GPO | Publiée AD : Oui | Pilote : Universal PCL6 fictif
+Fournisseur : Impression Exemple | Contrat : TEST2-PRINT-001
+
+T2-LAV-PRN01 — Étiquettes expédition
+Serveur : T2-MTL-FS01 | File : \\T2-MTL-FS01\LBL-Shipping
+Modèle : Zebra ZT411 fictif | IP : 10.77.10.71
+Déploiement : Script poste | Publiée AD : Non
+
+T2-QC-PRN01 — Multifonction Québec
+Serveur : Aucun | Connexion : IP directe 10.77.20.51
+Modèle : Canon imageRUNNER fictif | Déploiement : Manuel
+
+==========================================================================
+10. LICENCES, FOURNISSEURS ET APPLICATIONS
+==========================================================================
+
+LIC-M365 — Microsoft 365 — Renouvellement 2027-09-01 — 122 licences
+LIC-VEAM — Veeam fictif — Renouvellement 2027-03-15 — 12 charges de travail
+LIC-S1 — SentinelOne fictif — Renouvellement 2027-05-31 — 145 agents
+LIC-FORTI — Fortinet fictif — Renouvellement 2027-06-30 — 3 appareils
+LIC-ERP — ERP Aubépine fictif — Renouvellement 2027-01-01 — 85 utilisateurs
+
+VEN-001 — Fibres Exemple inc. — Internet Montréal — 1-800-555-0200
+VEN-002 — Impression Exemple — Imprimantes — support@example.test
+VEN-003 — Logiciels Démo — ERP — urgence 1-800-555-0203
+
+APP-ERP — ERP Aubépine — URL https://erp.aubepine-distribution.test
+Serveurs : T2-MTL-ERP01, T2-MTL-SQL01 | Propriétaire : Opérations
+Authentification : Active Directory | Criticité : Critique
+
+APP-WMS — Gestion d’entrepôt fictive — URL https://wms.aubepine-distribution.test
+Hébergement : SaaS fictif | Propriétaire : Entrepôt | Criticité : Critique
+
+APP-PAY — Paie fictive — URL https://paie.example.test
+Hébergement : SaaS fictif | Propriétaire : RH | Données sensibles : Oui
+
+==========================================================================
+11. DOMAINES ET CERTIFICATS
+==========================================================================
+
+DOM-001 — aubepine-distribution.test
+Registraire : Registraire Exemple | Renouvellement : 2027-08-01
+DNS : DNS Exemple | Auto-renouvellement : Oui | Verrouillage : Oui
+
+DOM-002 — aubepine-logistique.test
+Registraire : Registraire Exemple | Renouvellement : 2027-08-01
+Redirection : aubepine-distribution.test | Auto-renouvellement : Oui
+
+SSL-001 — *.aubepine-distribution.test
+Émetteur : Autorité Exemple | Expiration : 2027-05-20
+Utilisé par : APP-ERP, portail VPN fictif | Renouvellement : Manuel
+
+SSL-002 — wms.aubepine-distribution.test
+Émetteur : Autorité Exemple | Expiration : 2027-07-14
+Renouvellement : Automatique
+
+==========================================================================
+12. MOTS DE PASSE FICTIFS
+==========================================================================
+
+Tous les secrets ci-dessous sont inventés et préfixés TEST2. Ils ne correspondent
+à aucun service réel et ne doivent jamais être réutilisés.
+
+PWD-001 — T2-MTL-FW01 — admin local
+Utilisateur : test2-fw-admin
+Mot de passe : TEST2-FW!Az9-NotReal-2026
+URL : https://10.77.10.1
+Catégorie : Réseau | Rotation : 2027-01-06
+
+PWD-002 — T2-LAV-FW01 — admin local
+Utilisateur : test2-fw-admin
+Mot de passe : TEST2-LAV!Qx7-Fake-2026
+URL : https://10.77.10.1
+Catégorie : Réseau | Rotation : 2027-01-06
+
+PWD-003 — T2-QC-FW01 — admin local
+Utilisateur : test2-fw-admin
+Mot de passe : TEST2-QC!Lm8-Demo-2026
+URL : https://10.77.20.1
+Catégorie : Réseau | Rotation : 2027-01-06
+
+PWD-004 — Domaine AD — compte bris de glace
+Utilisateur : TEST2\\adm-breakglass
+Mot de passe : TEST2-AD!BreakGlass-Factice#47
+Catégorie : Active Directory | Coffre physique associé : enveloppe fictive BG-01
+
+PWD-005 — T2-MTL-HV01 — root
+Utilisateur : root
+Mot de passe : TEST2-PVE!Hv01-Factice#88
+URL : https://10.77.10.21:8006
+Catégorie : Virtualisation
+
+PWD-006 — T2-MTL-HV02 — root
+Utilisateur : root
+Mot de passe : TEST2-PVE!Hv02-Factice#89
+URL : https://10.77.10.22:8006
+Catégorie : Virtualisation
+
+PWD-007 — T2-MTL-NAS01 — sauvegarde
+Utilisateur : test2-veeam-repo
+Mot de passe : TEST2-NAS!Repo-Factice#26
+URL : https://10.77.20.41:5001
+Catégorie : Sauvegarde
+
+PWD-008 — WAN Montréal — portail fournisseur
+Utilisateur : t2-aub-mtl@example.test
+Mot de passe : TEST2-ISP!Portal-Factice#15
+URL : https://portal.example.test
+Catégorie : Fournisseur
+
+PWD-009 — Imprimantes — compte SMTP scan
+Utilisateur : scan@example.test
+Mot de passe : TEST2-SMTP!Scan-Factice#32
+Catégorie : Impression
+
+PWD-010 — UPS Montréal — admin
+Utilisateur : apc-admin
+Mot de passe : TEST2-UPS!Apc-Factice#71
+URL : https://10.77.10.61
+Catégorie : Infrastructure
+
+PWD-011 — Wi-Fi invité
+Utilisateur : AUB-GUEST
+Mot de passe : TEST2-Guest!WiFi-Factice#10
+Catégorie : Sans-fil | Rotation mensuelle
+
+PWD-012 — API ERP de démonstration
+Utilisateur : svc_atlas_demo
+Mot de passe : TEST2-ERP!Api-Factice#64
+URL : https://erp.aubepine-distribution.test/api
+Catégorie : Application | Ne représente pas une vraie clé API
+
+==========================================================================
+13. DOCUMENTS ET PROCÉDURES À CRÉER
+==========================================================================
+
+DOC-001 — Vue d’ensemble technique Aubépine
+Résumé : architecture multisite, contacts, criticités et chemins d’escalade.
+Responsable : Camille Gagnon | Révision : 2027-01-15 | Statut : Publié
+
+DOC-002 — Procédure de restauration ERP
+Étapes :
+1. Valider l’incident et aviser Élodie Caron.
+2. Confirmer l’état de T2-MTL-SQL01 et T2-MTL-ERP01.
+3. Identifier le dernier point Veeam valide sur T2-MTL-BKP01.
+4. Restaurer en réseau isolé et valider DBCC.
+5. Faire valider l’application par Opérations.
+6. Documenter les temps RPO/RTO et fermer l’incident.
+Liens souhaités : APP-ERP, T2-MTL-SQL01, T2-MTL-ERP01, T2-MTL-BKP01,
+POL-BKP-003 et les mots de passe PWD-005/PWD-006.
+
+DOC-003 — Procédure panne Internet Montréal
+Étapes : alimentation, état WAN, ping passerelle, test modem, appel fournisseur,
+bascule temporaire, communication, retour en service.
+Liens souhaités : WAN-MTL-PRIMARY, T2-MTL-FW01, VEN-001, PWD-008.
+
+DOC-004 — Onboarding employé
+Étapes : approbation RH, compte AD, licence M365, groupes, poste, MFA, validation
+du gestionnaire et fermeture de la checklist.
+Liens souhaités : Active Directory, tenant M365, T2-SHARE-COMMON.
+
+DOC-005 — Départ d’un employé
+Étapes : désactivation, révocation sessions, transfert OneDrive/courriel, retrait
+VPN, récupération matériel, conservation légale et validation RH.
+
+DOC-006 — Plan de continuité entrepôt
+Scénarios : panne WAN, panne WMS, panne Wi-Fi, imprimante d’étiquettes indisponible.
+Mode dégradé : formulaires papier fictifs et synchronisation au rétablissement.
+
+==========================================================================
+14. CHECKLISTS ET ÉCHÉANCES
+==========================================================================
+
+CHK-001 — Revue mensuelle des sauvegardes
+[ ] Vérifier tous les jobs | [ ] Vérifier copie immuable
+[ ] Tester une restauration | [ ] Mettre à jour le rapport
+
+CHK-002 — Revue trimestrielle des comptes administrateurs
+[ ] AD | [ ] M365 | [ ] Pare-feu | [ ] Hyperviseurs | [ ] Sauvegardes
+
+CHK-003 — Remplacement T2-QC-FW01
+[ ] Soumission | [ ] Configuration exportée | [ ] Nouveau matériel préparé
+[ ] Fenêtre approuvée | [ ] Migration | [ ] Tests VPN | [ ] Ancien matériel effacé
+Échéance : 2027-01-31 | Responsable : Camille Gagnon
+
+==========================================================================
+15. RELATIONS ATTENDUES
+==========================================================================
+
+- APP-ERP dépend de T2-MTL-ERP01 et T2-MTL-SQL01.
+- T2-MTL-ERP01 et T2-MTL-SQL01 sont hébergés par le cluster HV01/HV02.
+- POL-BKP-003 protège T2-MTL-SQL01 et dépend de T2-MTL-BKP01.
+- T2-MTL-BKP01 sauvegarde vers T2-MTL-NAS01.
+- T2-SHARE-COMMON, FINANCE et WAREHOUSE sont servis par T2-MTL-FS01.
+- T2-MTL-PRN01 et T2-LAV-PRN01 sont servis par T2-MTL-FS01.
+- VPN-MTL-LAV relie T2-MTL-FW01 et T2-LAV-FW01.
+- VPN-MTL-QC relie T2-MTL-FW01 et T2-QC-FW01.
+- DOC-002 est la procédure associée à APP-ERP et POL-BKP-003.
+- DOC-003 est la procédure associée à WAN-MTL-PRIMARY et T2-MTL-FW01.
+- Chaque mot de passe PWD-001 à PWD-012 doit être lié à sa fiche cible.
+- LIC-M365 est utilisée par le tenant Microsoft 365.
+- SSL-001 protège APP-ERP.
+- Les contacts de chaque site doivent être reliés à leur emplacement.
+
+==========================================================================
+16. CRITÈRES DU TEST À L’AVEUGLE
+==========================================================================
+
+1. Créer l’organisation et ses trois sites sans ressaisir inutilement le contexte.
+2. Saisir au moins 20 configurations avec leurs champs techniques essentiels.
+3. Saisir les 12 mots de passe fictifs sans MFA répété pendant la session.
+4. Saisir contacts, domaines, SSL, WAN, VPN, sauvegardes, partages, impressions,
+   licences, fournisseurs, applications, AD, M365, Wi-Fi, UPS et checklists.
+5. Créer les six documents/procédures avec contenu structuré.
+6. Relier les objets importants dans les deux sens.
+7. Vérifier recherche globale et recherche limitée à l’organisation.
+8. Relever chaque champ métier impossible à saisir proprement.
+9. Relever les formulaires trop génériques, trop longs ou mal adaptés au module.
+10. Corriger Atlas, répéter les parcours problématiques et documenter le résultat.
+
+FIN DU JEU D’ESSAI TEST2
