@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
 
@@ -34,3 +34,28 @@ jobs:
 
       - name: Run Atlas test suite
         run: npm test
+
+      - name: Test a clean Windows deployment on port 9095
+        shell: pwsh
+        run: |
+          ./scripts/Test-TRCCommunityAtlasDeployment.ps1 `
+            -Port 9095 `
+            -NodePath (Get-Command node).Source `
+            -TestRoot (Join-Path $env:RUNNER_TEMP 'atlas-deployment-9095')
+
+      - name: Build the self-contained Windows package
+        shell: pwsh
+        run: |
+          ./scripts/New-TRCCommunityAtlasPortablePackage.ps1 `
+            -OutputDirectory (Join-Path $PWD 'dist') `
+            -NodePath (Get-Command node).Source
+
+      - name: Publish the Windows test package
+        uses: actions/upload-artifact@v7
+        with:
+          name: TRC-Atlas-Windows-${{ github.sha }}
+          path: |
+            dist/TRC-Atlas-Portable-*-win-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

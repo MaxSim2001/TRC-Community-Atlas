@@ -1,12 +1,13 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = 'C:\Users\Administrateur.AD-01\Documents\TRC_Community_Atlas',
-    [string]$SourceNodePath = 'C:\Users\Administrateur.AD-01\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe',
-    [string]$TaskName = 'TRC Community Atlas - Production 9092',
+    [string]$ProjectRoot = '',
+    [string]$SourceNodePath = '',
+    [string]$DataRoot = '',
+    [string]$TaskName = '',
     [ValidateRange(1, 65535)]
     [int]$Port = 9092,
-    [string]$BindAddress = '192.168.50.12',
-    [string]$AllowedOrigin = 'https://atlas.therisingcloud.com'
+    [string]$BindAddress = '127.0.0.1',
+    [string[]]$AllowedOrigin = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,12 +37,36 @@ function Get-ListeningProcessId {
 
 Assert-Administrator
 
+if (-not $ProjectRoot) {
+    $ProjectRoot = Split-Path -Parent $PSScriptRoot
+}
+$ProjectRoot = [IO.Path]::GetFullPath($ProjectRoot)
+if (-not $DataRoot) {
+    $DataRoot = Join-Path $ProjectRoot 'data'
+}
+$DataRoot = [IO.Path]::GetFullPath($DataRoot)
+if (-not $TaskName) {
+    $TaskName = "TRC Community Atlas - $Port"
+}
+
 $serverPath = Join-Path $ProjectRoot 'server.mjs'
 if (-not (Test-Path -LiteralPath $serverPath -PathType Leaf)) {
     throw "Serveur Atlas introuvable : $serverPath"
 }
-if (-not (Test-Path -LiteralPath $SourceNodePath -PathType Leaf)) {
-    throw "Runtime Node.js introuvable : $SourceNodePath"
+if (-not $SourceNodePath) {
+    $bundledNode = Join-Path $ProjectRoot 'runtime\node.exe'
+    if (Test-Path -LiteralPath $bundledNode -PathType Leaf) {
+        $SourceNodePath = $bundledNode
+    }
+    else {
+        $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+        if ($nodeCommand) {
+            $SourceNodePath = $nodeCommand.Source
+        }
+    }
+}
+if (-not $SourceNodePath -or -not (Test-Path -LiteralPath $SourceNodePath -PathType Leaf)) {
+    throw 'Runtime Node.js 22 ou plus recent introuvable.'
 }
 
 $parsedAddress = $null
@@ -49,9 +74,11 @@ if (-not [Net.IPAddress]::TryParse($BindAddress, [ref]$parsedAddress)) {
     throw "Adresse d'ecoute invalide : $BindAddress"
 }
 
-$originUri = $null
-if (-not [Uri]::TryCreate($AllowedOrigin, [UriKind]::Absolute, [ref]$originUri) -or $originUri.Scheme -ne 'https') {
-    throw "Origine HTTPS invalide : $AllowedOrigin"
+foreach ($origin in $AllowedOrigin) {
+    $originUri = $null
+    if (-not [Uri]::TryCreate($origin, [UriKind]::Absolute, [ref]$originUri) -or $originUri.Scheme -ne 'https') {
+        throw "Origine HTTPS invalide : $origin"
+    }
 }
 
 $runtimeDirectory = Join-Path $ProjectRoot 'runtime'
@@ -77,7 +104,10 @@ if ($existingTask) {
     Export-ScheduledTask -TaskName $TaskName | Set-Content -LiteralPath $taskBackupPath -Encoding Unicode
 }
 
-$arguments = ('"{0}" --port {1} --host {2} --origin "{3}"' -f $serverPath, $Port, $BindAddress, $AllowedOrigin)
+$arguments = ('"{0}" --port {1} --host {2} --data "{3}"' -f $serverPath, $Port, $BindAddress, $DataRoot)
+foreach ($origin in $AllowedOrigin) {
+    $arguments += (' --origin "{0}"' -f $origin)
+}
 $action = New-ScheduledTaskAction `
     -Execute $runtimeNodePath `
     -Argument $arguments `
@@ -103,7 +133,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Principal $principal `
     -Settings $settings `
-    -Description 'Demarre TRC Community Atlas 0.11 en arriere-plan au demarrage de Windows, sans fenetre interactive.' `
+    -Description 'Demarre TRC Community Atlas en arriere-plan au demarrage de Windows, sans fenetre interactive.' `
     -Force | Out-Null
 
 $listenerProcessId = Get-ListeningProcessId -ListenerPort $Port
@@ -122,7 +152,8 @@ if ($listenerProcessId) {
 
 Start-ScheduledTask -TaskName $TaskName
 
-$healthUri = "http://${BindAddress}:$Port/api/status"
+$healthAddress = if ($BindAddress -eq '0.0.0.0' -or $BindAddress -eq '::') { '127.0.0.1' } else { $BindAddress }
+$healthUri = "http://${healthAddress}:$Port/api/status"
 $deadline = (Get-Date).AddSeconds(20)
 $status = $null
 do {

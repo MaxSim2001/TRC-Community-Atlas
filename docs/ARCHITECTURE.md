@@ -33,6 +33,11 @@ Les deux options seront désactivées par défaut. Un raccordement de données n
 - générateur de charge QA déterministe avec sauvegarde locale datée avant insertion et refus des doublons;
 - préférences de modules et portées d’organisations enregistrées par compte local; les comptes limités ne reçoivent jamais les objets, secrets ou pièces jointes des autres organisations;
 - interface statique locale sans police, CDN, télémétrie ou appel sortant.
+- installation Windows avec programme et runtime sous un répertoire applicatif,
+  tandis que SQLite, les comptes, le MFA, le coffre, les pièces jointes, la
+  configuration et les journaux demeurent dans un répertoire d’instance séparé;
+- paquet Windows autonome produit par la CI et test de déploiement propre sur
+  `127.0.0.1:9095`, sans modification du pare-feu, du DNS ou du réseau;
 - paramètres de déploiement locaux séparant code d’instance, domaine principal,
   alias et proxy inverse; les origines HTTPS enregistrées sont chargées par le
   serveur sans importer de certificat ni modifier le DNS ou le réseau;

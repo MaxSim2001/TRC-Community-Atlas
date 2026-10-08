@@ -46,5 +46,5 @@ test("universal bidirectional relationships and full-page records remain wired",
   assert.match(css, /\.mention-picker\s*\{/);
   assert.match(css, /\.impact-explorer\s*\{/);
   assert.match(server, /schemaVersion:\s*5/);
-  assert.match(server, /version:\s*"0\.12\.9"/);
+  assert.match(server, /version:\s*"0\.13\.0"/);
 });

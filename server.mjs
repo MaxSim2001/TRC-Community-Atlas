@@ -1115,7 +1115,7 @@ export function createAtlasServer(options = {}) {
     }
     const publicUrl = settings.primaryDomain ? `https://${settings.primaryDomain}` : "";
     const checks = [
-      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${"0.12.9"} répond sur ${host}:${port}.` },
+      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${"0.13.0"} répond sur ${host}:${port}.` },
       { id: "storage", status: document ? "ok" : "error", label: "Stockage documentaire", message: document ? "SQLite est initialisé et le workspace est lisible." : "Le stockage Atlas n’est pas initialisé." },
       { id: "authentication", status: auth?.users?.length ? "ok" : "error", label: "Authentification locale", message: auth?.users?.length ? `${auth.users.length} compte local configuré${auth.users.length === 1 ? "" : "s"}.` : "Aucun administrateur local n’est configuré." },
       { id: "vault", status: vaultKeyReady ? "ok" : "neutral", label: "Coffre chiffré", message: vaultKeyReady ? "La clé locale du coffre est présente." : "La clé du coffre sera créée localement au premier secret; aucune action n’est requise maintenant." },
@@ -1155,7 +1155,7 @@ export function createAtlasServer(options = {}) {
       if (request.method === "GET" && url.pathname === "/api/status") {
         const auth = await readJson(authPath, null);
         const storage = (await getStore()).readDocument() ? "sqlite" : "uninitialized";
-        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: "0.12.9", initialized: Boolean(auth?.users?.length), storage });
+        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: "0.13.0", initialized: Boolean(auth?.users?.length), storage });
       }
 
       if (request.method === "POST" && url.pathname === "/api/setup") {

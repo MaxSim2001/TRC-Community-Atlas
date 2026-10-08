@@ -40,14 +40,14 @@ test("Atlas exposes a local searchable bilingual help center from the header", (
   assert.match(styles, /\.help-article-grid/);
   assert.match(styles, /@media \(max-width: 680px\)[\s\S]*\.help-menu-popover/);
 
-  const helpIndex = index.indexOf("/assets/help-content.js?v=0.12.9-settings-layout-1");
-  const appIndex = index.indexOf("/assets/app.js?v=0.12.9-settings-layout-1");
+  const helpIndex = index.indexOf("/assets/help-content.js?v=0.13.0-installer-1");
+  const appIndex = index.indexOf("/assets/app.js?v=0.13.0-installer-1");
   assert.ok(helpIndex >= 0 && appIndex > helpIndex);
-  assert.match(worker, /\/assets\/help-content\.js\?v=0\.12\.9-settings-layout-1/);
+  assert.match(worker, /\/assets\/help-content\.js\?v=0\.13\.0-installer-1/);
   assert.match(source("server.mjs"), /\["\/assets\/help-content\.js", \["assets\/help-content\.js", "text\/javascript; charset=utf-8"\]\]/);
 });
 
-test("the official GitHub repository is published while general installation remains pending", () => {
+test("the official GitHub repository documents the self-contained Windows test package", () => {
   const helpSource = source("public/assets/help-content.js");
   const context = { window: {} };
   vm.runInNewContext(helpSource, context);
@@ -56,8 +56,9 @@ test("the official GitHub repository is published while general installation rem
   assert.ok(article);
   const serialized = JSON.stringify(article);
   assert.match(serialized, /https:\/\/github\.com\/MaxSim2001\/TRC-Community-Atlas/);
-  assert.match(serialized, /installateur Windows.*restent en préparation/);
-  assert.match(serialized, /Windows installer.*still in preparation/);
+  assert.match(serialized, /Installer-Atlas\.cmd/);
+  assert.match(serialized, /Release stable signée.*restent en préparation/);
+  assert.match(serialized, /signed stable Release.*still in preparation/);
 });
 
 test("repository guides cover users, security, operations, releases and GitHub readiness", () => {

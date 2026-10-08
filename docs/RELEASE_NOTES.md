@@ -1,5 +1,18 @@
 # Notes de version — TRC Community Atlas
 
+## 0.13.0 — Installation Windows simplifiée
+
+- ajout de `Installer-Atlas.cmd` pour une installation guidée en un double-clic;
+- paquet Windows autonome avec runtime Node.js inclus;
+- séparation explicite du programme, de la configuration, des journaux et des
+  données persistantes;
+- réparation du programme sans suppression des comptes, du MFA, du coffre ou
+  des pièces jointes;
+- raccourci du menu Démarrer et démarrage automatique sans fenêtre interactive;
+- test de déploiement propre sur `127.0.0.1:9095` dans la CI Windows;
+- production automatique d’un ZIP de validation et de son SHA-256;
+- mise à niveau des actions GitHub vers leur runtime Node.js actuel.
+
 ## 0.12.9 — Vue des paramètres réorganisée
 
 - navigation interne compacte placée au-dessus du contenu;

@@ -1,14 +1,38 @@
 # TRC Community Atlas
 
-Version actuelle : **0.12.9**.
+Version actuelle : **0.13.0**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
-Code source officiel : [MaxSim2001/TRC-Community-Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas). L’installateur Windows et les mises à jour intégrées restent en préparation; cloner le dépôt ne constitue pas encore une installation de production prise en charge.
+Code source officiel : [MaxSim2001/TRC-Community-Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas). Le paquet Windows autonome est maintenant fabriqué et testé par GitHub Actions. Il demeure un paquet de validation jusqu’à la publication d’une Release stable signée; le bouton de mise à jour intégré reste en préparation.
 
 Socle local de documentation et d’inventaire IT, inspiré du cahier des charges du 22 septembre 2026. Cette édition reste autonome : comptes, données et préférences sont stockés localement dans l’instance.
 
-## Démarrage local
+## Installation Windows simple
+
+Le paquet Windows autonome contient déjà Node.js. Après avoir téléchargé
+l’artéfact d’une exécution GitHub Actions réussie :
+
+1. décompresser complètement le fichier ZIP;
+2. double-cliquer sur `Installer-Atlas.cmd`;
+3. laisser Atlas démarrer en arrière-plan;
+4. créer le premier compte administrateur et activer son MFA dans le navigateur.
+
+L’installation utilisateur par défaut place le programme dans
+`%LOCALAPPDATA%\Programs\TRC Community Atlas` et les données dans
+`%LOCALAPPDATA%\TRC Community Atlas\data`. Relancer l’installateur répare le
+programme sans effacer les comptes, le MFA, le coffre ou les pièces jointes.
+Atlas crée aussi un raccourci dans le menu Démarrer et se relance en arrière-plan
+au démarrage de Windows ou à la connexion, selon les droits disponibles.
+
+Le paquet GitHub Actions est encore destiné aux essais. La Release stable signée
+et le mécanisme de mise à jour avec sauvegarde et retour arrière seront publiés
+après leur validation complète.
+
+Voir [Installation Windows](docs/INSTALLATION_WINDOWS.md) pour les paramètres
+avancés et le diagnostic.
+
+## Démarrage depuis le code source
 
 Dans PowerShell :
 
@@ -16,7 +40,7 @@ Dans PowerShell :
 .\Start-TRCCommunityAtlas.ps1
 ```
 
-Ouvrir ensuite `http://127.0.0.1:9092`. Au premier démarrage, l’application demande la création du compte administrateur local. Les données sont écrites dans `data/`; le serveur écoute uniquement sur la boucle locale par défaut.
+Ouvrir ensuite `http://127.0.0.1:9092`. Au premier démarrage, l’application demande la création du compte administrateur local. Les données sont écrites dans `data/`; le serveur écoute uniquement sur la boucle locale par défaut. Depuis une archive de code source sans runtime, Node.js 22 ou plus récent est requis.
 
 Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute et chaque origine HTTPS autorisée. Exemple : `Start-TRCCommunityAtlas.ps1 -BindAddress 192.168.50.12 -Port 9092 -AllowedOrigin https://atlas.therisingcloud.com`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Le mandataire inverse doit forcer TLS, transmettre `X-Forwarded-Proto https` et marquer le cookie `atlas_session` comme `Secure`.
 
@@ -61,7 +85,7 @@ toute tâche Atlas remplacée, puis valide l’état de l’API locale après d�
 - centre d’aide intégré accessible par l’icône `?`, avec menu compact, recherche locale, catégories, articles détaillés, notes de version et mise en page responsive;
 - assistant administrateur « Configuration initiale » séparant clairement le code d’instance, le domaine public, les alias et le proxy inverse; Atlas autorise les origines enregistrées mais ne modifie jamais le DNS, le certificat ou le pare-feu;
 - tableau « Santé du site » avec contrôles factuels du service, de SQLite, des comptes, du coffre, du domaine, de HTTPS, du proxy et de l’origine, plus un test public manuel limité au domaine enregistré et refusant les destinations privées;
-- dépôt public `MaxSim2001/TRC-Community-Atlas` avec tests Windows automatisés; l’installateur et les mises à jour signées restent en préparation;
+- dépôt public `MaxSim2001/TRC-Community-Atlas`, tests Windows automatisés, déploiement propre sur le port 9095 et paquet autonome produit à chaque exécution réussie; la Release stable signée et les mises à jour intégrées restent en préparation;
 - journal d’activité;
 - interface français/anglais et thèmes clair/sombre;
 - statut explicite du raccordement RMM et du futur SSO facultatif via TRC RMM;

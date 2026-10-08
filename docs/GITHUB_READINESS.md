@@ -2,9 +2,10 @@
 
 Le code source officiel d’Atlas est publié dans
 [`MaxSim2001/TRC-Community-Atlas`](https://github.com/MaxSim2001/TRC-Community-Atlas).
-Le dépôt public appartient directement au compte GitHub du propriétaire. Cette
-publication du code ne signifie pas encore qu’un installateur général ou un
-mécanisme de mise à jour intégré est disponible.
+Le dépôt public appartient directement au compte GitHub du propriétaire. Chaque
+exécution Windows réussie produit maintenant un paquet autonome de validation.
+Ce paquet n’est pas encore une Release stable signée et le mécanisme de mise à
+jour intégré n’est pas encore disponible.
 
 Le plan proposé pour l'installateur, les GitHub Releases, la vérification des
 paquets, les migrations et le retour arrière est consigné dans
@@ -22,11 +23,10 @@ plan tant que les décisions ci-dessous ne sont pas approuvées et implémentée
 - signature publique cible : Azure Artifact Signing; certificat autosigné
   réservé aux essais locaux;
 
-## À implémenter avant la première distribution installable
+## À implémenter avant la première distribution stable
 
-- installateur autonome et runtime intégré;
-- méthode d’installation et de mise à jour;
-- génération et rotation des secrets d’instance;
+- signature publique du paquet et Release approuvée;
+- méthode de mise à jour transactionnelle et retour arrière;
 - configuration HTTPS et mandataire inverse pour les déploiements publics;
 - politique de sécurité et canal de signalement des vulnérabilités;
 - conventions de branches et cycle de versions;
@@ -36,6 +36,10 @@ plan tant que les décisions ci-dessous ne sont pas approuvées et implémentée
 
 - dépôt public détenu par le propriétaire;
 - workflow GitHub Actions exécutant les validations JavaScript et les tests sur Windows;
+- installation guidée en un double-clic avec runtime Node.js inclus;
+- séparation du programme et des données persistantes;
+- test de déploiement propre sur le port 9095;
+- génération du ZIP Windows et de son SHA-256 comme artéfacts de validation;
 - README fonctionnel;
 - architecture et frontières d’autonomie;
 - guides utilisateur, sécurité et exploitation;

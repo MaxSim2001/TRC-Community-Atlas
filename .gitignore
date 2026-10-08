@@ -3,6 +3,7 @@ data/
 runtime/
 backups/
 logs/
+dist/
 
 # Local dependencies, secrets and operator configuration.
 node_modules/

@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.12.9
+Version du guide : 0.13.0
 
 ## Configuration initiale du domaine
 
