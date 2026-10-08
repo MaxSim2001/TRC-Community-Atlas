@@ -1,6 +1,6 @@
 # Guide utilisateur — TRC Community Atlas
 
-Version du guide : 0.13.1
+Version du guide : 0.13.2
 
 Ce guide accompagne le centre d’aide intégré accessible par l’icône `?` dans
 l’en-tête. Atlas reste autonome, self-hosted et sans appel externe pour afficher
@@ -60,6 +60,14 @@ restent visibles avec leur état et la fiche peut être restaurée.
 Atlas peut être installé comme application Web depuis un navigateur compatible.
 Le cache contient uniquement le shell statique; les API et données métier restent
 toujours servies par l’instance Atlas.
+
+## Configuration initiale et santé
+
+Le super administrateur peut activer le démarrage Windows en arrière-plan dans
+**Paramètres > Configuration initiale**, puis voir l’état de la tâche dans
+**Santé du site**. Le bouton **Tester le port local** vérifie seulement le port
+du processus Atlas courant sur cet ordinateur; il ne teste ni le LAN ni le
+pare-feu. Le test du domaine public demeure une action séparée et explicite.
 
 ## Aide intégrée
 

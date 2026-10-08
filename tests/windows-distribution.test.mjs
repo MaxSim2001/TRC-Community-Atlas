@@ -31,6 +31,7 @@ test("the Windows installer keeps program and instance data separate", () => {
 test("the portable package includes a runtime, a hash and a real port 9095 deployment test", () => {
   const builder = source("scripts/New-TRCCommunityAtlasPortablePackage.ps1");
   const deploymentTest = source("scripts/Test-TRCCommunityAtlasDeployment.ps1");
+  const autostartManager = source("scripts/Set-TRCCommunityAtlasAutostart.ps1");
   const workflow = source(".github/workflows/tests.yml");
 
   assert.match(builder, /runtimeDirectory/);
@@ -43,7 +44,14 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(deploymentTest, /Result = 'PASS'/);
   assert.match(deploymentTest, /DatabasePreserved = \$true/);
   assert.match(deploymentTest, /ConfiguratorReload = 'PASS'/);
+  assert.match(deploymentTest, /Autostart = \$autostartResult/);
+  assert.match(autostartManager, /ValidateSet\('Status', 'Enable', 'Disable'\)/);
+  assert.match(autostartManager, /TaskName = 'TRC Community Atlas'/);
+  assert.match(autostartManager, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);
+  assert.match(autostartManager, /Disable-ScheduledTask/);
+  assert.doesNotMatch(autostartManager, /New-NetFirewallRule|Set-NetFirewallProfile|netsh|Remove-ScheduledTask/);
   assert.match(workflow, /Test-TRCCommunityAtlasDeployment\.ps1/);
   assert.match(workflow, /-Port 9095/);
+  assert.match(workflow, /-TestAutostart/);
   assert.match(workflow, /actions\/upload-artifact@v7/);
 });

@@ -1,10 +1,11 @@
 import http from "node:http";
 import https from "node:https";
+import { execFile } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { isIP } from "node:net";
+import { createConnection, isIP } from "node:net";
 import path from "node:path";
 import { domainToASCII, fileURLToPath } from "node:url";
 import { AtlasStore } from "./lib/atlas-store.mjs";
@@ -282,6 +283,42 @@ function deploymentSettingsFromInput(input = {}) {
 function deploymentOrigins(settings = {}) {
   const deployment = normalizedDeploymentSettings(settings);
   return [deployment.primaryDomain, ...deployment.domainAliases].filter(Boolean).map((domain) => `https://${domain}`);
+}
+
+function runAutostartManager({ mode, host, port, dataRoot, allowedOrigins }) {
+  if (process.platform !== "win32") {
+    return Promise.resolve({ supported: false, installed: false, enabled: false, state: "Unsupported", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, taskName: "TRC Community Atlas", message: "La gestion intégrée du démarrage automatique est disponible dans le paquet Windows Atlas." });
+  }
+  const scriptPath = path.join(projectRoot, "scripts", "Set-TRCCommunityAtlasAutostart.ps1");
+  const systemRoot = process.env.SystemRoot || "C:\\Windows";
+  const powershellPath = path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  const args = [
+    "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+    "-File", scriptPath,
+    "-Mode", mode[0].toUpperCase() + mode.slice(1),
+    "-ProjectRoot", projectRoot,
+    "-NodePath", process.execPath,
+    "-DataRoot", dataRoot,
+    "-Port", String(port),
+    "-BindAddress", host,
+    "-AllowedOrigins", [...new Set(allowedOrigins)].join("|"),
+    "-Json",
+  ];
+  return new Promise((resolve, reject) => {
+    execFile(powershellPath, args, { windowsHide: true, timeout: 20_000, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) {
+        const detail = String(stderr || stdout || error.message || "").trim().split(/\r?\n/).filter(Boolean).at(-1) || "La tâche Windows n’a pas pu être configurée.";
+        reject(Object.assign(new Error(detail), { statusCode: 503, code: "autostart_configuration_failed" }));
+        return;
+      }
+      try {
+        const output = String(stdout || "").trim().split(/\r?\n/).filter(Boolean).at(-1);
+        resolve(JSON.parse(output));
+      } catch {
+        reject(Object.assign(new Error("Windows n’a pas retourné un état d’autodémarrage valide."), { statusCode: 503, code: "autostart_status_invalid" }));
+      }
+    });
+  });
 }
 
 export function isPublicProbeAddress(address) {
@@ -610,6 +647,7 @@ export function createAtlasServer(options = {}) {
   const savedDeploymentOrigins = new Set();
   const dataRoot = options.dataRoot || defaultDataRoot;
   const sessionNow = typeof options.now === "function" ? options.now : Date.now;
+  const manageAutostart = typeof options.autostartManager === "function" ? options.autostartManager : runAutostartManager;
   const authPath = path.join(dataRoot, "auth.json");
   const sessionsPath = path.join(dataRoot, "sessions.json");
   const workspacePath = path.join(dataRoot, "workspace.json");
@@ -1114,8 +1152,19 @@ export function createAtlasServer(options = {}) {
       if (error?.code !== "ENOENT") throw error;
     }
     const publicUrl = settings.primaryDomain ? `https://${settings.primaryDomain}` : "";
+    let autostart;
+    try {
+      autostart = await manageAutostart({ mode: "status", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])] });
+    } catch (error) {
+      autostart = { supported: process.platform === "win32", installed: false, enabled: false, state: "Error", trigger: "none", runAs: "", message: error.message || "L’état du démarrage automatique est indisponible." };
+    }
+    const listenerAddress = server.address();
+    const listenerOpen = server.listening && listenerAddress && typeof listenerAddress === "object";
+    const listenerLabel = listenerOpen ? `${listenerAddress.address}:${listenerAddress.port}` : `${host}:${port}`;
     const checks = [
-      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${"0.13.1"} répond sur ${host}:${port}.` },
+      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${"0.13.2"} répond sur ${host}:${port}.` },
+      { id: "port", status: listenerOpen ? "ok" : "error", label: "Port Atlas local", message: listenerOpen ? `Le listener Atlas est actif sur cet ordinateur (${listenerLabel}).` : `Aucun listener Atlas actif n’est confirmé sur ${listenerLabel}.` },
+      { id: "autostart", status: autostart.enabled ? "ok" : autostart.state === "Error" ? "warning" : "neutral", label: "Démarrage automatique", message: autostart.message || (autostart.enabled ? "Atlas démarrera en arrière-plan avec Windows." : "Le démarrage automatique est désactivé.") },
       { id: "storage", status: document ? "ok" : "error", label: "Stockage documentaire", message: document ? "SQLite est initialisé et le workspace est lisible." : "Le stockage Atlas n’est pas initialisé." },
       { id: "authentication", status: auth?.users?.length ? "ok" : "error", label: "Authentification locale", message: auth?.users?.length ? `${auth.users.length} compte local configuré${auth.users.length === 1 ? "" : "s"}.` : "Aucun administrateur local n’est configuré." },
       { id: "vault", status: vaultKeyReady ? "ok" : "neutral", label: "Coffre chiffré", message: vaultKeyReady ? "La clé locale du coffre est présente." : "La clé du coffre sera créée localement au premier secret; aucune action n’est requise maintenant." },
@@ -1132,6 +1181,7 @@ export function createAtlasServer(options = {}) {
       settings,
       publicUrl,
       observed: { protocol: httpsObserved ? "https" : "http", host: observedHost, reverseProxyHeaders: proxyObserved },
+      autostart,
       summary: {
         ok: checks.filter((check) => check.status === "ok").length,
         warning: checks.filter((check) => check.status === "warning" || check.status === "error").length,
@@ -1140,6 +1190,28 @@ export function createAtlasServer(options = {}) {
       },
       checks,
     };
+  }
+
+  async function probeLocalAtlasPort() {
+    const address = server.address();
+    if (!server.listening || !address || typeof address !== "object") {
+      return { checkedAt: nowIso(), open: false, host, port, latencyMs: null, scope: "this-computer-only", message: "Le listener Atlas n’est pas actif." };
+    }
+    const targetHost = address.address === "0.0.0.0" ? "127.0.0.1" : address.address === "::" ? "::1" : address.address;
+    const startedAt = Date.now();
+    return new Promise((resolve) => {
+      const socket = createConnection({ host: targetHost, port: address.port });
+      let settled = false;
+      const finish = (open, message) => {
+        if (settled) return;
+        settled = true;
+        socket.destroy();
+        resolve({ checkedAt: nowIso(), open, host: targetHost, port: address.port, latencyMs: Date.now() - startedAt, scope: "this-computer-only", message });
+      };
+      socket.setTimeout(2500, () => finish(false, `Le port ${address.port} n’a pas répondu dans le délai local.`));
+      socket.once("connect", () => finish(true, `Le port ${address.port} accepte les connexions sur cet ordinateur.`));
+      socket.once("error", () => finish(false, `Le port ${address.port} refuse la connexion locale.`));
+    });
   }
 
   const server = http.createServer(async (request, response) => {
@@ -1155,7 +1227,7 @@ export function createAtlasServer(options = {}) {
       if (request.method === "GET" && url.pathname === "/api/status") {
         const auth = await readJson(authPath, null);
         const storage = (await getStore()).readDocument() ? "sqlite" : "uninitialized";
-        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: "0.13.1", initialized: Boolean(auth?.users?.length), storage });
+        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: "0.13.2", initialized: Boolean(auth?.users?.length), storage });
       }
 
       if (request.method === "POST" && url.pathname === "/api/setup") {
@@ -2047,6 +2119,31 @@ export function createAtlasServer(options = {}) {
         const probe = typeof options.probePublicSite === "function" ? options.probePublicSite : probePublicAtlasDomain;
         const result = await probe(deployment.primaryDomain);
         await recordAudit(context.user, "deployment-public-probe", { details: { domain: deployment.primaryDomain, success: true } });
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/deployment/port-check") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const result = await probeLocalAtlasPort();
+        await recordAudit(context.user, "deployment-local-port-probe", { details: { host: result.host, port: result.port, open: result.open } });
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/autostart") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (typeof body.enabled !== "boolean") return errorResponse(response, 400, "invalid_autostart_setting", "Choisissez si le démarrage automatique doit être activé ou désactivé.");
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        await ensureDeploymentOrigins();
+        const result = await manageAutostart({ mode: body.enabled ? "enable" : "disable", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])] });
+        if (result.supported === false) return errorResponse(response, 409, "autostart_not_supported", result.message || "Cette plateforme ne prend pas en charge la tâche Windows Atlas.");
+        await recordAudit(context.user, "autostart-settings-updated", { details: { enabled: result.enabled === true, trigger: result.trigger || "none", taskName: result.taskName || "TRC Community Atlas" } });
         return jsonResponse(response, 200, result);
       }
 

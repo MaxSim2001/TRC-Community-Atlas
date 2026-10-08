@@ -35,8 +35,14 @@ function totp(secret) {
 test("local setup, explicit public origin, mandatory MFA, workspace revision and account management", async (context) => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), "trc-atlas-test-"));
   const sessionClock = { now: Date.now() };
-  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.13.1", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
-  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite });
+  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.13.2", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
+  let autostartState = { supported: true, installed: false, enabled: false, taskName: "TRC Community Atlas", state: "Absent", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, message: "Le démarrage automatique Atlas n’est pas configuré." };
+  const autostartManager = async ({ mode }) => {
+    if (mode === "enable") autostartState = { ...autostartState, installed: true, enabled: true, state: "Ready", trigger: "startup", runAs: "SYSTEM", hidden: true, message: "Atlas est planifié en arrière-plan avec Windows." };
+    if (mode === "disable") autostartState = { ...autostartState, enabled: false, state: "Disabled", message: "La tâche Atlas existe, mais elle est désactivée." };
+    return structuredClone(autostartState);
+  };
+  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   let address = server.address();
   let base = `http://127.0.0.1:${address.port}`;
@@ -66,7 +72,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   let result = await request("/api/status");
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.13.1");
+  assert.equal(result.payload.version, "0.13.2");
   assert.equal(result.payload.storage, "uninitialized");
   assert.match(result.response.headers.get("content-security-policy"), /default-src 'self'/);
 
@@ -105,7 +111,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 200);
 
   await new Promise((resolve) => server.close(resolve));
-  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite });
+  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   address = server.address();
   base = `http://127.0.0.1:${address.port}`;
@@ -480,9 +486,29 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.payload.publicUrl, "https://atlas.abcp.com");
   assert.ok(result.payload.checks.some((check) => check.id === "https" && check.status === "ok"));
   assert.ok(result.payload.checks.some((check) => check.id === "origin" && check.status === "ok"));
+  assert.ok(result.payload.checks.some((check) => check.id === "port" && check.status === "ok"));
+  assert.equal(result.payload.autostart.enabled, false);
+
+  result = await request("/api/settings/deployment/port-check", { method: "POST", csrf: refreshedCsrf, body: {} });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.open, true);
+  assert.equal(result.payload.port, address.port);
+  assert.equal(result.payload.scope, "this-computer-only");
+
+  result = await request("/api/settings/autostart", { method: "PUT", csrf: refreshedCsrf, body: { enabled: true, adminMfaCode: "000000" } });
+  assert.equal(result.response.status, 401);
+  result = await request("/api/settings/autostart", { method: "PUT", csrf: refreshedCsrf, body: { enabled: true, adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.enabled, true);
+  assert.equal(result.payload.hidden, true);
+
+  result = await request("/api/settings/deployment/health");
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.autostart.enabled, true);
+  assert.ok(result.payload.checks.some((check) => check.id === "autostart" && check.status === "ok"));
 
   await new Promise((resolve) => server.close(resolve));
-  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite });
+  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   address = server.address();
   base = `http://127.0.0.1:${address.port}`;
@@ -490,6 +516,10 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.domain, "atlas.abcp.com");
   assert.equal(result.payload.certificate.issuer, "Atlas QA CA");
+
+  result = await request("/api/settings/autostart", { method: "PUT", csrf: refreshedCsrf, headers: { origin: "https://atlas.abcp.com" }, body: { enabled: false, adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.enabled, false);
 
   result = await request("/api/workspace");
   const forbiddenDeploymentWorkspace = structuredClone(result.payload.data);
@@ -508,6 +538,8 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.ok(result.payload.entries.some((entry) => entry.action === "security-policy-updated"));
   assert.ok(result.payload.entries.some((entry) => entry.action === "account-recovery-codes-regenerated"));
   assert.ok(result.payload.entries.some((entry) => entry.action === "vault-created"));
+  assert.ok(result.payload.entries.some((entry) => entry.action === "deployment-local-port-probe"));
+  assert.ok(result.payload.entries.some((entry) => entry.action === "autostart-settings-updated"));
   const hardExpiry = Date.parse(refreshedSessionExpiresAt);
   sessionClock.now = hardExpiry - 1;
   result = await request("/api/me");

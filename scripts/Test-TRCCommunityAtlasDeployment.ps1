@@ -5,7 +5,8 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$ReconfiguredPort = 9096,
     [string]$NodePath = '',
-    [string]$TestRoot = ''
+    [string]$TestRoot = '',
+    [switch]$TestAutostart
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +47,8 @@ if ($NodePath) {
 $deployment = $null
 $runningDeployment = $null
 $reconfiguredDeployment = $null
+$autostartTaskName = "TRC Community Atlas QA $([Guid]::NewGuid().ToString('N'))"
+$autostartResult = 'NOT_RUN'
 try {
     $deploymentJson = & $installerPath @arguments
     $deployment = $deploymentJson | ConvertFrom-Json
@@ -103,6 +106,35 @@ try {
     if ([int]$rememberedConfiguration.port -ne $ReconfiguredPort -or [IO.Path]::GetFullPath([string]$rememberedConfiguration.dataRoot) -ne [IO.Path]::GetFullPath($dataRoot)) {
         throw 'Le configurateur installe ne recharge pas la configuration active.'
     }
+    if ($TestAutostart) {
+        $autostartManager = Join-Path $installRoot 'scripts\Set-TRCCommunityAtlasAutostart.ps1'
+        $installedNode = Join-Path $installRoot 'runtime\node.exe'
+        $enabledAutostart = (& $autostartManager `
+            -Mode Enable `
+            -ProjectRoot $installRoot `
+            -NodePath $installedNode `
+            -DataRoot $dataRoot `
+            -TaskName $autostartTaskName `
+            -Port $ReconfiguredPort `
+            -BindAddress '127.0.0.1' `
+            -Json | ConvertFrom-Json)
+        if (-not $enabledAutostart.installed -or -not $enabledAutostart.enabled -or -not $enabledAutostart.hidden -or $enabledAutostart.trigger -notin @('startup', 'logon')) {
+            throw 'La tache de demarrage Atlas n a pas ete configuree correctement.'
+        }
+        $disabledAutostart = (& $autostartManager `
+            -Mode Disable `
+            -ProjectRoot $installRoot `
+            -NodePath $installedNode `
+            -DataRoot $dataRoot `
+            -TaskName $autostartTaskName `
+            -Port $ReconfiguredPort `
+            -BindAddress '127.0.0.1' `
+            -Json | ConvertFrom-Json)
+        if (-not $disabledAutostart.installed -or $disabledAutostart.enabled -or $disabledAutostart.state -ne 'Disabled') {
+            throw 'La desactivation reversible de la tache Atlas a echoue.'
+        }
+        $autostartResult = 'PASS'
+    }
     Stop-Process -Id ([int]$reconfiguredDeployment.processId)
     $deadline = (Get-Date).AddSeconds(10)
     do {
@@ -121,6 +153,7 @@ try {
         ReconfiguredUrl = $reconfiguredDeployment.url
         Reconfiguration = 'PASS'
         ConfiguratorReload = 'PASS'
+        Autostart = $autostartResult
         DatabasePreserved = $true
         Initialized = [bool]$status.initialized
         Storage = $status.storage
@@ -131,6 +164,12 @@ try {
     }
 }
 finally {
+    if ($TestAutostart) {
+        $qaTask = Get-ScheduledTask -TaskName $autostartTaskName -ErrorAction SilentlyContinue
+        if ($qaTask) {
+            Unregister-ScheduledTask -TaskName $autostartTaskName -Confirm:$false
+        }
+    }
     $processToStop = if ($reconfiguredDeployment -and $reconfiguredDeployment.processId) { $reconfiguredDeployment.processId } elseif ($runningDeployment -and $runningDeployment.processId) { $runningDeployment.processId } elseif ($deployment -and $deployment.processId) { $deployment.processId } else { $null }
     if ($processToStop) {
         Stop-Process -Id ([int]$processToStop) -ErrorAction SilentlyContinue

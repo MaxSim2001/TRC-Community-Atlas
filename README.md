@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Version actuelle : **0.13.1**.
+Version actuelle : **0.13.2**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -93,7 +93,8 @@ toute tâche Atlas remplacée, puis valide l’état de l’API locale après d�
 - panneau « Quick Notes » toujours visible dans chaque espace de compagnie, vide par défaut, isolé par compagnie et modifiable avec aperçu Markdown par les comptes autorisés;
 - centre d’aide intégré accessible par l’icône `?`, avec menu compact, recherche locale, catégories, articles détaillés, notes de version et mise en page responsive;
 - assistant administrateur « Configuration initiale » séparant clairement le code d’instance, le domaine public, les alias et le proxy inverse; Atlas autorise les origines enregistrées mais ne modifie jamais le DNS, le certificat ou le pare-feu;
-- tableau « Santé du site » avec contrôles factuels du service, de SQLite, des comptes, du coffre, du domaine, de HTTPS, du proxy et de l’origine, plus un test public manuel limité au domaine enregistré et refusant les destinations privées;
+- tableau « Santé du site » avec contrôles factuels du service, du port local, de l’autodémarrage Windows, de SQLite, des comptes, du coffre, du domaine, de HTTPS, du proxy et de l’origine, plus un test local limité au listener Atlas courant et un test public manuel limité au domaine enregistré;
+- activation ou désactivation du démarrage automatique depuis la Configuration initiale, via une tâche Windows masquée qui réutilise le port et le dossier de données actifs sans modifier le pare-feu;
 - dépôt public `MaxSim2001/TRC-Community-Atlas`, tests Windows automatisés, déploiement propre sur le port 9095 et paquet autonome produit à chaque exécution réussie; la Release stable signée et les mises à jour intégrées restent en préparation;
 - journal d’activité;
 - interface français/anglais et thèmes clair/sombre;

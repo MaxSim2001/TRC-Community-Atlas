@@ -1,5 +1,19 @@
 # Notes de version — TRC Community Atlas
 
+## 0.13.2 — Autodémarrage et contrôle local du port
+
+- activation ou désactivation du démarrage automatique depuis
+  **Paramètres > Configuration initiale**;
+- tâche Windows masquée, protégée par les droits administrateur, le CSRF et la
+  politique MFA renforcée;
+- réutilisation de l’adresse, du port, des origines HTTPS et du dossier de
+  données actifs, sans port supplémentaire;
+- état réel de la tâche Windows intégré au tableau **Santé du site**;
+- bouton **Tester le port local** limité au listener Atlas courant sur cette
+  machine, sans balayage du LAN et sans modification du pare-feu;
+- test Windows automatisé d’activation, de désactivation et de nettoyage d’une
+  tâche QA isolée.
+
 ## 0.13.1 — Configuration complète du déploiement
 
 - configurateur Windows graphique ouvert par `Installer-Atlas.cmd`;

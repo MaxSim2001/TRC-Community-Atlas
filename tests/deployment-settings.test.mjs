@@ -42,6 +42,7 @@ test("the UI exposes dedicated protected setup and health pages", async () => {
   assert.match(app, /route: "settings\/deployment"/);
   assert.match(app, /route: "settings\/health"/);
   assert.match(app, /data-form="settings-deployment"/);
+  assert.match(app, /data-form="settings-autostart"/);
   assert.match(app, /data-form="settings-security"/);
   assert.match(app, /name="instanceCode"/);
   assert.match(app, /name="primaryDomain"/);
@@ -53,8 +54,14 @@ test("the UI exposes dedicated protected setup and health pages", async () => {
   assert.doesNotMatch(app, /<strong>Configuration de l’instance<\/strong>/);
   assert.doesNotMatch(app, /class="nav-item[^\n]+data-route="accounts"/);
   assert.match(app, /data-action="probe-public-site"/);
+  assert.match(app, /data-action="probe-local-port"/);
+  assert.match(app, /\/api\/settings\/deployment\/port-check/);
+  assert.match(app, /\/api\/settings\/autostart/);
+  assert.match(app, /Configurer et appliquer/);
   assert.match(app, /Atlas ne modifie jamais le DNS/);
   assert.match(css, /\.deployment-health-grid/);
+  assert.match(css, /\.local-port-result/);
+  assert.match(css, /\.autostart-current-state/);
   assert.match(css, /\.settings-sensitive-confirmation/);
   assert.match(css, /\.settings-overview-grid/);
   assert.match(app, /settings-overview-section/);

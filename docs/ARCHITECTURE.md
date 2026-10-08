@@ -43,7 +43,12 @@ Les deux options seront désactivées par défaut. Un raccordement de données n
   serveur sans importer de certificat ni modifier le DNS ou le réseau;
 - tableau de santé administrateur calculé localement et sonde HTTPS publique
   uniquement manuelle, limitée au domaine enregistré, sans redirection et avec
-  refus des adresses privées, locales, réservées ou de documentation.
+  refus des adresses privées, locales, réservées ou de documentation;
+- gestion administrateur d’une tâche Windows masquée pour l’autodémarrage,
+  appelée avec des arguments fixes sans shell et protégée par session, CSRF et
+  MFA renforcé; son état réel est exposé dans la santé du site;
+- sonde TCP locale limitée au listener courant d’Atlas, sans paramètre d’adresse
+  ou de port fourni par le navigateur et sans exploration du LAN.
 - manifeste PWA et service worker limité au shell statique : la bannière d’installation est réservée aux petits écrans de navigateur et disparaît en mode `standalone`; toutes les routes `/api/` restent strictement réseau et ne sont jamais placées dans le cache PWA.
 
 Le stockage PostgreSQL n’est pas requis pour cette instance locale mono-nœud. Les protections avancées de production, le connecteur RMM et le SSO feront l’objet de lots distincts avant une exposition publique. Les pièces jointes ne sont pas incluses dans l’export JSON documentaire et doivent être couvertes par la sauvegarde du dossier `data/`. Le coffre et les pièces jointes ne remplacent pas le chiffrement du disque ni la protection des sauvegardes de la VM.

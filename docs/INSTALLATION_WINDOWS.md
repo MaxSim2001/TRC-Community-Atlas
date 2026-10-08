@@ -1,13 +1,13 @@
 # Installation Windows — TRC Community Atlas
 
-Version du guide : 0.13.1
+Version du guide : 0.13.2
 
 ## Parcours recommandé
 
 1. Télécharger l’artéfact `TRC-Atlas-Windows-…` d’une exécution GitHub Actions
    réussie du dépôt officiel.
 2. Décompresser complètement le ZIP téléchargé.
-3. Ouvrir le dossier `TRC Community Atlas 0.13.1`.
+3. Ouvrir le dossier `TRC Community Atlas 0.13.2`.
 4. Double-cliquer sur `Installer-Atlas.cmd`.
 5. Choisir le port, les dossiers et les options dans le configurateur.
 6. Cliquer sur **Installer Atlas**.
@@ -71,6 +71,13 @@ Deux raccourcis sont ajoutés au menu Démarrer : `TRC Community Atlas` ouvre
 l’instance dans le navigateur, et `Configurer TRC Community Atlas` rouvre le
 configurateur. Changer uniquement le port arrête proprement l’ancien listener,
 réutilise le même dossier de données et conserve la base SQLite.
+
+Le super administrateur peut ensuite gérer la même tâche depuis
+**Paramètres > Configuration initiale > Démarrage Windows**. Le bouton
+**Configurer et appliquer** demande le MFA lorsque la politique renforcée est
+active. **Santé du site** affiche l’état réel de la tâche et propose
+**Tester le port local**, limité au listener Atlas courant sur cet ordinateur.
+Ces actions n’ouvrent aucun port et ne modifient pas le pare-feu.
 
 ## Installation avancée
 

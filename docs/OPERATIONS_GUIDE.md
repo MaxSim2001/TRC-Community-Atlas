@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.13.1
+Version du guide : 0.13.2
 
 ## Port et configuration de l’instance
 
@@ -39,6 +39,20 @@ valide TLS et refuse les domaines qui résolvent vers une adresse locale, privé
 réservée ou de test. Il ne remplace pas une vérification indépendante du DNS et
 du proxy.
 
+## Démarrage automatique depuis Atlas
+
+Dans **Paramètres > Configuration initiale**, le super administrateur peut
+activer ou désactiver **Démarrer Atlas automatiquement**, saisir son code MFA
+si la validation renforcée est active, puis choisir **Configurer et appliquer**.
+Atlas crée ou met à jour la tâche Windows masquée `TRC Community Atlas`. Avec
+des droits administrateur, elle utilise le déclencheur de démarrage et le compte
+`SYSTEM`; sinon, elle utilise l’ouverture de session du compte Windows courant.
+
+Cette action ne redémarre pas le processus actif et ne modifie ni le pare-feu,
+ni le DNS, ni le proxy. Elle reprend exactement le port, l’adresse d’écoute, les
+origines HTTPS et le dossier de données de l’instance courante. Désactiver
+l’option conserve la tâche de façon réversible, mais la désactive.
+
 ## Vérification de santé
 
 Avant un redémarrage ou une modification, comparer :
@@ -49,6 +63,11 @@ Avant un redémarrage ou une modification, comparer :
 4. la réponse publique, lorsqu’une publication a été autorisée;
 5. les contrôles séparés dans **Paramètres > Santé du site**;
 6. les journaux applicatifs et ceux du mandataire inverse.
+
+Le bouton **Tester le port local** ouvre une connexion TCP seulement vers le
+listener réellement utilisé par le processus Atlas courant et sur cet
+ordinateur. Il n’accepte aucune adresse fournie par l’utilisateur, ne balaie
+aucun autre port et ne contacte aucune autre machine du réseau.
 
 Un problème public avec une API locale saine ne prouve pas un arrêt d’Atlas.
 
