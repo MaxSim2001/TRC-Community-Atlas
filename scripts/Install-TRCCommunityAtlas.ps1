@@ -116,7 +116,6 @@ $configDirectory = Join-Path $instanceRoot 'config'
 $logsDirectory = Join-Path $instanceRoot 'logs'
 $configPath = Join-Path $configDirectory 'instance.json'
 $previousConfiguration = $null
-$previousConfigPath = $null
 $configCandidates = [Collections.Generic.List[string]]::new()
 foreach ($pointerPath in @((Join-Path $sourceRoot 'instance-location.json'), (Join-Path $InstallRoot 'instance-location.json'))) {
     if (-not (Test-Path -LiteralPath $pointerPath -PathType Leaf)) {
@@ -137,7 +136,6 @@ foreach ($candidateConfigPath in ($configCandidates | Select-Object -Unique)) {
     if (Test-Path -LiteralPath $candidateConfigPath -PathType Leaf) {
         try {
             $previousConfiguration = Get-Content -LiteralPath $candidateConfigPath -Raw | ConvertFrom-Json
-            $previousConfigPath = $candidateConfigPath
             break
         }
         catch {
@@ -330,10 +328,20 @@ else {
     }
 }
 
-if ($previousConfiguration -and $previousConfiguration.taskName -and [string]$previousConfiguration.taskName -ne $taskName) {
-    $legacyTask = Get-ScheduledTask -TaskName ([string]$previousConfiguration.taskName) -ErrorAction SilentlyContinue
+$legacyTaskNames = [Collections.Generic.List[string]]::new()
+if ($previousConfiguration -and $previousConfiguration.taskName) {
+    $legacyTaskNames.Add([string]$previousConfiguration.taskName)
+}
+if ($previousConfiguration -and $previousConfiguration.port) {
+    $legacyTaskNames.Add("TRC Community Atlas - $([int]$previousConfiguration.port)")
+}
+foreach ($legacyTaskName in ($legacyTaskNames | Select-Object -Unique)) {
+    if ($legacyTaskName -eq $taskName) {
+        continue
+    }
+    $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
     if ($legacyTask) {
-        Disable-ScheduledTask -TaskName ([string]$previousConfiguration.taskName) | Out-Null
+        Disable-ScheduledTask -TaskName $legacyTaskName | Out-Null
     }
 }
 

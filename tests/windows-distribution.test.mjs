@@ -19,6 +19,7 @@ test("the Windows installer keeps program and instance data separate", () => {
   assert.match(installer, /--data/);
   assert.match(installer, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);
   assert.match(installer, /LogonType S4U/);
+  assert.match(installer, /TRC Community Atlas - \$\(\[int\]\$previousConfiguration\.port\)/);
   assert.doesNotMatch(installer, /192\.168\.50\.|Administrateur\.AD-01/);
   assert.doesNotMatch(installer, /New-NetFirewallRule|Set-DnsClient|netsh/);
   assert.match(configurator, /NumericUpDown/);
