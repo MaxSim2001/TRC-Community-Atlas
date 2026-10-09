@@ -2,9 +2,9 @@
 
 Statut : code source publié; installateur, Releases et mise à jour intégrée à implémenter  
 Date : 8 octobre 2026  
-Version Atlas analysée : 0.14.2
+Version Atlas analysée : 0.14.3
 
-État d’avancement : la version 0.14.2 réalise le premier paquet Windows autonome,
+État d’avancement : la version 0.14.3 réalise le premier paquet Windows autonome,
 la séparation programme/données, le configurateur graphique, le démarrage caché
 et les tests de déploiement/reconfiguration sur les ports 9095 et 9096. La signature publique, les Releases stables,
 la mise à jour transactionnelle et le retour arrière restent à compléter avant

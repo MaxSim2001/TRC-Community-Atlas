@@ -10,8 +10,36 @@ import {
   inspectManagedBackup,
   listManagedBackups,
   nextBackupRun,
+  compareStableVersions,
+  summarizeGithubRelease,
   validateBackupDestination,
 } from "../lib/atlas-operations.mjs";
+
+test("GitHub release metadata never becomes installable before cryptographic verification and rollback readiness", () => {
+  assert.equal(compareStableVersions("v0.14.3", "0.14.2"), 1);
+  assert.equal(compareStableVersions("0.14.2", "0.14.2"), 0);
+  assert.equal(compareStableVersions("0.13.9", "0.14.2"), -1);
+  assert.equal(compareStableVersions("latest", "0.14.2"), null);
+
+  const release = summarizeGithubRelease({
+    tag_name: "v0.14.3",
+    name: "Atlas 0.14.3",
+    published_at: "2026-10-09T12:00:00.000Z",
+    html_url: "https://github.com/MaxSim2001/TRC-Community-Atlas/releases/tag/v0.14.3",
+    assets: [
+      { name: "atlas-release-manifest.json", size: 512, browser_download_url: "https://github.com/example/manifest" },
+      { name: "atlas-release-manifest.sig", size: 256, browser_download_url: "https://github.com/example/signature" },
+    ],
+  }, { currentVersion: "0.14.2" });
+
+  assert.equal(release.updateAvailable, true);
+  assert.equal(release.artifactSetPresent, true);
+  assert.equal(release.signatureVerified, false);
+  assert.equal(release.packageVerified, false);
+  assert.equal(release.rollbackReady, false);
+  assert.equal(release.installable, false);
+  assert.match(release.installBlockedReason, /pas encore téléchargés et vérifiés/i);
+});
 
 test("managed backups are encrypted, inspectable, scheduled and retained without touching unrelated files", async (context) => {
   const root = await mkdtemp(path.join(tmpdir(), "atlas-operations-"));

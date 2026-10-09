@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.14.2";
+  const ATLAS_VERSION = "0.14.3";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -3519,7 +3519,14 @@
     if (!state.updateStatus && !state.updateLoading) queueMicrotask(() => loadUpdateStatus());
     const status = state.updateStatus;
     const release = status?.lastCheck;
-    const releaseMarkup = release ? `<section class="panel update-release-card"><div class="update-release-heading"><span class="module-hero-icon">${icon(release.installable ? "shield" : "alert", 21)}</span><div><p class="eyebrow">DERNIÈRE VERSION STABLE</p><h2>${escapeHtml(release.name || release.tag || "Aucune version stable")}</h2><p>${release.publishedAt ? `Publiée ${formatDateTime(release.publishedAt)}` : "Aucune publication stable détectée."}</p></div><span class="status-badge ${release.installable ? "success" : "warning"}">${release.installable ? "Signée" : "Installation bloquée"}</span></div>${release.notes ? `<pre class="release-notes-preview">${escapeHtml(release.notes)}</pre>` : ""}${release.installBlockedReason ? `<div class="notice">${icon("shield", 16)} ${escapeHtml(release.installBlockedReason)}</div>` : ""}${release.pageUrl ? `<a class="secondary compact" href="${escapeHtml(release.pageUrl)}" target="_blank" rel="noreferrer">Voir la version sur GitHub ${icon("external", 14)}</a>` : ""}</section>` : `<section class="panel update-release-card">${emptyState(state.updateLoading ? "Vérification locale en cours…" : "Aucune vérification GitHub lancée sur cette session.")}</section>`;
+    const releaseBadge = !release?.available
+      ? { className: "muted", label: "Aucune publication" }
+      : release.sameVersion
+        ? { className: "success", label: "Atlas à jour" }
+        : release.updateAvailable
+          ? { className: "warning", label: "Mise à jour détectée" }
+          : { className: "warning", label: "Version non applicable" };
+    const releaseMarkup = release ? `<section class="panel update-release-card"><div class="update-release-heading"><span class="module-hero-icon">${icon(release.sameVersion ? "check" : release.updateAvailable ? "refresh" : "alert", 21)}</span><div><p class="eyebrow">DERNIÈRE VERSION STABLE</p><h2>${escapeHtml(release.name || release.tag || "Aucune version stable")}</h2><p>${release.publishedAt ? `Publiée ${formatDateTime(release.publishedAt)}` : "Aucune publication stable détectée."}</p></div><span class="status-badge ${releaseBadge.className}">${releaseBadge.label}</span></div>${release.notes ? `<pre class="release-notes-preview">${escapeHtml(release.notes)}</pre>` : ""}${release.installBlockedReason && release.available ? `<div class="notice">${icon("shield", 16)} ${escapeHtml(release.installBlockedReason)}</div>` : ""}${release.pageUrl ? `<a class="secondary compact" href="${escapeHtml(release.pageUrl)}" target="_blank" rel="noreferrer">Voir la version sur GitHub ${icon("external", 14)}</a>` : ""}</section>` : `<section class="panel update-release-card">${emptyState(state.updateLoading ? "Vérification locale en cours…" : "Aucune vérification GitHub lancée sur cette session.")}</section>`;
     return renderSettingsShell("updates", "Mises à jour", "Contrôle manuel de la version publiée, sans téléchargement ni installation silencieuse.", `<section class="panel update-policy-card"><div><p class="eyebrow">CENTRE DE MISE À JOUR</p><h2>Atlas ${escapeHtml(status?.currentVersion || ATLAS_VERSION)}</h2><p>Atlas contacte uniquement l’API officielle de GitHub lorsque vous cliquez sur Vérifier. Une sauvegarde et une confirmation seront obligatoires avant une future installation.</p></div><dl class="security-list"><div><dt>Vérification automatique</dt><dd><span class="status-badge muted">Désactivée</span></dd></div><div><dt>Installation silencieuse</dt><dd><span class="status-badge muted">Interdite</span></dd></div><div><dt>Manifeste + signature</dt><dd>Obligatoires</dd></div><div><dt>Retour arrière</dt><dd>Requis avant activation de l’installation</dd></div></dl><button class="primary" type="button" data-action="check-updates" ${state.updateLoading ? "disabled" : ""}>${icon("refresh", 15)} ${state.updateLoading ? "Vérification…" : "Vérifier sur GitHub"}</button></section>${releaseMarkup}<div class="health-boundary-note">${icon("info", 16)} Le bouton d’installation demeure volontairement absent tant que la chaîne de publication ne fournit pas un manifeste signé vérifiable et un retour arrière testé.</div>`);
   }
 

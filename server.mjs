@@ -32,7 +32,7 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 8;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.14.2";
+const ATLAS_VERSION = "0.14.3";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -679,7 +679,7 @@ export function createAtlasServer(options = {}) {
   const dataRoot = options.dataRoot || defaultDataRoot;
   const sessionNow = typeof options.now === "function" ? options.now : Date.now;
   const manageAutostart = typeof options.autostartManager === "function" ? options.autostartManager : runAutostartManager;
-  const releaseChecker = typeof options.releaseChecker === "function" ? options.releaseChecker : checkLatestGithubRelease;
+  const releaseChecker = typeof options.releaseChecker === "function" ? options.releaseChecker : () => checkLatestGithubRelease({ currentVersion: ATLAS_VERSION });
   const backupSecretProtector = typeof options.backupSecretProtector === "function" ? options.backupSecretProtector : protectBackupSecret;
   const authPath = path.join(dataRoot, "auth.json");
   const sessionsPath = path.join(dataRoot, "sessions.json");
@@ -1434,7 +1434,7 @@ export function createAtlasServer(options = {}) {
       { id: "https", status: httpsObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "HTTPS observé", message: httpsObserved ? "Cette requête est arrivée à Atlas avec le protocole HTTPS déclaré." : settings.accessMode === "local" ? "Accès local HTTP attendu; le navigateur public devra passer par HTTPS." : "Atlas ne voit pas X-Forwarded-Proto: https sur cette requête." },
       { id: "reverse-proxy", status: proxyObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Proxy inverse", message: proxyObserved ? `En-têtes de proxy observés${observedHost ? ` pour ${observedHost}` : ""}.` : settings.accessMode === "local" ? "Aucun proxy requis en mode local." : `Aucun en-tête de proxy n’est visible; vérifiez ${settings.reverseProxy.toUpperCase()}.` },
       { id: "origin", status: settings.primaryDomain && savedDeploymentOrigins.has(`https://${settings.primaryDomain}`) ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Origine autorisée", message: settings.primaryDomain ? "Les requêtes d’écriture HTTPS de ce domaine sont autorisées par Atlas." : "Aucune origine publique enregistrée." },
-      { id: "updates", status: lastReleaseCheck?.installable ? "ok" : "neutral", label: "Mises à jour", message: lastReleaseCheck ? (lastReleaseCheck.installable ? `La version ${lastReleaseCheck.tag} fournit un manifeste signé vérifiable.` : `Dernière vérification : ${lastReleaseCheck.tag || "aucune version stable"}. Aucune installation n’est autorisée sans manifeste signé.`) : "La vérification GitHub est manuelle; aucun appel externe automatique n’est effectué." },
+      { id: "updates", status: lastReleaseCheck?.updateAvailable ? "warning" : lastReleaseCheck ? "ok" : "neutral", label: "Mises à jour", message: lastReleaseCheck ? (lastReleaseCheck.updateAvailable ? `La version ${lastReleaseCheck.tag} est publiée, mais l’installation reste bloquée jusqu’à la vérification cryptographique et au retour arrière.` : `Dernière vérification : ${lastReleaseCheck.tag || "aucune version stable"}.`) : "La vérification GitHub est manuelle; aucun appel externe automatique n’est effectué." },
     ];
     return {
       checkedAt: nowIso(),
@@ -2482,7 +2482,7 @@ export function createAtlasServer(options = {}) {
         const context = await requireAdmin(session, response);
         if (!context) return;
         lastReleaseCheck = await releaseChecker();
-        await recordAudit(context.user, "github-release-checked", { details: { repository: lastReleaseCheck.repository || "MaxSim2001/TRC-Community-Atlas", tag: lastReleaseCheck.tag || "", installable: lastReleaseCheck.installable === true } });
+        await recordAudit(context.user, "github-release-checked", { details: { repository: lastReleaseCheck.repository || "MaxSim2001/TRC-Community-Atlas", tag: lastReleaseCheck.tag || "", updateAvailable: lastReleaseCheck.updateAvailable === true, installable: lastReleaseCheck.installable === true } });
         return jsonResponse(response, 200, { currentVersion: ATLAS_VERSION, automaticChecks: false, automaticInstall: false, lastCheck: lastReleaseCheck });
       }
 

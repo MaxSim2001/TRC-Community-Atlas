@@ -99,9 +99,9 @@ test("the complete Atlas module catalog has valid business schemas", async () =>
 
 test("the public shell cache-busts the audited module release", async () => {
   const index = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
-  assert.match(index, /assets\/styles\.css\?v=0\.14\.2-auth-1/);
-  assert.match(index, /assets\/help-content\.js\?v=0\.14\.2-auth-1/);
-  assert.match(index, /assets\/app\.js\?v=0\.14\.2-auth-1/);
+  assert.match(index, /assets\/styles\.css\?v=0\.14\.3-update-1/);
+  assert.match(index, /assets\/help-content\.js\?v=0\.14\.3-update-1/);
+  assert.match(index, /assets\/app\.js\?v=0\.14\.3-update-1/);
 });
 
 test("every shared module schema survives a SQLite round trip", async (context) => {

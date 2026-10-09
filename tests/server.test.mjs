@@ -35,7 +35,7 @@ function totp(secret) {
 test("local setup, explicit public origin, mandatory MFA, workspace revision and account management", async (context) => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), "trc-atlas-test-"));
   const sessionClock = { now: Date.now() };
-  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.14.2", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
+  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.14.3", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
   let autostartState = { supported: true, installed: false, enabled: false, taskName: "TRC Community Atlas", state: "Absent", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, message: "Le démarrage automatique Atlas n’est pas configuré." };
   const autostartManager = async ({ mode }) => {
     if (mode === "enable") autostartState = { ...autostartState, installed: true, enabled: true, state: "Ready", trigger: "startup", runAs: "SYSTEM", hidden: true, message: "Atlas est planifié en arrière-plan avec Windows." };
@@ -74,7 +74,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   let result = await request("/api/status");
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.14.2");
+  assert.equal(result.payload.version, "0.14.3");
   assert.equal(result.payload.storage, "uninitialized");
   assert.match(result.response.headers.get("content-security-policy"), /default-src 'self'/);
 
@@ -175,7 +175,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 401);
   result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.version, "0.14.2");
+  assert.equal(result.payload.version, "0.14.3");
   result = await request("/api/v1/organizations", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
   assert.ok(result.payload.items.length >= 1);

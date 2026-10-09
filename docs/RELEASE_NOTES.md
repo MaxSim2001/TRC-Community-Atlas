@@ -1,5 +1,16 @@
 # Notes de version — TRC Community Atlas
 
+## 0.14.3 — Vérification GitHub durcie
+
+- comparaison explicite de la version installée avec le tag stable publié;
+- état **Atlas à jour**, **Mise à jour détectée** ou **Aucune publication**
+  affiché sans présenter un paquet non vérifié comme installable;
+- présence d’un manifeste et d’une signature traitée comme un indice seulement :
+  Atlas exige toujours leur vérification cryptographique, celle du paquet et un
+  retour arrière prêt avant d’autoriser une installation;
+- tests d’intégration ajoutés pour l’authentification administrateur, le CSRF,
+  l’audit et l’absence volontaire de route d’installation non sécurisée.
+
 ## 0.14.2 — Connexion responsive
 
 - écran de connexion basculé en une seule colonne avant que ses largeurs
