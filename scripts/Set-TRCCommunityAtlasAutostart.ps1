@@ -41,6 +41,10 @@ function Set-InstanceConfigurationValue {
     foreach ($entry in @{
         autostart = $Enabled
         taskName = $TaskName
+        bindAddress = $BindAddress
+        port = $Port
+        allowedOrigins = @($allowedOriginList)
+        trustedProxies = @($trustedProxyList)
         updatedAt = (Get-Date).ToUniversalTime().ToString('o')
     }.GetEnumerator()) {
         if ($configuration.PSObject.Properties.Name -contains $entry.Key) {

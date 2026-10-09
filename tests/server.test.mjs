@@ -37,7 +37,10 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   const sessionClock = { now: Date.now() };
   const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.15.0", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
   let autostartState = { supported: true, installed: false, enabled: false, taskName: "TRC Community Atlas", state: "Absent", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, message: "Le démarrage automatique Atlas n’est pas configuré." };
-  const autostartManager = async ({ mode }) => {
+  const autostartCalls = [];
+  const autostartManager = async (options) => {
+    autostartCalls.push(structuredClone(options));
+    const { mode } = options;
     if (mode === "enable") autostartState = { ...autostartState, installed: true, enabled: true, state: "Ready", trigger: "startup", runAs: "SYSTEM", hidden: true, message: "Atlas est planifié en arrière-plan avec Windows." };
     if (mode === "disable") autostartState = { ...autostartState, enabled: false, state: "Disabled", message: "La tâche Atlas existe, mais elle est désactivée." };
     return structuredClone(autostartState);
@@ -572,6 +575,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.enabled, true);
   assert.equal(result.payload.hidden, true);
+  assert.deepEqual(autostartCalls.at(-1).trustedProxies, ["127.0.0.1"]);
 
   result = await request("/api/settings/deployment/health");
   assert.equal(result.response.status, 200);

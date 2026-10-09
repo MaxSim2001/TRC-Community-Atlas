@@ -350,7 +350,7 @@ function deploymentOrigins(settings = {}) {
   return [deployment.primaryDomain, ...deployment.domainAliases].filter(Boolean).map((domain) => `https://${domain}`);
 }
 
-function runAutostartManager({ mode, host, port, dataRoot, allowedOrigins }) {
+function runAutostartManager({ mode, host, port, dataRoot, allowedOrigins, trustedProxies = [] }) {
   if (process.platform !== "win32") {
     return Promise.resolve({ supported: false, installed: false, enabled: false, state: "Unsupported", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, taskName: "TRC Community Atlas", message: "La gestion intégrée du démarrage automatique est disponible dans le paquet Windows Atlas." });
   }
@@ -367,6 +367,7 @@ function runAutostartManager({ mode, host, port, dataRoot, allowedOrigins }) {
     "-Port", String(port),
     "-BindAddress", host,
     "-AllowedOrigins", [...new Set(allowedOrigins)].join("|"),
+    "-TrustedProxies", [...new Set(trustedProxies)].join("|"),
     "-Json",
   ];
   return new Promise((resolve, reject) => {
@@ -1662,7 +1663,7 @@ export function createAtlasServer(options = {}) {
     const backupAgeDays = backupSettings.lastSuccessAt ? Math.floor((Date.now() - Date.parse(backupSettings.lastSuccessAt)) / 86400000) : null;
     let autostart;
     try {
-      autostart = await manageAutostart({ mode: "status", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])] });
+      autostart = await manageAutostart({ mode: "status", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])], trustedProxies: [...activeTrustedProxies] });
     } catch (error) {
       autostart = { supported: process.platform === "win32", installed: false, enabled: false, state: "Error", trigger: "none", runAs: "", message: error.message || "L’état du démarrage automatique est indisponible." };
     }
@@ -1682,7 +1683,7 @@ export function createAtlasServer(options = {}) {
       { id: "domain", status: settings.primaryDomain ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Domaine public", message: settings.primaryDomain ? `${publicUrl} est enregistré dans Atlas.` : settings.accessMode === "local" ? "Mode local : aucun domaine public requis." : "Ajoutez le domaine public servi par le proxy inverse." },
       { id: "https", status: httpsObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "HTTPS observé", message: httpsObserved ? "Cette requête est arrivée à Atlas avec le protocole HTTPS déclaré." : settings.accessMode === "local" ? "Accès local HTTP attendu; le navigateur public devra passer par HTTPS." : "Atlas ne voit pas X-Forwarded-Proto: https sur cette requête." },
       { id: "reverse-proxy", status: proxyObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Proxy inverse", message: proxyObserved ? `En-têtes de proxy observés${observedHost ? ` pour ${observedHost}` : ""}.` : settings.accessMode === "local" ? "Aucun proxy requis en mode local." : `Aucun en-tête de proxy n’est visible; vérifiez ${settings.reverseProxy.toUpperCase()}.` },
-      { id: "trusted-proxy", status: settings.accessMode === "local" ? "neutral" : settings.trustedProxies.length ? "ok" : "warning", label: "Proxy de confiance", message: settings.accessMode === "local" ? "Aucun proxy de confiance requis en mode local." : settings.trustedProxies.length ? `${settings.trustedProxies.length} adresse${settings.trustedProxies.length === 1 ? "" : "s"} de proxy explicitement autorisée${settings.trustedProxies.length === 1 ? "" : "s"}.` : "Ajoutez l’adresse IP exacte du proxy; Atlas ignore volontairement ses en-têtes tant qu’elle n’est pas déclarée." },
+      { id: "trusted-proxy", status: settings.accessMode === "local" ? "neutral" : activeTrustedProxies.size ? "ok" : "warning", label: "Proxy de confiance", message: settings.accessMode === "local" ? "Aucun proxy de confiance requis en mode local." : activeTrustedProxies.size ? `${activeTrustedProxies.size} adresse${activeTrustedProxies.size === 1 ? "" : "s"} de proxy explicitement autorisée${activeTrustedProxies.size === 1 ? "" : "s"} par l’installation ou les paramètres Atlas.` : "Ajoutez l’adresse IP exacte du proxy; Atlas ignore volontairement ses en-têtes tant qu’elle n’est pas déclarée." },
       { id: "origin", status: settings.primaryDomain && savedDeploymentOrigins.has(`https://${settings.primaryDomain}`) ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Origine autorisée", message: settings.primaryDomain ? "Les requêtes d’écriture HTTPS de ce domaine sont autorisées par Atlas." : "Aucune origine publique enregistrée." },
       { id: "updates", status: lastReleaseCheck?.updateAvailable ? "warning" : lastReleaseCheck ? "ok" : "neutral", label: "Mises à jour", message: lastReleaseCheck ? (lastReleaseCheck.updateAvailable ? `La version ${lastReleaseCheck.tag} est publiée, mais l’installation reste bloquée jusqu’à la vérification cryptographique et au retour arrière.` : `Dernière vérification : ${lastReleaseCheck.tag || "aucune version stable"}.`) : "La vérification GitHub est manuelle; aucun appel externe automatique n’est effectué." },
     ];
@@ -2986,7 +2987,7 @@ export function createAtlasServer(options = {}) {
         if (typeof body.enabled !== "boolean") return errorResponse(response, 400, "invalid_autostart_setting", "Choisissez si le démarrage automatique doit être activé ou désactivé.");
         if (!(await requirePrivilegedMfa(context.user, body, response))) return;
         await ensureDeploymentOrigins();
-        const result = await manageAutostart({ mode: body.enabled ? "enable" : "disable", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])] });
+        const result = await manageAutostart({ mode: body.enabled ? "enable" : "disable", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])], trustedProxies: [...new Set([...trustedProxies, ...savedTrustedProxies])] });
         if (result.supported === false) return errorResponse(response, 409, "autostart_not_supported", result.message || "Cette plateforme ne prend pas en charge la tâche Windows Atlas.");
         await recordAudit(context.user, "autostart-settings-updated", { details: { enabled: result.enabled === true, trigger: result.trigger || "none", taskName: result.taskName || "TRC Community Atlas" } });
         return jsonResponse(response, 200, result);
