@@ -32,7 +32,18 @@ test("managed backups are encrypted, inspectable, scheduled and retained without
   assert.equal(validateBackupDestination(destination), path.normalize(destination));
   assert.throws(() => validateBackupDestination(path.parse(destination).root), /racine/i);
   assert.equal(nextBackupRun({ enabled: false }), "");
-  assert.equal(nextBackupRun({ enabled: true, cadence: "daily", hour: 2, minute: 30 }, Date.parse("2026-10-08T03:00:00-04:00")), "2026-10-09T06:30:00.000Z");
+  const scheduleReference = new Date(2026, 9, 8, 3, 0, 0).getTime();
+  const scheduledRun = new Date(nextBackupRun({ enabled: true, cadence: "daily", hour: 2, minute: 30 }, scheduleReference));
+  assert.deepEqual(
+    {
+      year: scheduledRun.getFullYear(),
+      month: scheduledRun.getMonth(),
+      date: scheduledRun.getDate(),
+      hour: scheduledRun.getHours(),
+      minute: scheduledRun.getMinutes(),
+    },
+    { year: 2026, month: 9, date: 9, hour: 2, minute: 30 },
+  );
 
   for (let index = 0; index < 3; index += 1) {
     await createManagedBackup({ projectRoot: root, dataRoot, destination, passphrase, now: Date.parse(`2026-10-0${7 + index}T12:00:0${index}Z`) });
