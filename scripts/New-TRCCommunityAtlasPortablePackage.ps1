@@ -47,7 +47,7 @@ try {
     foreach ($relativePath in @('server.mjs', 'package.json', 'README.md', 'LICENSE.txt', 'NOTICE.txt', 'Start-TRCCommunityAtlas.ps1', 'Install-Atlas.cmd')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot $relativePath) -Destination (Join-Path $packageRoot $relativePath) -Force
     }
-    foreach ($directoryName in @('public', 'lib', 'scripts', 'docs')) {
+    foreach ($directoryName in @('public', 'lib', 'scripts', 'docs', 'resources')) {
         Copy-Item -LiteralPath (Join-Path $sourceRoot $directoryName) -Destination (Join-Path $packageRoot $directoryName) -Recurse -Force
     }
     $runtimeDirectory = Join-Path $packageRoot 'runtime'

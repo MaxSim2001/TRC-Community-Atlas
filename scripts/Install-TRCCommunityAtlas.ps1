@@ -11,6 +11,8 @@ param(
 
     [string[]]$AllowedOrigin = @(),
     [string]$NodePath = '',
+    [ValidatePattern('^[^\\/:*?"<>|]{1,180}$')]
+    [string]$TaskName = 'TRC Community Atlas',
     [ValidateSet('stable', 'beta')]
     [string]$Channel = 'stable',
     [switch]$SkipAutostart,
@@ -228,7 +230,7 @@ foreach ($relativePath in $rootFiles) {
     }
 }
 
-foreach ($directoryName in @('public', 'lib', 'scripts', 'docs')) {
+foreach ($directoryName in @('public', 'lib', 'scripts', 'docs', 'resources')) {
     $sourceDirectory = Join-Path $sourceRoot $directoryName
     if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
         continue
@@ -251,7 +253,6 @@ $installedAt = (Get-Date).ToUniversalTime().ToString('o')
 if ($previousConfiguration -and $previousConfiguration.installedAt) {
     $installedAt = [string]$previousConfiguration.installedAt
 }
-$taskName = 'TRC Community Atlas'
 $configuration = [ordered]@{
     schemaVersion = 1
     version = $version

@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.14.3";
+  const ATLAS_VERSION = "0.15.0";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -3519,6 +3519,8 @@
     if (!state.updateStatus && !state.updateLoading) queueMicrotask(() => loadUpdateStatus());
     const status = state.updateStatus;
     const release = status?.lastCheck;
+    const prepared = status?.prepared;
+    const job = status?.job;
     const releaseBadge = !release?.available
       ? { className: "muted", label: "Aucune publication" }
       : release.sameVersion
@@ -3526,8 +3528,13 @@
         : release.updateAvailable
           ? { className: "warning", label: "Mise à jour détectée" }
           : { className: "warning", label: "Version non applicable" };
-    const releaseMarkup = release ? `<section class="panel update-release-card"><div class="update-release-heading"><span class="module-hero-icon">${icon(release.sameVersion ? "check" : release.updateAvailable ? "refresh" : "alert", 21)}</span><div><p class="eyebrow">DERNIÈRE VERSION STABLE</p><h2>${escapeHtml(release.name || release.tag || "Aucune version stable")}</h2><p>${release.publishedAt ? `Publiée ${formatDateTime(release.publishedAt)}` : "Aucune publication stable détectée."}</p></div><span class="status-badge ${releaseBadge.className}">${releaseBadge.label}</span></div>${release.notes ? `<pre class="release-notes-preview">${escapeHtml(release.notes)}</pre>` : ""}${release.installBlockedReason && release.available ? `<div class="notice">${icon("shield", 16)} ${escapeHtml(release.installBlockedReason)}</div>` : ""}${release.pageUrl ? `<a class="secondary compact" href="${escapeHtml(release.pageUrl)}" target="_blank" rel="noreferrer">Voir la version sur GitHub ${icon("external", 14)}</a>` : ""}</section>` : `<section class="panel update-release-card">${emptyState(state.updateLoading ? "Vérification locale en cours…" : "Aucune vérification GitHub lancée sur cette session.")}</section>`;
-    return renderSettingsShell("updates", "Mises à jour", "Contrôle manuel de la version publiée, sans téléchargement ni installation silencieuse.", `<section class="panel update-policy-card"><div><p class="eyebrow">CENTRE DE MISE À JOUR</p><h2>Atlas ${escapeHtml(status?.currentVersion || ATLAS_VERSION)}</h2><p>Atlas contacte uniquement l’API officielle de GitHub lorsque vous cliquez sur Vérifier. Une sauvegarde et une confirmation seront obligatoires avant une future installation.</p></div><dl class="security-list"><div><dt>Vérification automatique</dt><dd><span class="status-badge muted">Désactivée</span></dd></div><div><dt>Installation silencieuse</dt><dd><span class="status-badge muted">Interdite</span></dd></div><div><dt>Manifeste + signature</dt><dd>Obligatoires</dd></div><div><dt>Retour arrière</dt><dd>Requis avant activation de l’installation</dd></div></dl><button class="primary" type="button" data-action="check-updates" ${state.updateLoading ? "disabled" : ""}>${icon("refresh", 15)} ${state.updateLoading ? "Vérification…" : "Vérifier sur GitHub"}</button></section>${releaseMarkup}<div class="health-boundary-note">${icon("info", 16)} Le bouton d’installation demeure volontairement absent tant que la chaîne de publication ne fournit pas un manifeste signé vérifiable et un retour arrière testé.</div>`);
+    const releaseMarkup = release ? `<section class="panel update-release-card"><div class="update-release-heading"><span class="module-hero-icon">${icon(release.sameVersion ? "check" : release.updateAvailable ? "refresh" : "alert", 21)}</span><div><p class="eyebrow">DERNIÈRE VERSION STABLE</p><h2>${escapeHtml(release.name || release.tag || "Aucune version stable")}</h2><p>${release.publishedAt ? `Publiée ${formatDateTime(release.publishedAt)}` : "Aucune publication stable détectée."}</p></div><span class="status-badge ${releaseBadge.className}">${releaseBadge.label}</span></div>${release.notes ? `<pre class="release-notes-preview">${escapeHtml(release.notes)}</pre>` : ""}${release.installBlockedReason && release.available && !prepared ? `<div class="notice">${icon("shield", 16)} ${escapeHtml(release.installBlockedReason)}</div>` : ""}${release.pageUrl ? `<a class="secondary compact" href="${escapeHtml(release.pageUrl)}" target="_blank" rel="noreferrer">Voir la version sur GitHub ${icon("external", 14)}</a>` : ""}</section>` : `<section class="panel update-release-card">${emptyState(state.updateLoading ? "Vérification locale en cours…" : "Aucune vérification GitHub lancée sur cette session.")}</section>`;
+    const prepareMarkup = release?.updateAvailable && (!prepared || prepared.targetVersion !== String(release.tag || "").replace(/^v/, ""))
+      ? `<section class="panel update-prepare-card"><div><p class="eyebrow">TÉLÉCHARGEMENT CONTRÔLÉ</p><h2>Préparer ${escapeHtml(release.tag)}</h2><p>Télécharge le manifeste, vérifie sa signature Ed25519, puis contrôle la taille et l’empreinte SHA-256 du paquet. Le programme actif et les données ne sont pas modifiés.</p></div><button class="secondary" type="button" data-action="prepare-update" ${state.updateLoading ? "disabled" : ""}>${icon("download", 15)} Télécharger et vérifier</button></section>`
+      : "";
+    const preparedMarkup = prepared ? `<section class="panel update-prepared-card"><header><div><p class="eyebrow">PAQUET PRÉPARÉ</p><h2>Atlas ${escapeHtml(prepared.targetVersion)}</h2><p>${escapeHtml(prepared.assetName)} · ${formatFileSize(prepared.assetSize)}</p></div><span class="status-badge success">Vérifié</span></header><dl class="security-list"><div><dt>Signature du manifeste</dt><dd>${prepared.signatureVerified ? "Valide" : "Refusée"}</dd></div><div><dt>Empreinte du paquet</dt><dd>${prepared.packageVerified ? "Conforme" : "Refusée"}</dd></div><div><dt>Point de retour arrière</dt><dd>${prepared.rollbackReady ? "Obligatoire à l’installation" : "Indisponible"}</dd></div><div><dt>SHA-256</dt><dd><code>${escapeHtml(prepared.sha256.slice(0, 16))}…</code></dd></div></dl><form data-form="update-apply" class="update-apply-form"><div class="notice warning">${icon("alert", 16)} Atlas sera indisponible brièvement. L’assistant arrêtera le service, prendra un instantané complet, installera la version, vérifiera SQLite et le coffre, puis reviendra automatiquement à la version précédente en cas d’échec.</div><label>Confirmation<input name="confirmation" autocomplete="off" required placeholder="INSTALLER ${escapeHtml(prepared.targetVersion)}"/><small>Saisissez exactement <strong>INSTALLER ${escapeHtml(prepared.targetVersion)}</strong>.</small></label>${settingsAdminMfaMarkup(`Confirmez l’installation de la version ${prepared.targetVersion} et le redémarrage d’Atlas.`, "update-apply")}<p class="form-error" role="alert"></p><button class="primary" type="submit">${icon("refresh", 15)} Installer Atlas ${escapeHtml(prepared.targetVersion)}</button></form></section>` : "";
+    const jobMarkup = job ? `<section class="panel update-job-card"><div><p class="eyebrow">DERNIÈRE OPÉRATION</p><h2>${escapeHtml(job.message || "Mise à jour Atlas")}</h2><p>${escapeHtml(job.currentVersion)} → ${escapeHtml(job.targetVersion)} · ${job.updatedAt ? formatDateTime(job.updatedAt) : "état en attente"}</p></div><span class="status-badge ${job.status === "succeeded" ? "success" : job.status === "rolled-back" ? "warning" : ["failed", "rollback-failed"].includes(job.status) ? "danger" : "muted"}">${escapeHtml(job.status || "inconnue")}</span></section>` : "";
+    return renderSettingsShell("updates", "Mises à jour", "Vérification cryptographique, installation confirmée et retour arrière automatique.", `<section class="panel update-policy-card"><div><p class="eyebrow">CENTRE DE MISE À JOUR</p><h2>Atlas ${escapeHtml(status?.currentVersion || ATLAS_VERSION)}</h2><p>Atlas contacte uniquement l’API officielle de GitHub lorsque vous cliquez sur Vérifier. Il n’installe jamais une version sans action explicite, MFA et point de retour arrière.</p></div><dl class="security-list"><div><dt>Vérification automatique</dt><dd><span class="status-badge muted">Désactivée</span></dd></div><div><dt>Installation silencieuse</dt><dd><span class="status-badge muted">Interdite</span></dd></div><div><dt>Manifeste Ed25519 + SHA-256</dt><dd>Obligatoires</dd></div><div><dt>Retour arrière</dt><dd>Automatique si la santé échoue</dd></div></dl><button class="primary" type="button" data-action="check-updates" ${state.updateLoading ? "disabled" : ""}>${icon("refresh", 15)} ${state.updateLoading ? "Vérification…" : "Vérifier sur GitHub"}</button></section>${releaseMarkup}${prepareMarkup}${preparedMarkup}${jobMarkup}<div class="health-boundary-note">${icon("shield", 16)} La clé privée de publication n’est jamais incluse dans Atlas. Seule la clé publique de vérification fait partie du paquet.</div>`);
   }
 
   function renderGeneralSettingsPage() {
@@ -5045,6 +5052,15 @@
       } catch (error) { toast(error.message, "error"); }
       finally { state.updateLoading = false; render(); }
     }
+    if (action === "prepare-update") {
+      state.updateLoading = true;
+      render();
+      try {
+        state.updateStatus = await api("/api/settings/updates/prepare", { method: "POST", body: "{}" });
+        toast(`Atlas ${state.updateStatus.prepared?.targetVersion || ""} a été téléchargé et vérifié.`);
+      } catch (error) { toast(error.message, "error"); }
+      finally { state.updateLoading = false; render(); }
+    }
     if (action === "copy-local-api-token" && state.createdApiToken) {
       try { await navigator.clipboard.writeText(state.createdApiToken); toast("Jeton API copié."); }
       catch { toast("Copie impossible dans ce navigateur.", "error"); }
@@ -5992,6 +6008,26 @@
         await loadAudit();
         render();
         toast("Jeton API révoqué.");
+        return;
+      }
+      if (form.dataset.form === "update-apply") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut installer une mise à jour.");
+        const targetVersion = state.updateStatus?.prepared?.targetVersion || "";
+        if (String(data.confirmation || "").trim() !== `INSTALLER ${targetVersion}`) throw new Error(`Saisissez exactement INSTALLER ${targetVersion}.`);
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const result = await api("/api/settings/updates/apply", { method: "POST", body: JSON.stringify({ confirmation: data.confirmation, adminMfaCode: data.adminMfaCode || "" }) });
+        state.updateStatus = { ...state.updateStatus, job: { jobId: result.jobId, status: result.status, message: result.message, currentVersion: ATLAS_VERSION, targetVersion: result.targetVersion, updatedAt: new Date().toISOString() } };
+        render();
+        toast("Mise à jour lancée. Atlas va redémarrer automatiquement.");
+        const reconnect = setInterval(async () => {
+          try {
+            const response = await fetch("/api/status", { cache: "no-store" });
+            const payload = await response.json();
+            if (response.ok && payload.version === result.targetVersion) { clearInterval(reconnect); window.location.reload(); }
+          } catch { /* Atlas est temporairement arrêté. */ }
+        }, 2500);
+        setTimeout(() => clearInterval(reconnect), 5 * 60 * 1000);
         return;
       }
       if (form.dataset.form === "backup-run") {

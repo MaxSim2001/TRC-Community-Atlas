@@ -1,14 +1,14 @@
 # Plan de mise en place — installation et mises à jour par GitHub
 
-Statut : code source publié; installateur, Releases et mise à jour intégrée à implémenter  
-Date : 8 octobre 2026  
-Version Atlas analysée : 0.14.3
+Statut : chaîne signée et mise à jour intégrée implémentées; Authenticode public à compléter
+Date : 9 octobre 2026
+Version Atlas analysée : 0.15.0
 
-État d’avancement : la version 0.14.3 réalise le premier paquet Windows autonome,
-la séparation programme/données, le configurateur graphique, le démarrage caché
-et les tests de déploiement/reconfiguration sur les ports 9095 et 9096. La signature publique, les Releases stables,
-la mise à jour transactionnelle et le retour arrière restent à compléter avant
-de présenter ce paquet comme distribution stable.
+État d’avancement : la version 0.15.0 ajoute au paquet Windows autonome un
+manifeste signé Ed25519, une clé publique embarquée, la vérification de taille et
+SHA-256, une installation confirmée par MFA, un instantané transactionnel et un
+retour arrière automatique testé. La signature Authenticode publiquement reconnue
+pour un futur exécutable demeure distincte et à compléter.
 
 ## 1. Objectif
 

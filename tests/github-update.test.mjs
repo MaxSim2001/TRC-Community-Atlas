@@ -32,9 +32,13 @@ function totp(secret) {
   return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1000000).padStart(6, "0");
 }
 
-test("GitHub update check requires an administrator session and CSRF, records an audit, and never exposes an installer", async (context) => {
+test("GitHub update preparation and installation require admin, CSRF, MFA and exact confirmation", async (context) => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), "trc-atlas-update-test-"));
+  const updateRoot = path.join(dataRoot, "update-test");
   let checks = 0;
+  let preparations = 0;
+  const launches = [];
+  let shutdowns = 0;
   const releaseChecker = async () => {
     checks += 1;
     return {
@@ -42,9 +46,9 @@ test("GitHub update check requires an administrator session and CSRF, records an
       updateAvailable: true,
       sameVersion: false,
       repository: "MaxSim2001/TRC-Community-Atlas",
-      currentVersion: "0.14.3",
-      tag: "v0.14.4",
-      name: "Atlas 0.14.4 QA",
+      currentVersion: "0.15.0",
+      tag: "v0.15.1",
+      name: "Atlas 0.15.1 QA",
       checkedAt: "2026-10-09T12:00:00.000Z",
       artifactSetPresent: true,
       signatureVerified: false,
@@ -54,7 +58,44 @@ test("GitHub update check requires an administrator session and CSRF, records an
       installBlockedReason: "Validation cryptographique et retour arrière requis.",
     };
   };
-  const server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, releaseChecker });
+  const releasePreparer = async ({ release, currentVersion, publicKeyPath, updateRoot: requestedUpdateRoot }) => {
+    preparations += 1;
+    assert.equal(release.tag, "v0.15.1");
+    assert.equal(currentVersion, "0.15.0");
+    assert.match(publicKeyPath, /atlas-release-public-key\.pem$/);
+    assert.equal(requestedUpdateRoot, updateRoot);
+    return {
+      schemaVersion: 1,
+      repository: "MaxSim2001/TRC-Community-Atlas",
+      currentVersion,
+      targetVersion: "0.15.1",
+      tag: "v0.15.1",
+      preparedAt: "2026-10-09T12:01:00.000Z",
+      preparedRoot: path.join(updateRoot, "prepared-v0.15.1"),
+      manifestPath: path.join(updateRoot, "prepared-v0.15.1", "atlas-release-manifest.json"),
+      signaturePath: path.join(updateRoot, "prepared-v0.15.1", "atlas-release-manifest.sig"),
+      packagePath: path.join(updateRoot, "prepared-v0.15.1", "TRC-Atlas-Portable-0.15.1-win-x64.zip"),
+      manifest: { assetName: "TRC-Atlas-Portable-0.15.1-win-x64.zip", assetSize: 1234, sha256: "a".repeat(64), releaseNotesUrl: release.pageUrl || "" },
+      signatureVerified: true,
+      packageVerified: true,
+      rollbackReady: true,
+      installable: true,
+    };
+  };
+  const updateLauncher = (options) => {
+    launches.push(options);
+    return { jobId: options.jobId, processId: 4242, status: "starting" };
+  };
+  const server = createAtlasServer({
+    host: "127.0.0.1",
+    port: 9092,
+    dataRoot,
+    updateRoot,
+    releaseChecker,
+    releasePreparer,
+    updateLauncher,
+    updateShutdownHandler: () => { shutdowns += 1; },
+  });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   context.after(async () => {
@@ -91,7 +132,7 @@ test("GitHub update check requires an administrator session and CSRF, records an
 
   result = await request("/api/settings/updates");
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.currentVersion, "0.14.3");
+  assert.equal(result.payload.currentVersion, "0.15.0");
   assert.equal(result.payload.automaticChecks, false);
   assert.equal(result.payload.automaticInstall, false);
   assert.equal(result.payload.lastCheck, null);
@@ -107,13 +148,40 @@ test("GitHub update check requires an administrator session and CSRF, records an
   assert.equal(result.payload.lastCheck.installable, false);
   assert.equal(result.payload.lastCheck.signatureVerified, false);
 
-  result = await request("/api/settings/updates/install", { method: "POST", csrf, body: {} });
-  assert.equal(result.response.status, 404);
+  result = await request("/api/settings/updates/prepare", { method: "POST", body: {} });
+  assert.equal(result.response.status, 403);
+  assert.equal(preparations, 0);
+
+  result = await request("/api/settings/updates/prepare", { method: "POST", csrf, body: {} });
+  assert.equal(result.response.status, 200);
+  assert.equal(preparations, 1);
+  assert.equal(result.payload.prepared.targetVersion, "0.15.1");
+  assert.equal(result.payload.prepared.signatureVerified, true);
+  assert.equal(result.payload.prepared.packageVerified, true);
+  assert.equal(result.payload.prepared.rollbackReady, true);
+  assert.equal(result.payload.prepared.packagePath, undefined);
+
+  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.15.1", adminMfaCode: "000000" } });
+  assert.equal(result.response.status, 401);
+  assert.equal(launches.length, 0);
+
+  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "installer", adminMfaCode: totp(secret) } });
+  assert.equal(result.response.status, 400);
+  assert.equal(launches.length, 0);
+
+  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.15.1", adminMfaCode: totp(secret) } });
+  assert.equal(result.response.status, 202);
+  assert.equal(result.payload.targetVersion, "0.15.1");
+  assert.equal(launches.length, 1);
+  assert.equal(launches[0].expectedVersion, "0.15.1");
+  assert.equal(launches[0].updateRoot, updateRoot);
+  await new Promise((resolve) => setTimeout(resolve, 850));
+  assert.equal(shutdowns, 1);
 
   result = await request("/api/audit?limit=100");
   assert.equal(result.response.status, 200);
-  const audit = result.payload.entries.find((entry) => entry.action === "github-release-checked");
-  assert.ok(audit);
-  assert.equal(audit.details.updateAvailable, true);
-  assert.equal(audit.details.installable, false);
+  const actions = new Set(result.payload.entries.map((entry) => entry.action));
+  assert.ok(actions.has("github-release-checked"));
+  assert.ok(actions.has("github-release-prepared"));
+  assert.ok(actions.has("github-release-install-started"));
 });

@@ -40,7 +40,7 @@
 .backup-current-state.enabled { border-color: color-mix(in srgb, var(--success) 35%, var(--border)); }
 .backup-settings-controls { display: grid; gap: 16px; }
 .backup-schedule-grid { display: grid; grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1.25fr) minmax(90px, .6fr) minmax(90px, .6fr); gap: 12px; }
-.backup-run-card, .backup-history-card, .update-policy-card, .update-release-card { padding: 24px; display: grid; gap: 18px; }
+.backup-run-card, .backup-history-card, .update-policy-card, .update-release-card, .update-prepare-card, .update-prepared-card, .update-job-card, .update-apply-form { padding: 24px; display: grid; gap: 18px; }
 .backup-run-card { grid-template-columns: minmax(260px, 1fr) minmax(260px, .8fr); align-items: start; }
 .backup-run-card .settings-sensitive-confirmation, .backup-run-card .form-error, .backup-run-card > button { grid-column: 1 / -1; }
 .backup-run-card > button { justify-self: end; }
@@ -59,6 +59,13 @@
 .backup-history-item form > button { justify-self: start; }
 .update-policy-card { grid-template-columns: minmax(280px, 1.2fr) minmax(260px, .8fr); align-items: start; }
 .update-policy-card > button { grid-column: 1 / -1; justify-self: start; }
+.update-prepare-card, .update-job-card { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.update-prepare-card > button, .update-job-card > button { min-height: 44px; }
+.update-prepared-card > header, .update-job-card > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.update-prepared-card dl, .update-job-card dl { margin: 0; }
+.update-apply-form { padding-top: 18px; border-top: 1px solid var(--border); }
+.update-apply-form > label { display: grid; gap: 7px; }
+.update-apply-form > button { justify-self: start; min-height: 44px; }
 .update-release-heading { display: flex; align-items: center; gap: 14px; }
 .update-release-heading > div { min-width: 0; flex: 1; }
 .release-notes-preview { margin: 0; max-height: 260px; overflow: auto; white-space: pre-wrap; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); color: var(--text); font: inherit; line-height: 1.55; }
@@ -66,14 +73,15 @@
 
 @media (max-width: 900px) {
   .backup-schedule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .backup-run-card, .update-policy-card { grid-template-columns: 1fr; }
+  .backup-run-card, .update-policy-card, .update-prepare-card, .update-job-card { grid-template-columns: 1fr; }
   .backup-run-card .settings-sensitive-confirmation, .backup-run-card .form-error, .backup-run-card > button, .update-policy-card > button { grid-column: 1; }
+  .update-prepare-card > button, .update-job-card > button { justify-self: start; }
 }
 
 @media (max-width: 560px) {
   .backup-schedule-grid { grid-template-columns: 1fr; }
-  .backup-run-card, .backup-history-card, .update-policy-card, .update-release-card { padding: 18px; }
-  .backup-history-card > header, .update-release-heading { align-items: stretch; flex-direction: column; }
+  .backup-run-card, .backup-history-card, .update-policy-card, .update-release-card, .update-prepare-card, .update-prepared-card, .update-job-card, .update-apply-form { padding: 18px; }
+  .backup-history-card > header, .update-release-heading, .update-prepared-card > header, .update-job-card > header { align-items: stretch; flex-direction: column; }
 }
 
 .local-module-builder { margin: 18px 0; padding: 22px; display: grid; gap: 18px; }

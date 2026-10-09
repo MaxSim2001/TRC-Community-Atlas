@@ -30,7 +30,9 @@ test("the Windows installer keeps program and instance data separate", () => {
 
 test("the portable package includes a runtime, a hash and a real port 9095 deployment test", () => {
   const builder = source("scripts/New-TRCCommunityAtlasPortablePackage.ps1");
+  const installer = source("scripts/Install-TRCCommunityAtlas.ps1");
   const deploymentTest = source("scripts/Test-TRCCommunityAtlasDeployment.ps1");
+  const updateLifecycleTest = source("scripts/Test-AtlasSignedUpdateLifecycle.ps1");
   const autostartManager = source("scripts/Set-TRCCommunityAtlasAutostart.ps1");
   const workflow = source(".github/workflows/tests.yml");
 
@@ -38,6 +40,9 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(builder, /'node\.exe'/);
   assert.match(builder, /SHA256SUMS\.txt/);
   assert.match(builder, /Compress-Archive/);
+  assert.match(builder, /'resources'/);
+  assert.match(installer, /'resources'/);
+  assert.match(installer, /\[string\]\$TaskName = 'TRC Community Atlas'/);
   assert.match(deploymentTest, /\[int\]\$Port = 9095/);
   assert.match(deploymentTest, /\[int\]\$ReconfiguredPort = 9096/);
   assert.match(deploymentTest, /api\/status/);
@@ -45,6 +50,9 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(deploymentTest, /DatabasePreserved = \$true/);
   assert.match(deploymentTest, /ConfiguratorReload = 'PASS'/);
   assert.match(deploymentTest, /Autostart = \$autostartResult/);
+  assert.match(updateLifecycleTest, /SuccessfulUpdate = \$successState\.status/);
+  assert.match(updateLifecycleTest, /Rollback = \$rollbackState\.status/);
+  assert.match(updateLifecycleTest, /-SimulateHealthFailure/);
   assert.match(autostartManager, /ValidateSet\('Status', 'Enable', 'Disable'\)/);
   assert.match(autostartManager, /TaskName = 'TRC Community Atlas'/);
   assert.match(autostartManager, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);

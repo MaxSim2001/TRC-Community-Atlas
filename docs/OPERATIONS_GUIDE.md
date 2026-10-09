@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.14.3
+Version du guide : 0.15.0
 
 ## Port et configuration de l’instance
 
@@ -124,11 +124,14 @@ Avant chaque mise à jour :
 - exécuter les tests sur les fichiers déployés;
 - vérifier la version locale et publique après redémarrage.
 
-La page **Paramètres > Mises à jour** effectue uniquement une vérification
-manuelle auprès de l’API officielle GitHub. Le mécanisme refuse toute
-installation lorsque la Release ne contient pas un manifeste et une signature
-attendus. Aucun téléchargement ni redémarrage silencieux n’est exécuté dans la
-version 0.14.3.
+La page **Paramètres > Mises à jour** vérifie manuellement l’API officielle
+GitHub. **Télécharger et vérifier** récupère uniquement le manifeste, sa
+signature et le paquet depuis des hôtes GitHub approuvés, sans modifier le
+programme actif. Atlas contrôle Ed25519, la taille et SHA-256. **Installer**
+exige ensuite un super administrateur, le MFA et la confirmation exacte
+`INSTALLER <version>`. L’assistant crée un instantané, redémarre Atlas, vérifie
+SQLite, le coffre et les compteurs métier, puis restaure automatiquement la
+version antérieure si un contrôle échoue. Aucune installation n’est automatique.
 
 ## API locale facultative
 

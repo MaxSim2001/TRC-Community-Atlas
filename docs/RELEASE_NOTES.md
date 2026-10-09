@@ -1,5 +1,21 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.0 — Release signée et mise à jour transactionnelle
+
+- manifeste de Release signé avec Ed25519; seule la clé publique de vérification
+  est incluse dans Atlas et la clé privée chiffrée demeure hors du dépôt;
+- téléchargement limité aux hôtes GitHub approuvés, contrôle de la taille et du
+  SHA-256 du paquet, puis seconde vérification juste avant toute modification;
+- préparation sans effet sur le programme actif, installation réservée au super
+  administrateur avec CSRF, MFA et confirmation exacte de la version;
+- instantané complet du programme, de SQLite, du coffre, des comptes, des pièces
+  jointes et de la configuration avant remplacement;
+- vérification après redémarrage de la version, de SQLite, du coffre déchiffrable
+  et des compteurs métier; retour automatique à la version précédente si un de
+  ces contrôles échoue;
+- tâche Windows paramétrable permettant de valider les mises à jour sur les ports
+  QA 9095/9096 sans interférer avec l’instance de production.
+
 ## 0.14.3 — Vérification GitHub durcie
 
 - comparaison explicite de la version installée avec le tag stable publié;

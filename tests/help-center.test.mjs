@@ -40,14 +40,14 @@ test("Atlas exposes a local searchable bilingual help center from the header", (
   assert.match(styles, /\.help-article-grid/);
   assert.match(styles, /@media \(max-width: 680px\)[\s\S]*\.help-menu-popover/);
 
-  const helpIndex = index.indexOf("/assets/help-content.js?v=0.14.3-update-1");
-  const appIndex = index.indexOf("/assets/app.js?v=0.14.3-update-1");
+  const helpIndex = index.indexOf("/assets/help-content.js?v=0.15.0-update-1");
+  const appIndex = index.indexOf("/assets/app.js?v=0.15.0-update-1");
   assert.ok(helpIndex >= 0 && appIndex > helpIndex);
-  assert.match(worker, /\/assets\/help-content\.js\?v=0\.14\.3-update-1/);
+  assert.match(worker, /\/assets\/help-content\.js\?v=0\.15\.0-update-1/);
   assert.match(source("server.mjs"), /\["\/assets\/help-content\.js", \["assets\/help-content\.js", "text\/javascript; charset=utf-8"\]\]/);
 });
 
-test("the official GitHub repository documents the self-contained Windows test package", () => {
+test("the official GitHub repository documents the signed Windows release and guarded updater", () => {
   const helpSource = source("public/assets/help-content.js");
   const context = { window: {} };
   vm.runInNewContext(helpSource, context);
@@ -57,8 +57,10 @@ test("the official GitHub repository documents the self-contained Windows test p
   const serialized = JSON.stringify(article);
   assert.match(serialized, /https:\/\/github\.com\/MaxSim2001\/TRC-Community-Atlas/);
   assert.match(serialized, /Installer-Atlas\.cmd/);
-  assert.match(serialized, /Release stable signée.*restent en préparation/);
-  assert.match(serialized, /signed stable Release.*still in preparation/);
+  assert.match(serialized, /Release (?:stable porte|Windows signée)/i);
+  assert.match(serialized, /signed Windows Release|stable Release includes/i);
+  assert.match(serialized, /Ed25519/);
+  assert.match(serialized, /SHA-256/);
 });
 
 test("repository guides cover users, security, operations, releases and GitHub readiness", () => {

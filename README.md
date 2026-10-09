@@ -1,17 +1,17 @@
 # TRC Community Atlas
 
-Version actuelle : **0.14.3**.
+Version actuelle : **0.15.0**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
-Code source officiel : [MaxSim2001/TRC-Community-Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas). Le paquet Windows autonome est maintenant fabriqué et testé par GitHub Actions. Il demeure un paquet de validation jusqu’à la publication d’une Release stable signée; le bouton de mise à jour intégré reste en préparation.
+Code source officiel : [MaxSim2001/TRC-Community-Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas). La Release Windows autonome contient un manifeste signé Ed25519, un SHA-256 vérifié avant toute installation et un assistant de mise à jour avec instantané puis retour arrière automatique. La clé privée de publication demeure hors du dépôt.
 
 Socle local de documentation et d’inventaire IT, inspiré du cahier des charges du 22 septembre 2026. Cette édition reste autonome : comptes, données et préférences sont stockés localement dans l’instance.
 
 ## Installation Windows simple
 
-Le paquet Windows autonome contient déjà Node.js. Après avoir téléchargé
-l’artéfact d’une exécution GitHub Actions réussie :
+Le paquet Windows autonome contient déjà Node.js. Après avoir téléchargé le ZIP
+et son manifeste depuis la page **Releases** officielle :
 
 1. décompresser complètement le fichier ZIP;
 2. double-cliquer sur `Installer-Atlas.cmd`;
@@ -34,9 +34,10 @@ fichier local et ne demande ni serveur, ni compte, ni port de base de données.
 Avec un proxy inverse, le public utilise généralement le port HTTPS `443`, puis
 le proxy transmet vers l’unique port Atlas choisi dans le configurateur.
 
-Le paquet GitHub Actions est encore destiné aux essais. La Release stable signée
-et le mécanisme de mise à jour avec sauvegarde et retour arrière seront publiés
-après leur validation complète.
+Les artéfacts GitHub Actions demeurent destinés aux essais. Pour une installation
+stable, utiliser uniquement une Release officielle portant le manifeste et sa
+signature. Atlas 0.15.0 amorce cette chaîne de confiance; les versions suivantes
+pourront être préparées et installées depuis **Paramètres > Mises à jour**.
 
 Voir [Installation Windows](docs/INSTALLATION_WINDOWS.md) pour les paramètres
 avancés et le diagnostic.
@@ -95,7 +96,7 @@ toute tâche Atlas remplacée, puis valide l’état de l’API locale après d�
 - assistant administrateur « Configuration initiale » séparant clairement le code d’instance, le domaine public, les alias et le proxy inverse; Atlas autorise les origines enregistrées mais ne modifie jamais le DNS, le certificat ou le pare-feu;
 - tableau « Santé du site » avec contrôles factuels du service, du port local, de l’autodémarrage Windows, de SQLite, des comptes, du coffre, du domaine, de HTTPS, du proxy et de l’origine, plus un test local limité au listener Atlas courant et un test public manuel limité au domaine enregistré;
 - activation ou désactivation du démarrage automatique depuis la Configuration initiale, via une tâche Windows masquée qui réutilise le port et le dossier de données actifs sans modifier le pare-feu;
-- dépôt public `MaxSim2001/TRC-Community-Atlas`, tests Windows automatisés, déploiement propre sur le port 9095 et paquet autonome produit à chaque exécution réussie; la Release stable signée et les mises à jour intégrées restent en préparation;
+- dépôt public `MaxSim2001/TRC-Community-Atlas`, tests Windows automatisés, déploiement propre sur le port 9095, Release stable signée Ed25519 et mise à jour intégrée avec MFA, confirmation exacte, contrôle SHA-256, inventaire avant/après et retour arrière automatique;
 - journal d’activité;
 - interface français/anglais et thèmes clair/sombre;
 - statut explicite du raccordement RMM et du futur SSO facultatif via TRC RMM;
@@ -165,7 +166,7 @@ En récupération hors bande, exécuter d’abord `atlas-break-glass.mjs` avec `
 - La page Gérer les modules affiche la couverture, le profil et le nombre de champs de chaque type; une matrice QA valide tous les schémas et leur persistance SQLite.
 - Aucun lien ni aucune dépendance à TRC Account.
 - TRC RMM demeure autonome; son connecteur et son SSO seront des options configurables et désactivées par défaut.
-- Aucun service Internet ni télémétrie. La vérification de version GitHub est manuelle et n’autorise aucune installation tant qu’un manifeste signé et un retour arrière testé ne sont pas disponibles.
+- Aucune télémétrie. La vérification de version GitHub est manuelle; Atlas n’autorise l’installation qu’après validation Ed25519 du manifeste, contrôle SHA-256 du paquet, MFA administrateur et préparation d’un instantané local de retour arrière.
 - Un seul port Atlas, `9092` par défaut, configurable graphiquement ou avec
   `-Port`; la base SQLite locale n’ouvre aucun port supplémentaire.
 

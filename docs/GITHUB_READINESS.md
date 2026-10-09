@@ -2,15 +2,18 @@
 
 Le code source officiel d’Atlas est publié dans
 [`MaxSim2001/TRC-Community-Atlas`](https://github.com/MaxSim2001/TRC-Community-Atlas).
-Le dépôt public appartient directement au compte GitHub du propriétaire. Chaque
-exécution Windows réussie produit maintenant un paquet autonome de validation.
-Ce paquet n’est pas encore une Release stable signée et le mécanisme de mise à
-jour intégré n’est pas encore disponible.
+Le dépôt public appartient directement au compte GitHub du propriétaire. La
+version 0.15.0 introduit la première Release stable avec manifeste Ed25519,
+paquet Windows autonome, contrôle SHA-256 et assistant de mise à jour
+transactionnelle. Les artéfacts produits automatiquement par GitHub Actions
+demeurent des artéfacts de validation; les utilisateurs doivent télécharger les
+versions stables depuis **Releases**.
 
 Le plan proposé pour l'installateur, les GitHub Releases, la vérification des
 paquets, les migrations et le retour arrière est consigné dans
-[`PLAN_GITHUB_INSTALL_UPDATE.md`](PLAN_GITHUB_INSTALL_UPDATE.md). Il demeure un
-plan tant que les décisions ci-dessous ne sont pas approuvées et implémentées.
+[`PLAN_GITHUB_INSTALL_UPDATE.md`](PLAN_GITHUB_INSTALL_UPDATE.md). Les phases de
+signature du manifeste, préparation, installation et retour arrière sont
+implémentées; les éléments encore ouverts y restent identifiés.
 
 ## Décisions confirmées
 
@@ -20,13 +23,15 @@ plan tant que les décisions ci-dessous ne sont pas approuvées et implémentée
   interdit sans licence écrite distincte;
 - contributions externes : cession de droits signée avant fusion;
 - plateformes initiales : Windows 10 et Windows 11 x64;
-- signature publique cible : Azure Artifact Signing; certificat autosigné
-  réservé aux essais locaux;
+- signature de manifeste : Ed25519 avec clé privée chiffrée et ACL locale
+  restreinte, clé publique embarquée dans Atlas;
+- signature Authenticode publique cible : Azure Artifact Signing; certificat
+  autosigné réservé aux essais locaux;
 
-## À implémenter avant la première distribution stable
+## À compléter après la première distribution stable
 
-- signature publique du paquet et Release approuvée;
-- méthode de mise à jour transactionnelle et retour arrière;
+- signature Authenticode reconnue par Windows pour le futur exécutable
+  d’installation;
 - configuration HTTPS et mandataire inverse pour les déploiements publics;
 - politique de sécurité et canal de signalement des vulnérabilités;
 - conventions de branches et cycle de versions;
@@ -40,6 +45,11 @@ plan tant que les décisions ci-dessous ne sont pas approuvées et implémentée
 - séparation du programme et des données persistantes;
 - test de déploiement propre sur le port 9095;
 - génération du ZIP Windows et de son SHA-256 comme artéfacts de validation;
+- manifeste JSON signé Ed25519, seconde vérification avant mutation et
+  téléchargements limités aux hôtes GitHub approuvés;
+- mise à jour avec contrôle MFA, confirmation exacte, instantané du programme et
+  des données, inventaire avant/après et retour arrière automatique testé;
+- [preuve QA du cycle signé et du retour arrière](QA_SIGNED_UPDATE_2026-10-09.md);
 - README fonctionnel;
 - architecture et frontières d’autonomie;
 - guides utilisateur, sécurité et exploitation;
@@ -48,8 +58,9 @@ plan tant que les décisions ci-dessous ne sont pas approuvées et implémentée
 
 ## Règle documentaire
 
-Le centre d’aide peut pointer vers le dépôt officiel, mais doit distinguer le
-code source publié de l’installation générale encore en préparation. Aucun
-installateur, paquet Release ou mécanisme de mise à jour ne doit être présenté
-comme disponible avant sa validation et sa signature.
+Le centre d’aide pointe vers le dépôt officiel et distingue les artéfacts de CI
+des Releases stables. Une version n’est présentée comme installable qu’après
+validation Ed25519 du manifeste et du SHA-256 du paquet. Atlas 0.15.0 est la
+version d’amorçage : son installation initiale est manuelle; le bouton intégré
+sert aux versions stables ultérieures.
 

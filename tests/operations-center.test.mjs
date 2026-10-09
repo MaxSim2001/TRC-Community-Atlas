@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,12 +9,88 @@ import {
   createManagedBackup,
   enforceBackupRetention,
   inspectManagedBackup,
+  launchReleaseUpdater,
   listManagedBackups,
   nextBackupRun,
   compareStableVersions,
   summarizeGithubRelease,
   validateBackupDestination,
 } from "../lib/atlas-operations.mjs";
+import { verifyAtlasReleaseFiles } from "../lib/atlas-release.mjs";
+
+test("signed Atlas releases verify Ed25519, size and SHA-256 and reject tampering", async (context) => {
+  const root = await mkdtemp(path.join(tmpdir(), "atlas-signed-release-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  const packagePath = path.join(root, "TRC-Atlas-Portable-0.15.1-win-x64.zip");
+  const manifestPath = path.join(root, "atlas-release-manifest.json");
+  const signaturePath = path.join(root, "atlas-release-manifest.sig");
+  const publicKeyPath = path.join(root, "atlas-release-public-key.pem");
+  const packageBytes = Buffer.from("synthetic signed Atlas package");
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const publicPem = publicKey.export({ type: "spki", format: "pem" });
+  const manifest = {
+    formatVersion: 1,
+    product: "TRC Community Atlas",
+    repository: "MaxSim2001/TRC-Community-Atlas",
+    version: "0.15.1",
+    channel: "stable",
+    minimumUpgradableVersion: "0.14.3",
+    platform: "win32-x64",
+    assetName: path.basename(packagePath),
+    assetSize: packageBytes.length,
+    sha256: createHash("sha256").update(packageBytes).digest("hex"),
+    publicKeyId: createHash("sha256").update(publicPem).digest("hex"),
+    minimumDataSchema: 5,
+    targetDataSchema: 5,
+    requiresRestart: true,
+    backupRequired: true,
+    rollbackMode: "snapshot",
+  };
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  await Promise.all([
+    writeFile(packagePath, packageBytes),
+    writeFile(manifestPath, manifestBytes),
+    writeFile(signaturePath, `${sign(null, manifestBytes, privateKey).toString("base64")}\n`, "utf8"),
+    writeFile(publicKeyPath, publicPem, "utf8"),
+  ]);
+
+  const verified = await verifyAtlasReleaseFiles({ manifestPath, signaturePath, packagePath, publicKeyPath, currentVersion: "0.15.0", expectedTag: "v0.15.1" });
+  assert.equal(verified.signatureVerified, true);
+  assert.equal(verified.packageVerified, true);
+  assert.equal(verified.sha256, manifest.sha256);
+
+  await writeFile(packagePath, Buffer.from("tampered package"));
+  await assert.rejects(
+    verifyAtlasReleaseFiles({ manifestPath, signaturePath, packagePath, publicKeyPath, currentVersion: "0.15.0", expectedTag: "v0.15.1" }),
+    /taille|empreinte/i,
+  );
+  await writeFile(packagePath, packageBytes);
+  await writeFile(signaturePath, `${Buffer.alloc(64, 7).toString("base64")}\n`, "utf8");
+  await assert.rejects(
+    verifyAtlasReleaseFiles({ manifestPath, signaturePath, packagePath, publicKeyPath, currentVersion: "0.15.0", expectedTag: "v0.15.1" }),
+    /signature Ed25519/i,
+  );
+});
+
+test("the integrated updater refuses a source checkout without an installed Windows package", async (context) => {
+  if (process.platform !== "win32") return;
+  const root = await mkdtemp(path.join(tmpdir(), "atlas-source-update-refusal-"));
+  context.after(() => rm(root, { recursive: true, force: true }));
+  assert.throws(() => launchReleaseUpdater({
+    projectRoot: root,
+    jobId: "qa-refusal",
+    installRoot: root,
+    dataRoot: path.join(root, "data"),
+    updateRoot: path.join(root, "updates"),
+    packagePath: path.join(root, "package.zip"),
+    manifestPath: path.join(root, "manifest.json"),
+    signaturePath: path.join(root, "manifest.sig"),
+    publicKeyPath: path.join(root, "public.pem"),
+    expectedVersion: "0.15.1",
+    port: 9095,
+    host: "127.0.0.1",
+  }), /Installez d’abord le paquet Windows Atlas/i);
+});
 
 test("GitHub release metadata never becomes installable before cryptographic verification and rollback readiness", () => {
   assert.equal(compareStableVersions("v0.14.3", "0.14.2"), 1);
@@ -101,7 +178,9 @@ test("operations UI exposes backup, safe update and scoped local API controls", 
   ]);
   assert.match(app, /data-form="settings-backups"/);
   assert.match(app, /data-form="backup-inspect"/);
-  assert.match(app, /manifeste signé/);
+  assert.match(app, /signature Ed25519/i);
+  assert.match(app, /data-action="prepare-update"/);
+  assert.match(app, /data-form="update-apply"/);
   assert.match(app, /data-form="local-api-token-create"/);
   assert.match(app, /read:organizations/);
   assert.match(app, /WEBHOOKS LOCAUX/);

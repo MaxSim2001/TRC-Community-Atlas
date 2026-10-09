@@ -11,12 +11,15 @@ import { domainToASCII, fileURLToPath } from "node:url";
 import { AtlasStore } from "./lib/atlas-store.mjs";
 import {
   checkLatestGithubRelease,
+  compareStableVersions,
   createManagedBackup,
   enforceBackupRetention,
   inspectManagedBackup,
+  launchReleaseUpdater,
   listManagedBackups,
   nextBackupRun,
   normalizeBackupSettings,
+  prepareGithubRelease,
   protectBackupSecret,
   validateBackupDestination,
 } from "./lib/atlas-operations.mjs";
@@ -32,7 +35,7 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 8;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.14.3";
+const ATLAS_VERSION = "0.15.0";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -680,6 +683,8 @@ export function createAtlasServer(options = {}) {
   const sessionNow = typeof options.now === "function" ? options.now : Date.now;
   const manageAutostart = typeof options.autostartManager === "function" ? options.autostartManager : runAutostartManager;
   const releaseChecker = typeof options.releaseChecker === "function" ? options.releaseChecker : () => checkLatestGithubRelease({ currentVersion: ATLAS_VERSION });
+  const releasePreparer = typeof options.releasePreparer === "function" ? options.releasePreparer : prepareGithubRelease;
+  const updaterLauncher = typeof options.updateLauncher === "function" ? options.updateLauncher : launchReleaseUpdater;
   const backupSecretProtector = typeof options.backupSecretProtector === "function" ? options.backupSecretProtector : protectBackupSecret;
   const authPath = path.join(dataRoot, "auth.json");
   const sessionsPath = path.join(dataRoot, "sessions.json");
@@ -693,6 +698,10 @@ export function createAtlasServer(options = {}) {
   const backupSecretPath = path.join(dataRoot, "backup-secret.clixml");
   const localApiSettingsPath = path.join(dataRoot, "local-api.json");
   const backupBaseRoot = path.dirname(dataRoot);
+  const updateRoot = options.updateRoot || path.join(backupBaseRoot, "updates");
+  const updateStatePath = path.join(updateRoot, "update-state.json");
+  const updateJobsRoot = path.join(updateRoot, "jobs");
+  const releasePublicKeyPath = options.releasePublicKeyPath || path.join(projectRoot, "resources", "atlas-release-public-key.pem");
   const sessions = new Map();
   const pendingMfa = new Map();
   const pendingPasswordChanges = new Map();
@@ -1094,6 +1103,68 @@ export function createAtlasServer(options = {}) {
     }
     if (dueAt > Date.now()) return;
     await executeManagedBackup({ scheduled: true });
+  }
+
+  function publicPreparedUpdate(prepared) {
+    if (!prepared || typeof prepared !== "object") return null;
+    return {
+      targetVersion: String(prepared.targetVersion || ""),
+      tag: String(prepared.tag || ""),
+      preparedAt: String(prepared.preparedAt || ""),
+      signatureVerified: prepared.signatureVerified === true,
+      packageVerified: prepared.packageVerified === true,
+      rollbackReady: prepared.rollbackReady === true,
+      installable: prepared.installable === true,
+      assetName: String(prepared.manifest?.assetName || ""),
+      assetSize: Number(prepared.manifest?.assetSize) || 0,
+      sha256: String(prepared.manifest?.sha256 || ""),
+      releaseNotesUrl: String(prepared.manifest?.releaseNotesUrl || ""),
+    };
+  }
+
+  function publicUpdateJob(job) {
+    if (!job || typeof job !== "object") return null;
+    return {
+      jobId: String(job.jobId || ""),
+      status: String(job.status || ""),
+      message: String(job.message || ""),
+      currentVersion: String(job.currentVersion || ""),
+      targetVersion: String(job.targetVersion || ""),
+      updatedAt: String(job.updatedAt || ""),
+      completedAt: String(job.completedAt || ""),
+      rolledBackAt: String(job.rolledBackAt || ""),
+    };
+  }
+
+  async function readUpdateState() {
+    const state = await readJson(updateStatePath, { schemaVersion: 1, lastCheck: null, prepared: null, lastJobId: "" });
+    const lastJobId = isSafeId(state?.lastJobId) ? state.lastJobId : "";
+    const job = lastJobId ? await readJson(path.join(updateJobsRoot, `${lastJobId}.json`), null) : null;
+    return { state, job };
+  }
+
+  async function updateStatusPayload() {
+    const { state, job } = await readUpdateState();
+    const storedRelease = lastReleaseCheck || state.lastCheck || null;
+    const releaseComparison = storedRelease?.tag ? compareStableVersions(storedRelease.tag, ATLAS_VERSION) : null;
+    const normalizedRelease = storedRelease ? {
+      ...storedRelease,
+      currentVersion: ATLAS_VERSION,
+      updateAvailable: releaseComparison === 1,
+      sameVersion: releaseComparison === 0,
+      versionComparison: releaseComparison,
+      installable: false,
+      installBlockedReason: releaseComparison === 0 ? "Cette version est déjà installée." : storedRelease.installBlockedReason,
+    } : null;
+    const prepared = state.prepared && compareStableVersions(state.prepared.targetVersion, ATLAS_VERSION) === 1 ? state.prepared : null;
+    return {
+      currentVersion: ATLAS_VERSION,
+      automaticChecks: false,
+      automaticInstall: false,
+      lastCheck: normalizedRelease,
+      prepared: publicPreparedUpdate(prepared),
+      job: publicUpdateJob(job),
+    };
   }
 
   function refreshSavedDeploymentOrigins(settings) {
@@ -2473,7 +2544,7 @@ export function createAtlasServer(options = {}) {
         if (!session) return;
         const context = await requireAdmin(session, response);
         if (!context) return;
-        return jsonResponse(response, 200, { currentVersion: ATLAS_VERSION, automaticChecks: false, automaticInstall: false, lastCheck: lastReleaseCheck });
+        return jsonResponse(response, 200, await updateStatusPayload());
       }
 
       if (request.method === "POST" && url.pathname === "/api/settings/updates/check") {
@@ -2482,8 +2553,77 @@ export function createAtlasServer(options = {}) {
         const context = await requireAdmin(session, response);
         if (!context) return;
         lastReleaseCheck = await releaseChecker();
+        const { state } = await readUpdateState();
+        await writeJsonAtomic(updateStatePath, { ...state, schemaVersion: 1, lastCheck: lastReleaseCheck, updatedAt: nowIso() });
         await recordAudit(context.user, "github-release-checked", { details: { repository: lastReleaseCheck.repository || "MaxSim2001/TRC-Community-Atlas", tag: lastReleaseCheck.tag || "", updateAvailable: lastReleaseCheck.updateAvailable === true, installable: lastReleaseCheck.installable === true } });
-        return jsonResponse(response, 200, { currentVersion: ATLAS_VERSION, automaticChecks: false, automaticInstall: false, lastCheck: lastReleaseCheck });
+        return jsonResponse(response, 200, await updateStatusPayload());
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/updates/prepare") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        if (backupRunning) return errorResponse(response, 409, "backup_in_progress", "Attendez la fin de la sauvegarde avant de préparer une mise à jour.");
+        const { state } = await readUpdateState();
+        const release = lastReleaseCheck || state.lastCheck;
+        const prepared = await releasePreparer({ release, currentVersion: ATLAS_VERSION, publicKeyPath: releasePublicKeyPath, updateRoot });
+        await writeJsonAtomic(updateStatePath, { ...state, schemaVersion: 1, lastCheck: release, prepared, updatedAt: nowIso() });
+        await recordAudit(context.user, "github-release-prepared", { details: { repository: prepared.repository, tag: prepared.tag, targetVersion: prepared.targetVersion, signatureVerified: true, packageVerified: true } });
+        return jsonResponse(response, 200, await updateStatusPayload());
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/updates/apply") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        if (backupRunning) return errorResponse(response, 409, "backup_in_progress", "Attendez la fin de la sauvegarde avant d’installer une mise à jour.");
+        const { state, job } = await readUpdateState();
+        const prepared = state.prepared;
+        if (!prepared?.installable || !prepared.signatureVerified || !prepared.packageVerified || !prepared.rollbackReady) return errorResponse(response, 409, "update_not_prepared", "Téléchargez et vérifiez la Release avant de l’installer.");
+        if (["starting", "verifying", "waiting-for-shutdown", "snapshotting", "installing"].includes(job?.status)) return errorResponse(response, 409, "update_in_progress", "Une mise à jour Atlas est déjà en cours.");
+        const confirmation = `INSTALLER ${prepared.targetVersion}`;
+        if (String(body.confirmation || "").trim() !== confirmation) return errorResponse(response, 400, "update_confirmation_required", `Saisissez exactement « ${confirmation} » pour confirmer l’arrêt et la mise à jour.`);
+        const jobId = `update-${Date.now()}-${randomBytes(4).toString("hex")}`;
+        const jobPath = path.join(updateJobsRoot, `${jobId}.json`);
+        await writeJsonAtomic(jobPath, { schemaVersion: 1, jobId, status: "starting", message: "L’assistant de mise à jour démarre.", currentVersion: ATLAS_VERSION, targetVersion: prepared.targetVersion, updatedAt: nowIso() });
+        await writeJsonAtomic(updateStatePath, { ...state, schemaVersion: 1, lastJobId: jobId, updatedAt: nowIso() });
+        let launch;
+        try {
+          launch = await updaterLauncher({
+            projectRoot,
+            jobId,
+            installRoot: projectRoot,
+            dataRoot,
+            updateRoot,
+            packagePath: prepared.packagePath,
+            manifestPath: prepared.manifestPath,
+            signaturePath: prepared.signaturePath,
+            publicKeyPath: releasePublicKeyPath,
+            expectedVersion: prepared.targetVersion,
+            taskName: "TRC Community Atlas",
+            port,
+            host,
+            allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])],
+          });
+        } catch (error) {
+          await writeJsonAtomic(jobPath, { schemaVersion: 1, jobId, status: "failed", message: "L’assistant de mise à jour n’a pas pu démarrer.", currentVersion: ATLAS_VERSION, targetVersion: prepared.targetVersion, failedReason: String(error?.message || error).slice(0, 500), updatedAt: nowIso() });
+          throw error;
+        }
+        await recordAudit(context.user, "github-release-install-started", { details: { jobId, targetVersion: prepared.targetVersion, processId: launch.processId || null } });
+        jsonResponse(response, 202, { jobId, status: "starting", targetVersion: prepared.targetVersion, message: "Atlas va redémarrer. Cette page se reconnectera automatiquement." });
+        setTimeout(() => {
+          if (typeof options.updateShutdownHandler === "function") {
+            options.updateShutdownHandler({ server, jobId });
+            return;
+          }
+          server.close(() => process.exit(0));
+          server.closeAllConnections?.();
+        }, 750).unref?.();
+        return;
       }
 
       if (request.method === "GET" && url.pathname === "/api/settings/local-api") {
