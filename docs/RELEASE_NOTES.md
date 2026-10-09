@@ -1,5 +1,16 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.2 — Mise à jour GitHub tolérante aux fins de ligne
+
+- identité de la clé de publication vérifiée à partir de la clé Ed25519 réelle,
+  tout en acceptant les représentations PEM LF et CRLF produites par Git;
+- règle Git explicite imposant LF pour les fichiers PEM afin de rendre les
+  prochains paquets reproductibles entre Windows et GitHub Actions;
+- test de régression empêchant le retour de l’erreur `release_key_mismatch`
+  lorsque seule la fin de ligne du fichier de clé publique change;
+- la Release 0.15.1 demeure vérifiable et installable, mais la 0.15.2 devient
+  la version stable recommandée pour les mises à jour intégrées.
+
 ## 0.15.1 — Correctifs de sécurité de l’authentification et du proxy
 
 - limitation persistante des tentatives de mot de passe et de MFA par compte et
