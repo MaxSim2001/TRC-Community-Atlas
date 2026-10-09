@@ -394,7 +394,7 @@ if (-not $SkipStart) {
     do {
         Start-Sleep -Milliseconds 500
         try {
-            $status = Invoke-RestMethod -Uri ($applicationUrl + 'api/status') -TimeoutSec 2
+            $status = Invoke-RestMethod -Uri ($applicationUrl + 'api/status/details') -TimeoutSec 2
         }
         catch {
             $status = $null

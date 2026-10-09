@@ -52,7 +52,7 @@ $autostartResult = 'NOT_RUN'
 try {
     $deploymentJson = & $installerPath @arguments
     $deployment = $deploymentJson | ConvertFrom-Json
-    $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status" -TimeoutSec 5
+    $status = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status/details" -TimeoutSec 5
     $homeResponse = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/" -UseBasicParsing -TimeoutSec 5
     $config = Get-Content -LiteralPath $deployment.configPath -Raw | ConvertFrom-Json
 
@@ -80,7 +80,7 @@ try {
 
     $runningJson = & $installerPath @arguments
     $runningDeployment = $runningJson | ConvertFrom-Json
-    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status" -TimeoutSec 5 | Out-Null
+    Invoke-RestMethod -Uri "http://127.0.0.1:$Port/api/status/details" -TimeoutSec 5 | Out-Null
 
     $reconfigurationArguments = @{
         InstallRoot = $installRoot
@@ -96,7 +96,7 @@ try {
     }
     $reconfiguredJson = & $installerPath @reconfigurationArguments
     $reconfiguredDeployment = $reconfiguredJson | ConvertFrom-Json
-    $reconfiguredStatus = Invoke-RestMethod -Uri "http://127.0.0.1:$ReconfiguredPort/api/status" -TimeoutSec 5
+    $reconfiguredStatus = Invoke-RestMethod -Uri "http://127.0.0.1:$ReconfiguredPort/api/status/details" -TimeoutSec 5
     $reconfiguredConfig = Get-Content -LiteralPath $reconfiguredDeployment.configPath -Raw | ConvertFrom-Json
     if ($reconfiguredStatus.version -ne $deployment.version -or [int]$reconfiguredConfig.port -ne $ReconfiguredPort) {
         throw 'La reconfiguration du port Atlas n a pas ete appliquee.'

@@ -77,7 +77,7 @@ function Restore-Directory {
 function Wait-AtlasStatus {
     param([string]$Version, [int]$Seconds = 30)
     $healthHost = if ($BindAddress -in @('0.0.0.0','::')) { '127.0.0.1' } elseif ($BindAddress.Contains(':')) { "[$BindAddress]" } else { $BindAddress }
-    $uri = "http://${healthHost}:$Port/api/status"
+    $uri = "http://${healthHost}:$Port/api/status/details"
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
         Start-Sleep -Milliseconds 500

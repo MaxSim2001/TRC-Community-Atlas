@@ -1,6 +1,6 @@
 # Sécurité et accès — TRC Community Atlas
 
-Version du guide : 0.15.0
+Version du guide : 0.15.1
 
 ## Modèle autonome
 
@@ -28,6 +28,12 @@ Le MFA TOTP est obligatoire à la première connexion. Les codes de récupérati
 sont à usage unique. La session expire absolument huit heures après
 l’authentification; l’activité ne prolonge pas cette échéance.
 
+Les échecs de mot de passe et de MFA sont limités séparément par compte et par
+adresse cliente. Ces compteurs sont conservés localement sous forme de sujets
+hachés afin qu’un redémarrage ne réinitialise pas la protection. Un défi MFA
+expire après cinq minutes et devient inutilisable après cinq codes incorrects.
+Atlas retourne alors `429` avec un délai de reprise.
+
 Une validation MFA déverrouille le coffre pour la session courante. Les secrets
 restent masqués jusqu’à leur affichage explicite. La révélation et la copie sont
 journalisées.
@@ -48,6 +54,21 @@ de passe, codes OTP et notes confidentielles sont exclus :
 La politique de MFA renforcé peut obliger une nouvelle validation pour les
 actions administratives sensibles. La suppression d’une organisation exige
 toujours le nom exact et une validation MFA.
+
+## Proxy et surface publique
+
+Atlas ne fait confiance à aucun en-tête de proxy par défaut. Le super
+administrateur doit déclarer l’adresse IP exacte de chaque proxy dans
+**Paramètres > Configuration initiale**. Les en-têtes `X-Forwarded-For`,
+`X-Real-IP`, `CF-Connecting-IP`, `X-Forwarded-Proto` et `X-Forwarded-Host` sont
+ignorés lorsqu’ils viennent d’une autre adresse.
+
+`/api/status` publie uniquement `{ "ok": true }`. Le diagnostic détaillé
+`/api/status/details` est réservé aux connexions provenant de la VM. Les chemins
+non publiés retournent un vrai `404`; ils ne reçoivent jamais le shell HTML.
+
+Les corps JSON sensibles sont limités à 8 Kio, les requêtes ordinaires à
+256 Kio, les imports à 16 Mio et l’enveloppe des pièces jointes à 12 Mio.
 
 ## Récupération
 

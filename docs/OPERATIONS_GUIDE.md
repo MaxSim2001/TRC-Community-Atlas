@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.15.0
+Version du guide : 0.15.1
 
 ## Port et configuration de l’instance
 
@@ -26,12 +26,15 @@ Dans **Paramètres > Configuration initiale**, distinguer toujours :
 - le code court de l’instance, par exemple `ABC`;
 - le domaine public complet, par exemple `atlas.abcp.com`;
 - les domaines secondaires facultatifs;
-- le proxy inverse réellement utilisé : Nginx, IIS, Caddy ou autre.
+- le proxy inverse réellement utilisé : Nginx, IIS, Caddy ou autre;
+- l’adresse IP exacte de chaque proxy de confiance.
 
 Atlas enregistre ces noms et autorise leurs origines HTTPS. Il ne crée pas
 l’entrée DNS, n’installe pas le certificat et ne modifie aucun pare-feu. La clé
 privée TLS reste uniquement dans le proxy inverse. Celui-ci doit transmettre
-`X-Forwarded-Proto: https` et le nom demandé à Atlas.
+`X-Forwarded-Proto: https` et le nom demandé à Atlas. Tant que son adresse n’est
+pas déclarée comme proxy de confiance, Atlas ignore volontairement ces
+en-têtes et utilise l’adresse de connexion directe pour les limites de sécurité.
 
 Le bouton **Tester le domaine public** est volontairement manuel. Il appelle
 uniquement `https://<domaine-enregistré>/api/status`, ne suit aucune redirection,
@@ -59,7 +62,7 @@ Avant un redémarrage ou une modification, comparer :
 
 1. l’état de la tâche ou du processus Atlas;
 2. le listener local attendu;
-3. la réponse locale de `/api/status`;
+3. la réponse locale détaillée de `/api/status/details`;
 4. la réponse publique, lorsqu’une publication a été autorisée;
 5. les contrôles séparés dans **Paramètres > Santé du site**;
 6. les journaux applicatifs et ceux du mandataire inverse.

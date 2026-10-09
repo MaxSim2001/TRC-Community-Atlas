@@ -153,7 +153,7 @@ if ($listenerProcessId) {
 Start-ScheduledTask -TaskName $TaskName
 
 $healthAddress = if ($BindAddress -eq '0.0.0.0' -or $BindAddress -eq '::') { '127.0.0.1' } else { $BindAddress }
-$healthUri = "http://${healthAddress}:$Port/api/status"
+$healthUri = "http://${healthAddress}:$Port/api/status/details"
 $deadline = (Get-Date).AddSeconds(20)
 $status = $null
 do {

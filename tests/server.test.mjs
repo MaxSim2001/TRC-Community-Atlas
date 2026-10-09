@@ -44,7 +44,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   };
   const webhookDeliveries = [];
   const webhookSender = async (delivery) => { webhookDeliveries.push(delivery); return { status: 202 }; };
-  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager, webhookSender });
+  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], trustedProxies: ["127.0.0.1"], probePublicSite, autostartManager, webhookSender });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   let address = server.address();
   let base = `http://127.0.0.1:${address.port}`;
@@ -73,10 +73,15 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
 
   let result = await request("/api/status");
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.15.0");
-  assert.equal(result.payload.storage, "uninitialized");
+  assert.deepEqual(result.payload, { ok: true });
   assert.match(result.response.headers.get("content-security-policy"), /default-src 'self'/);
+
+  result = await request("/api/bootstrap");
+  assert.deepEqual(result.payload, { setupRequired: true });
+  result = await request("/api/status/details");
+  assert.equal(result.payload.initialized, false);
+  assert.equal(result.payload.version, "0.15.1");
+  assert.equal(result.payload.storage, "uninitialized");
 
   result = await request("/api/setup", { method: "POST", headers: { origin: "https://malicious.invalid" }, body: { displayName: "Intrus", username: "intrus", password: "invalid-password" } });
   assert.equal(result.response.status, 403);
@@ -113,7 +118,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 200);
 
   await new Promise((resolve) => server.close(resolve));
-  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager, webhookSender });
+  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], trustedProxies: ["127.0.0.1"], probePublicSite, autostartManager, webhookSender });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   address = server.address();
   base = `http://127.0.0.1:${address.port}`;
@@ -175,7 +180,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 401);
   result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.version, "0.15.0");
+  assert.equal(result.payload.version, "0.15.1");
   result = await request("/api/v1/organizations", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
   assert.ok(result.payload.items.length >= 1);
@@ -191,7 +196,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 403);
 
-  result = await request("/api/settings/local-api/webhooks", { method: "POST", csrf, body: { label: "LAN interdit", url: "http://192.168.50.6:9199/atlas-events", events: ["workspace.updated"], adminMfaCode: totp(adminSecret) } });
+  result = await request("/api/settings/local-api/webhooks", { method: "POST", csrf, body: { label: "LAN interdit", url: "http://192.168.1.60:9199/atlas-events", events: ["workspace.updated"], adminMfaCode: totp(adminSecret) } });
   assert.equal(result.response.status, 400);
   result = await request("/api/settings/local-api/webhooks", { method: "POST", csrf, body: { label: "Orchestrateur QA", url: "http://127.0.0.1:9199/atlas-events", events: ["workspace.updated", "backup.completed"], adminMfaCode: totp(adminSecret) } });
   assert.equal(result.response.status, 201);

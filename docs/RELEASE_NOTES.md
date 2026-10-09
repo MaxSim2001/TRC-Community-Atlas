@@ -1,5 +1,18 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.1 — Correctifs de sécurité de l’authentification et du proxy
+
+- limitation persistante des tentatives de mot de passe et de MFA par compte et
+  par adresse cliente, avec `429` et délai de reprise;
+- défis MFA réduits à cinq minutes et invalidés après cinq codes incorrects;
+- limites de corps adaptées à chaque endpoint afin d’éviter l’accumulation de
+  requêtes anonymes volumineuses en mémoire;
+- confiance explicite envers les adresses IP de proxy; les en-têtes transmis
+  sont ignorés lorsqu’ils viennent d’une source non déclarée;
+- statut public réduit à `{ "ok": true }`, diagnostic détaillé limité à la VM
+  et vrais `404` pour les chemins non publiés;
+- retrait des adresses, chemins et détails d’exploitation des rapports publics.
+
 ## 0.15.0 — Release signée et mise à jour transactionnelle
 
 - manifeste de Release signé avec Ed25519; seule la clé publique de vérification

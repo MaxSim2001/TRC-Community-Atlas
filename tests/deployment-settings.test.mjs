@@ -21,12 +21,13 @@ test("deployment domains are normalized without accepting URLs, ports or local a
     domainAliases: ["documentation.abcp.com"],
     accessMode: "reverse-proxy",
     reverseProxy: "nginx",
+    trustedProxies: [],
     certificateManagement: "reverse-proxy",
   });
 });
 
 test("the public probe refuses private and reserved destinations", () => {
-  for (const address of ["127.0.0.1", "10.0.0.2", "172.16.0.1", "192.168.50.12", "169.254.1.2", "100.64.0.1", "::1", "fd00::1", "fe80::1", "2001:db8::1"]) {
+  for (const address of ["127.0.0.1", "10.0.0.2", "172.16.0.1", "192.168.1.12", "169.254.1.2", "100.64.0.1", "::1", "fd00::1", "fe80::1", "2001:db8::1"]) {
     assert.equal(isPublicProbeAddress(address), false, address);
   }
   assert.equal(isPublicProbeAddress("8.8.8.8"), true);
@@ -46,6 +47,7 @@ test("the UI exposes dedicated protected setup and health pages", async () => {
   assert.match(app, /data-form="settings-security"/);
   assert.match(app, /name="instanceCode"/);
   assert.match(app, /name="primaryDomain"/);
+  assert.match(app, /name="trustedProxies"/);
   assert.match(app, /name="adminMfaCode"/);
   assert.match(app, /Code MFA actuel/);
   assert.match(app, /Seul le super administrateur Atlas/);

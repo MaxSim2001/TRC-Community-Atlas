@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.15.0";
+  const ATLAS_VERSION = "0.15.1";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -1664,8 +1664,8 @@
     applyPreferences();
     parseRoute();
     try {
-      state.status = await api("/api/status");
-      if (!state.status.initialized) {
+      state.status = await api("/api/bootstrap");
+      if (state.status.setupRequired) {
         state.phase = "setup";
       } else {
         try {
@@ -1788,6 +1788,7 @@
       domainAliases: Array.isArray(deployment.domainAliases) ? deployment.domainAliases.map((domain) => String(domain).trim().toLowerCase()).filter(Boolean) : [],
       accessMode: deployment.accessMode === "reverse-proxy" ? "reverse-proxy" : "local",
       reverseProxy: ["nginx", "iis", "caddy", "other"].includes(deployment.reverseProxy) ? deployment.reverseProxy : "nginx",
+      trustedProxies: Array.isArray(deployment.trustedProxies) ? deployment.trustedProxies.map((address) => String(address).trim()).filter(Boolean) : [],
       certificateManagement: "reverse-proxy",
     };
     for (const organization of state.workspace.organizations) {
@@ -3409,7 +3410,7 @@
     const probe = state.deploymentProbe;
     const portProbe = state.deploymentPortProbe;
     const certificate = probe?.certificate;
-    const probeMarkup = probe ? `<div class="public-probe-result success"><div><span>${icon("shield", 18)}</span><div><strong>Domaine public vérifié</strong><p>${escapeHtml(probe.domain)} répond avec Atlas ${escapeHtml(probe.atlas?.version || "")}, via ${escapeHtml(probe.address || "adresse résolue")}.</p></div></div>${certificate ? `<dl><div><dt>Certificat</dt><dd>${escapeHtml(certificate.subject || "Nom non déclaré")}</dd></div><div><dt>Émetteur</dt><dd>${escapeHtml(certificate.issuer || "Non déclaré")}</dd></div><div><dt>Expiration</dt><dd>${certificate.validTo ? `${formatDateTime(certificate.validTo)} · ${certificate.daysRemaining} jours` : "Non disponible"}</dd></div></dl>` : ""}</div>` : "";
+    const probeMarkup = probe ? `<div class="public-probe-result success"><div><span>${icon("shield", 18)}</span><div><strong>Domaine public vérifié</strong><p>${escapeHtml(probe.domain)} répond comme une instance Atlas, via ${escapeHtml(probe.address || "adresse résolue")}.</p></div></div>${certificate ? `<dl><div><dt>Certificat</dt><dd>${escapeHtml(certificate.subject || "Nom non déclaré")}</dd></div><div><dt>Émetteur</dt><dd>${escapeHtml(certificate.issuer || "Non déclaré")}</dd></div><div><dt>Expiration</dt><dd>${certificate.validTo ? `${formatDateTime(certificate.validTo)} · ${certificate.daysRemaining} jours` : "Non disponible"}</dd></div></dl>` : ""}</div>` : "";
     const portProbeMarkup = portProbe ? `<div class="local-port-result ${portProbe.open ? "success" : "error"}"><span>${icon(portProbe.open ? "check" : "alert", 18)}</span><div><strong>${portProbe.open ? "Port Atlas ouvert sur cet ordinateur" : "Port Atlas inaccessible localement"}</strong><p>${escapeHtml(portProbe.message || "")} Cible testée : <code>${escapeHtml(portProbe.host || "127.0.0.1")}:${Number(portProbe.port) || "—"}</code>${Number.isFinite(portProbe.latencyMs) ? ` · ${portProbe.latencyMs} ms` : ""}.</p><small>${portProbe.checkedAt ? `Testé ${formatDateTime(portProbe.checkedAt)}` : ""}</small></div></div>` : "";
     return `<section class="panel settings-health-section" id="settings-health"><header><div><p class="eyebrow">SANTÉ DU SITE</p><h2>État de l’instance</h2><p>Ces contrôles sont factuels. Atlas ne modifie jamais le DNS, le certificat, le routeur ou le pare-feu.</p></div><div class="settings-health-actions"><button class="secondary compact" type="button" data-action="refresh-site-health" ${state.deploymentHealthLoading ? "disabled" : ""}>${icon("refresh", 14)} ${state.deploymentHealthLoading ? "Vérification…" : "Actualiser"}</button><button class="secondary compact" type="button" data-action="probe-local-port" ${state.deploymentHealthLoading ? "disabled" : ""}>${icon("activity", 14)} Tester le port local</button><button class="primary compact" type="button" data-action="probe-public-site" ${!settings.deployment.primaryDomain || state.deploymentHealthLoading ? "disabled" : ""}>${icon("globe", 14)} Tester le domaine public</button></div></header>
       ${health?.error ? `<div class="notice">${icon("alert", 17)} ${escapeHtml(health.error)}</div>` : `<div class="health-summary"><span class="health-summary-icon">${icon(summary.warning ? "alert" : "check", 22)}</span><div><strong>${summary.warning ? `${summary.warning} point${summary.warning === 1 ? "" : "s"} à vérifier` : "Les contrôles locaux sont prêts"}</strong><p>${summary.ok} réussi${summary.ok === 1 ? "" : "s"}, ${summary.neutral} informatif${summary.neutral === 1 ? "" : "s"}, ${summary.total} contrôle${summary.total === 1 ? "" : "s"} au total.</p></div><small>${health?.checkedAt ? `Actualisé ${formatDateTime(health.checkedAt)}` : "Actualisez pour lancer les contrôles"}</small></div>`}
@@ -3489,6 +3490,7 @@
       <label>Domaine public principal<input name="primaryDomain" maxlength="253" value="${escapeHtml(deployment.primaryDomain)}" placeholder="atlas.abcp.com"/><small>Saisissez seulement le domaine, sans <code>https://</code>, port ni chemin.</small></label>
       <label>Domaines secondaires<textarea name="domainAliases" rows="3" maxlength="2540" placeholder="atlas.abc.com&#10;documentation.abcp.com">${escapeHtml(deployment.domainAliases.join("\n"))}</textarea><small>Un domaine par ligne, jusqu’à 10. Ils demeurent isolés des domaines documentés dans les compagnies.</small></label>
       <label>Proxy inverse<select name="reverseProxy" data-reverse-proxy ${deployment.accessMode === "local" ? "disabled" : ""}><option value="nginx" ${deployment.reverseProxy === "nginx" ? "selected" : ""}>Nginx</option><option value="iis" ${deployment.reverseProxy === "iis" ? "selected" : ""}>IIS</option><option value="caddy" ${deployment.reverseProxy === "caddy" ? "selected" : ""}>Caddy</option><option value="other" ${deployment.reverseProxy === "other" ? "selected" : ""}>Autre</option></select><small>Le proxy termine TLS puis transmet <code>X-Forwarded-Proto: https</code> à Atlas.</small></label>
+      <label>Adresses IP des proxys de confiance<textarea name="trustedProxies" rows="3" maxlength="720" placeholder="Adresse IPv4 ou IPv6 exacte du proxy">${escapeHtml(deployment.trustedProxies.join("\n"))}</textarea><small>Une adresse IP exacte par ligne, jusqu’à 16. Atlas ignore <code>X-Forwarded-For</code>, <code>X-Real-IP</code> et <code>X-Forwarded-Proto</code> depuis toute autre machine.</small></label>
       <div class="certificate-boundary">${icon("shield", 18)}<div><strong>Certificat géré hors d’Atlas</strong><p>Installez la clé privée et le certificat dans Nginx, IIS ou Caddy. Atlas n’importe et ne conserve jamais la clé TLS.</p></div></div><div class="module-boundary-note"><strong>À ne pas confondre :</strong> Domain Tracker et SSL Tracker documentent les actifs des compagnies. Cette page configure seulement cette instance Atlas.</div>
     </div></section>${settingsAdminMfaMarkup("Un code MFA actuel est requis lorsque le domaine, le mode d’accès ou le proxy change.", "deployment")}<p class="form-error" role="alert"></p><div class="settings-save"><span>Atlas ne modifie jamais le DNS, le certificat ou le proxy.</span><button class="primary" type="submit" ${state.saving ? "disabled" : ""}>${state.saving ? "Enregistrement…" : "Enregistrer la configuration"}</button></div></form>`;
     const autostartForm = `<form class="settings-dedicated-form" data-form="settings-autostart"><section class="panel settings-section autostart-settings-section"><div><p class="eyebrow">DÉMARRAGE WINDOWS</p><h2>Lancer Atlas en arrière-plan</h2><p>Planifiez Atlas avec Windows sans fenêtre PowerShell visible. L’instance actuelle reste ouverte pendant l’application du réglage.</p><div class="autostart-current-state ${autostart.enabled ? "enabled" : "disabled"}"><span>${icon(autostart.enabled ? "check" : "clock", 17)}</span><div><small>État détecté</small><strong>${escapeHtml(autostart.message || (autostart.enabled ? "Activé" : "Désactivé"))}</strong></div></div></div><div class="autostart-controls"><label class="permission-switch"><input name="autostartEnabled" type="checkbox" ${autostart.enabled ? "checked" : ""} ${autostartReady ? "" : "disabled"}/><span><strong>Démarrer Atlas automatiquement</strong><small>Utilise une tâche Windows masquée avec redémarrage automatique en cas d’échec.</small></span></label><dl class="security-list"><div><dt>Déclencheur</dt><dd>${escapeHtml(autostartTrigger)}</dd></div><div><dt>Compte d’exécution</dt><dd>${escapeHtml(autostart.runAs || "Déterminé à l’application")}</dd></div><div><dt>Tâche Windows</dt><dd>${escapeHtml(autostart.taskName || "TRC Community Atlas")}</dd></div><div><dt>État système</dt><dd><span class="status-badge ${autostart.enabled ? "success" : "muted"}">${escapeHtml(autostart.state || "Inconnu")}</span></dd></div></dl><div class="module-boundary-note"><strong>Port conservé :</strong> la tâche réutilise l’adresse, le port et le dossier de données actifs. Aucun port supplémentaire n’est ouvert.</div></div></section>${settingsAdminMfaMarkup("Confirmez avant de créer, modifier ou désactiver la tâche de démarrage Windows.", "autostart")}<p class="form-error" role="alert"></p><div class="settings-save"><span>La modification sera visible dans Santé du site.</span><button class="primary" type="submit" ${autostartReady ? "" : "disabled"}>${state.deploymentHealthLoading ? "Vérification…" : "Configurer et appliquer"}</button></div></form>`;
@@ -6024,7 +6026,7 @@
           try {
             const response = await fetch("/api/status", { cache: "no-store" });
             const payload = await response.json();
-            if (response.ok && payload.version === result.targetVersion) { clearInterval(reconnect); window.location.reload(); }
+            if (response.ok && payload.ok === true) { clearInterval(reconnect); window.location.reload(); }
           } catch { /* Atlas est temporairement arrêté. */ }
         }, 2500);
         setTimeout(() => clearInterval(reconnect), 5 * 60 * 1000);
@@ -6060,12 +6062,15 @@
           domainAliases: String(data.domainAliases || "").split(/[\n,;]+/).map((domain) => domain.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean),
           accessMode: data.accessMode === "reverse-proxy" ? "reverse-proxy" : "local",
           reverseProxy: data.reverseProxy || currentDeployment.reverseProxy || "nginx",
+          trustedProxies: String(data.trustedProxies || "").split(/[\n,;]+/).map((address) => address.trim()).filter(Boolean),
           certificateManagement: "reverse-proxy",
         };
         if (!/^[A-Z0-9][A-Z0-9-]{1,31}$/.test(nextDeployment.instanceCode)) throw new Error("Le code de l’instance doit contenir de 2 à 32 lettres, chiffres ou tirets.");
         const invalidDomain = (domain) => domain && (/^[a-z][a-z0-9+.-]*:\/\//i.test(domain) || /[\s/:\\@?#]/.test(domain) || !domain.includes("."));
         if (invalidDomain(nextDeployment.primaryDomain)) throw new Error("Saisissez le domaine principal sans protocole, port ni chemin, par exemple atlas.abcp.com.");
         if (nextDeployment.domainAliases.length > 10 || nextDeployment.domainAliases.some(invalidDomain)) throw new Error("Vérifiez les domaines secondaires; un maximum de 10 domaines complets est permis.");
+        const invalidProxy = (address) => !/^(?:\d{1,3}(?:\.\d{1,3}){3}|[0-9a-f:]+)$/i.test(address);
+        if (nextDeployment.trustedProxies.length > 16 || nextDeployment.trustedProxies.some(invalidProxy)) throw new Error("Saisissez au maximum 16 adresses IPv4 ou IPv6 exactes, une par ligne.");
         if (nextDeployment.accessMode === "reverse-proxy" && !nextDeployment.primaryDomain) throw new Error("Un domaine principal est requis pour le mode HTTPS par proxy inverse.");
         const deploymentChanged = JSON.stringify(currentDeployment) !== JSON.stringify(nextDeployment);
         if (!deploymentChanged) { toast("Aucune modification à enregistrer."); return; }

@@ -8,6 +8,8 @@ param(
 
     [string[]]$AllowedOrigin = @(),
 
+    [string[]]$TrustedProxy = @(),
+
     [string]$DataRoot = ''
 )
 
@@ -37,11 +39,17 @@ $serverArguments = @($serverPath, '--port', [string]$Port, '--host', $BindAddres
 foreach ($origin in $AllowedOrigin) {
     $serverArguments += @('--origin', $origin)
 }
+foreach ($proxyAddress in $TrustedProxy) {
+    $serverArguments += @('--trusted-proxy', $proxyAddress)
+}
 
 Write-Host "TRC Community Atlas démarre sur http://${BindAddress}:$Port" -ForegroundColor Cyan
 Write-Host "Données : $DataRoot" -ForegroundColor DarkCyan
 if ($AllowedOrigin.Count -gt 0) {
     Write-Host "Origines autorisées : $($AllowedOrigin -join ', ')" -ForegroundColor DarkCyan
+}
+if ($TrustedProxy.Count -gt 0) {
+    Write-Host "Proxys de confiance : $($TrustedProxy -join ', ')" -ForegroundColor DarkCyan
 }
 Write-Host 'Appuyez sur Ctrl+C pour arrêter le serveur.' -ForegroundColor DarkGray
 & $nodePath @serverArguments

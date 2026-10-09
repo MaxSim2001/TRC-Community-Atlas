@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Version actuelle : **0.15.0**.
+Version actuelle : **0.15.1**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -52,7 +52,7 @@ Dans PowerShell :
 
 Ouvrir ensuite `http://127.0.0.1:9092`. Au premier démarrage, l’application demande la création du compte administrateur local. Les données sont écrites dans `data/`; le serveur écoute uniquement sur la boucle locale par défaut. Depuis une archive de code source sans runtime, Node.js 22 ou plus récent est requis.
 
-Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute et chaque origine HTTPS autorisée. Exemple : `Start-TRCCommunityAtlas.ps1 -BindAddress 192.168.50.12 -Port 9092 -AllowedOrigin https://atlas.therisingcloud.com`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Le mandataire inverse doit forcer TLS, transmettre `X-Forwarded-Proto https` et marquer le cookie `atlas_session` comme `Secure`.
+Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute et chaque origine HTTPS autorisée. Exemple : `Start-TRCCommunityAtlas.ps1 -BindAddress 10.0.0.12 -Port 9092 -AllowedOrigin https://atlas.exemple.com`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Dans **Paramètres > Configuration initiale**, ajouter ensuite l’adresse IP exacte du proxy à la liste des proxys de confiance. Atlas ignore les en-têtes `X-Forwarded-*`, `X-Real-IP` et `CF-Connecting-IP` venant de toute autre adresse.
 
 ## Démarrage automatique Windows
 

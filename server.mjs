@@ -3,7 +3,7 @@ import https from "node:https";
 import { execFile } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rename, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { createConnection, isIP } from "node:net";
 import path from "node:path";
@@ -28,14 +28,22 @@ const modulePath = fileURLToPath(import.meta.url);
 const projectRoot = path.dirname(modulePath);
 const publicRoot = path.join(projectRoot, "public");
 const defaultDataRoot = path.join(projectRoot, "data");
-const MAX_BODY_BYTES = 132 * 1024 * 1024;
-const MAX_WORKSPACE_BYTES = 128 * 1024 * 1024;
+const DEFAULT_JSON_BODY_BYTES = 256 * 1024;
+const SENSITIVE_BODY_BYTES = 8 * 1024;
+const IMPORT_BODY_BYTES = 16 * 1024 * 1024;
+const ATTACHMENT_BODY_BYTES = 12 * 1024 * 1024;
+const MAX_WORKSPACE_BYTES = 16 * 1024 * 1024;
 const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
 const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 8;
+const MFA_WINDOW_MS = 15 * 60 * 1000;
+const MFA_ACCOUNT_LIMIT = 10;
+const MFA_IP_LIMIT = 30;
+const MFA_CHALLENGE_LIMIT = 5;
+const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.15.0";
+const ATLAS_VERSION = "0.15.1";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -52,12 +60,13 @@ const staticFiles = new Map([
 ]);
 
 function parseArgs(argv) {
-  const result = { host: "127.0.0.1", port: 9092, dataRoot: defaultDataRoot, allowedOrigins: [] };
+  const result = { host: "127.0.0.1", port: 9092, dataRoot: defaultDataRoot, allowedOrigins: [], trustedProxies: [] };
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--port") result.port = Number(argv[index + 1]);
     if (argv[index] === "--data") result.dataRoot = path.resolve(argv[index + 1]);
     if (argv[index] === "--host") result.host = String(argv[index + 1] || "").trim();
     if (argv[index] === "--origin") result.allowedOrigins.push(String(argv[index + 1] || "").trim());
+    if (argv[index] === "--trusted-proxy") result.trustedProxies.push(String(argv[index + 1] || "").trim());
   }
   if (!Number.isInteger(result.port) || result.port < 1024 || result.port > 65535) {
     throw new Error("Le port doit être un entier entre 1024 et 65535.");
@@ -70,6 +79,10 @@ function parseArgs(argv) {
     if (!normalized) throw new Error(`Origine publique Atlas invalide : ${origin}`);
     return normalized;
   });
+  if (result.trustedProxies.length > 16 || result.trustedProxies.some((address) => !normalizeProxyAddress(address))) {
+    throw new Error("Chaque proxy de confiance doit être une adresse IPv4 ou IPv6 exacte; maximum 16.");
+  }
+  result.trustedProxies = [...new Set(result.trustedProxies.map(normalizeProxyAddress))];
   return result;
 }
 
@@ -82,8 +95,8 @@ function jsonResponse(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
-function errorResponse(response, status, code, message) {
-  jsonResponse(response, status, { error: code, message });
+function errorResponse(response, status, code, message, headers = {}) {
+  jsonResponse(response, status, { error: code, message }, headers);
 }
 
 function setSecurityHeaders(response) {
@@ -113,14 +126,31 @@ async function writeJsonAtomic(filePath, value) {
   await rename(temporaryPath, filePath);
 }
 
+function requestBodyLimit(method, pathname) {
+  if (["GET", "HEAD"].includes(method)) return 0;
+  if (method === "POST" && pathname === "/api/attachments") return ATTACHMENT_BODY_BYTES;
+  if ((method === "PUT" && pathname === "/api/workspace") || (method === "POST" && pathname === "/api/import")) return IMPORT_BODY_BYTES;
+  if (/^\/api\/(?:setup|login|mfa\/|password\/|vault\/unlock|me\/(?:change-password|recovery-codes|mfa\/re-enroll))/.test(pathname)) return SENSITIVE_BODY_BYTES;
+  return DEFAULT_JSON_BODY_BYTES;
+}
+
 async function readBody(request) {
+  const limit = Number.isInteger(request.atlasBodyLimit) ? request.atlasBodyLimit : DEFAULT_JSON_BODY_BYTES;
+  const declaredLength = Number(request.headers["content-length"] || 0);
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {
+    const error = new Error("Corps de requête trop volumineux.");
+    error.statusCode = 413;
+    error.code = "request_too_large";
+    throw error;
+  }
   const chunks = [];
   let length = 0;
   for await (const chunk of request) {
     length += chunk.length;
-    if (length > MAX_BODY_BYTES) {
+    if (length > limit) {
       const error = new Error("Corps de requête trop volumineux.");
       error.statusCode = 413;
+      error.code = "request_too_large";
       throw error;
     }
     chunks.push(chunk);
@@ -253,6 +283,19 @@ export function normalizeAtlasDomain(value) {
   return ascii;
 }
 
+export function normalizeProxyAddress(value) {
+  let normalized = String(value || "").trim().toLowerCase();
+  if (normalized.startsWith("[")) normalized = normalized.slice(1, normalized.indexOf("]"));
+  if (normalized.startsWith("::ffff:")) normalized = normalized.slice(7);
+  normalized = normalized.split("%", 1)[0];
+  return isIP(normalized) ? normalized : null;
+}
+
+function normalizedTrustedProxies(value) {
+  const raw = Array.isArray(value) ? value : String(value || "").split(/[\n,;]+/);
+  return [...new Set(raw.map(normalizeProxyAddress).filter(Boolean))].slice(0, 16);
+}
+
 export function normalizedDeploymentSettings(settings = {}) {
   const source = settings?.deployment && typeof settings.deployment === "object" ? settings.deployment : settings;
   const rawCode = String(source?.instanceCode || "ATLAS").trim().toUpperCase();
@@ -263,7 +306,8 @@ export function normalizedDeploymentSettings(settings = {}) {
     .filter((domain) => domain && domain !== primaryDomain))].slice(0, 10);
   const accessMode = source?.accessMode === "reverse-proxy" ? "reverse-proxy" : "local";
   const reverseProxy = ["nginx", "iis", "caddy", "other"].includes(source?.reverseProxy) ? source.reverseProxy : "nginx";
-  return { instanceCode, primaryDomain, domainAliases, accessMode, reverseProxy, certificateManagement: "reverse-proxy" };
+  const trustedProxies = normalizedTrustedProxies(source?.trustedProxies);
+  return { instanceCode, primaryDomain, domainAliases, accessMode, reverseProxy, trustedProxies, certificateManagement: "reverse-proxy" };
 }
 
 function deploymentSettingsFromInput(input = {}) {
@@ -292,7 +336,13 @@ function deploymentSettingsFromInput(input = {}) {
   }
   const reverseProxy = ["nginx", "iis", "caddy", "other"].includes(input.reverseProxy) ? input.reverseProxy : null;
   if (!reverseProxy) throw Object.assign(new Error("Choisissez le proxy inverse utilisé devant Atlas."), { statusCode: 400, code: "invalid_reverse_proxy" });
-  return { instanceCode: rawCode, primaryDomain, domainAliases, accessMode, reverseProxy, certificateManagement: "reverse-proxy" };
+  const rawTrustedProxies = Array.isArray(input.trustedProxies) ? input.trustedProxies : String(input.trustedProxies || "").split(/[\n,;]+/);
+  if (rawTrustedProxies.filter((entry) => String(entry || "").trim()).length > 16) throw Object.assign(new Error("Un maximum de 16 proxys de confiance est permis."), { statusCode: 400, code: "too_many_trusted_proxies" });
+  for (const rawProxy of rawTrustedProxies) {
+    if (String(rawProxy || "").trim() && !normalizeProxyAddress(rawProxy)) throw Object.assign(new Error(`L’adresse du proxy « ${String(rawProxy).trim()} » est invalide.`), { statusCode: 400, code: "invalid_trusted_proxy" });
+  }
+  const trustedProxies = normalizedTrustedProxies(rawTrustedProxies);
+  return { instanceCode: rawCode, primaryDomain, domainAliases, accessMode, reverseProxy, trustedProxies, certificateManagement: "reverse-proxy" };
 }
 
 function deploymentOrigins(settings = {}) {
@@ -409,7 +459,7 @@ async function probePublicAtlasDomain(domain) {
         let payload;
         try { payload = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
         catch { fail(new Error("la réponse /api/status n’est pas un JSON valide")); return; }
-        if (response.statusCode !== 200 || payload?.product !== "TRC Community Atlas") {
+        if (response.statusCode !== 200 || payload?.ok !== true) {
           fail(new Error("le domaine ne répond pas comme une instance Atlas"));
           return;
         }
@@ -420,7 +470,7 @@ async function probePublicAtlasDomain(domain) {
           checkedAt: nowIso(),
           domain: normalizedDomain,
           address: destination.address,
-          atlas: { ok: true, version: String(payload.version || ""), storage: String(payload.storage || "") },
+          atlas: { ok: true },
           certificate: {
             subject: String(certificate?.subject?.CN || ""),
             issuer: String(certificate?.issuer?.CN || certificate?.issuer?.O || ""),
@@ -665,13 +715,18 @@ function sameOrigin(request, port, allowedOrigins) {
   return normalized === `http://127.0.0.1:${port}` || normalized === `http://localhost:${port}` || Boolean(normalized && allowedOrigins.has(normalized));
 }
 
-function requestUsesHttps(request) {
+function socketAddress(request) {
+  return normalizeProxyAddress(request.socket.remoteAddress) || "local";
+}
+
+function requestUsesHttps(request, trustedProxies = new Set()) {
   if (request.socket.encrypted) return true;
+  if (!trustedProxies.has(socketAddress(request))) return false;
   return String(request.headers["x-forwarded-proto"] || "").split(",", 1)[0].trim().toLowerCase() === "https";
 }
 
-function sessionCookie(request, value, maxAge) {
-  return `atlas_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${requestUsesHttps(request) ? "; Secure" : ""}`;
+function sessionCookie(request, value, maxAge, trustedProxies = new Set()) {
+  return `atlas_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${requestUsesHttps(request, trustedProxies) ? "; Secure" : ""}`;
 }
 
 export function createAtlasServer(options = {}) {
@@ -679,6 +734,8 @@ export function createAtlasServer(options = {}) {
   const port = options.port || 9092;
   const allowedOrigins = new Set((options.allowedOrigins || []).map(normalizeOrigin).filter(Boolean));
   const savedDeploymentOrigins = new Set();
+  const trustedProxies = new Set(normalizedTrustedProxies(options.trustedProxies));
+  const savedTrustedProxies = new Set();
   const dataRoot = options.dataRoot || defaultDataRoot;
   const sessionNow = typeof options.now === "function" ? options.now : Date.now;
   const manageAutostart = typeof options.autostartManager === "function" ? options.autostartManager : runAutostartManager;
@@ -697,6 +754,8 @@ export function createAtlasServer(options = {}) {
   const backupSettingsPath = path.join(dataRoot, "backup-settings.json");
   const backupSecretPath = path.join(dataRoot, "backup-secret.clixml");
   const localApiSettingsPath = path.join(dataRoot, "local-api.json");
+  const authRateLimitPath = path.join(dataRoot, "auth-rate-limits.json");
+  const authRateLimitKeyPath = path.join(dataRoot, "auth-rate-limit.key");
   const backupBaseRoot = path.dirname(dataRoot);
   const updateRoot = options.updateRoot || path.join(backupBaseRoot, "updates");
   const updateStatePath = path.join(updateRoot, "update-state.json");
@@ -705,7 +764,6 @@ export function createAtlasServer(options = {}) {
   const sessions = new Map();
   const pendingMfa = new Map();
   const pendingPasswordChanges = new Map();
-  const loginAttempts = new Map();
   let writeQueue = Promise.resolve();
   let storePromise = null;
   let vaultSecurityMetadataPromise = null;
@@ -713,6 +771,28 @@ export function createAtlasServer(options = {}) {
   let backupRunning = false;
   let backupTimer = null;
   let lastReleaseCheck = null;
+  let authRateLimitKey;
+  let authRateLimits = { schemaVersion: 1, entries: {} };
+
+  mkdirSync(dataRoot, { recursive: true });
+  try {
+    authRateLimitKey = readFileSync(authRateLimitKeyPath);
+    if (authRateLimitKey.length !== 32) throw new Error("invalid rate-limit key");
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.error("[atlas] La clé locale de limitation a été remplacée car elle était invalide.");
+    authRateLimitKey = randomBytes(32);
+    try { writeFileSync(authRateLimitKeyPath, authRateLimitKey, { flag: "wx", mode: 0o600 }); }
+    catch (writeError) {
+      if (writeError?.code !== "EEXIST") throw writeError;
+      authRateLimitKey = readFileSync(authRateLimitKeyPath);
+    }
+  }
+  try {
+    const persistedLimits = JSON.parse(readFileSync(authRateLimitPath, "utf8"));
+    if (persistedLimits?.schemaVersion === 1 && persistedLimits.entries && typeof persistedLimits.entries === "object") authRateLimits = persistedLimits;
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.error("[atlas] Le registre local de limitation des authentifications a été ignoré car il est invalide.");
+  }
 
   try {
     const persisted = JSON.parse(readFileSync(sessionsPath, "utf8"));
@@ -750,7 +830,63 @@ export function createAtlasServer(options = {}) {
   }
 
   function requestIp(request) {
-    return cleanText(String(request.headers["x-real-ip"] || request.socket.remoteAddress || "local").split(",", 1)[0], 96) || "local";
+    const peer = socketAddress(request);
+    const activeTrustedProxies = new Set([...trustedProxies, ...savedTrustedProxies]);
+    if (!activeTrustedProxies.has(peer)) return peer;
+    const forwarded = String(request.headers["x-forwarded-for"] || "").split(",").map(normalizeProxyAddress).filter(Boolean);
+    if (!forwarded.length) {
+      const direct = normalizeProxyAddress(request.headers["cf-connecting-ip"] || request.headers["x-real-ip"]);
+      return direct || peer;
+    }
+    const chain = [...forwarded, peer];
+    for (let index = chain.length - 1; index >= 0; index -= 1) {
+      if (!activeTrustedProxies.has(chain[index])) return chain[index];
+    }
+    return forwarded[0] || peer;
+  }
+
+  function isLocalRequest(request) {
+    const peer = socketAddress(request);
+    if (["127.0.0.1", "::1"].includes(peer)) return true;
+    return Boolean(request.socket.localAddress && normalizeProxyAddress(request.socket.localAddress) === peer);
+  }
+
+  function rateLimitKey(scope, subject) {
+    return createHmac("sha256", authRateLimitKey).update(`${scope}:${String(subject || "unknown")}`).digest("hex");
+  }
+
+  function rateLimitStatus(scope, subject, limit, windowMs) {
+    const key = rateLimitKey(scope, subject);
+    const cutoff = sessionNow() - windowMs;
+    const failures = (authRateLimits.entries[key]?.failures || []).filter((timestamp) => Number.isFinite(timestamp) && timestamp > cutoff);
+    if (failures.length) authRateLimits.entries[key] = { scope, failures };
+    else delete authRateLimits.entries[key];
+    const blocked = failures.length >= limit;
+    const retryAfter = blocked ? Math.max(1, Math.ceil((failures[0] + windowMs - sessionNow()) / 1000)) : 0;
+    return { key, blocked, retryAfter };
+  }
+
+  async function recordRateLimitFailures(entries) {
+    for (const { scope, subject, windowMs } of entries) {
+      const status = rateLimitStatus(scope, subject, Number.MAX_SAFE_INTEGER, windowMs);
+      const current = authRateLimits.entries[status.key] || { scope, failures: [] };
+      current.failures.push(sessionNow());
+      authRateLimits.entries[status.key] = current;
+    }
+    const ordered = Object.entries(authRateLimits.entries).sort(([, a], [, b]) => (b.failures?.at(-1) || 0) - (a.failures?.at(-1) || 0)).slice(0, 5000);
+    authRateLimits.entries = Object.fromEntries(ordered);
+    await enqueueWrite(() => writeJsonAtomic(authRateLimitPath, { schemaVersion: 1, updatedAt: new Date(sessionNow()).toISOString(), entries: authRateLimits.entries }));
+  }
+
+  function rejectWhenRateLimited(response, checks) {
+    let longestRetry = 0;
+    for (const check of checks) {
+      const status = rateLimitStatus(check.scope, check.subject, check.limit, check.windowMs);
+      if (status.blocked) longestRetry = Math.max(longestRetry, status.retryAfter);
+    }
+    if (!longestRetry) return false;
+    errorResponse(response, 429, "too_many_attempts", "Trop de tentatives. Réessayez plus tard.", { "retry-after": String(longestRetry) });
+    return true;
   }
 
   function publicSession(session, currentSessionId = "") {
@@ -1170,6 +1306,8 @@ export function createAtlasServer(options = {}) {
   function refreshSavedDeploymentOrigins(settings) {
     savedDeploymentOrigins.clear();
     for (const origin of deploymentOrigins(settings)) savedDeploymentOrigins.add(origin);
+    savedTrustedProxies.clear();
+    for (const address of normalizedDeploymentSettings(settings).trustedProxies) savedTrustedProxies.add(address);
     deploymentOriginsLoaded = true;
   }
 
@@ -1325,7 +1463,8 @@ export function createAtlasServer(options = {}) {
       userId: user.id,
       type,
       secret,
-      expiresAt: Date.now() + 10 * 60 * 1000,
+      failures: 0,
+      expiresAt: sessionNow() + MFA_CHALLENGE_TTL_MS,
     });
     return { token, secret };
   }
@@ -1334,7 +1473,7 @@ export function createAtlasServer(options = {}) {
     if (typeof token !== "string" || token.length < 32) return null;
     const key = createHash("sha256").update(token).digest("hex");
     const pending = pendingMfa.get(key);
-    if (!pending || pending.expiresAt < Date.now()) {
+    if (!pending || pending.expiresAt < sessionNow()) {
       pendingMfa.delete(key);
       return null;
     }
@@ -1343,7 +1482,7 @@ export function createAtlasServer(options = {}) {
 
   function createPendingPasswordChange(user) {
     const token = randomBytes(32).toString("base64url");
-    pendingPasswordChanges.set(createHash("sha256").update(token).digest("hex"), { userId: user.id, expiresAt: Date.now() + 10 * 60 * 1000 });
+    pendingPasswordChanges.set(createHash("sha256").update(token).digest("hex"), { userId: user.id, expiresAt: sessionNow() + 10 * 60 * 1000 });
     return token;
   }
 
@@ -1351,7 +1490,7 @@ export function createAtlasServer(options = {}) {
     if (typeof token !== "string" || token.length < 32) return null;
     const key = createHash("sha256").update(token).digest("hex");
     const pending = pendingPasswordChanges.get(key);
-    if (!pending || pending.expiresAt < Date.now()) {
+    if (!pending || pending.expiresAt < sessionNow()) {
       pendingPasswordChanges.delete(key);
       return null;
     }
@@ -1394,7 +1533,7 @@ export function createAtlasServer(options = {}) {
     });
     await persistSessions();
     return jsonResponse(response, 200, { user: publicUser(user), csrf, ...extra, sessionExpiresAt: new Date(expiresAt).toISOString(), sessionTtlSeconds: SESSION_TTL_MS / 1000, vaultUnlockedUntil: new Date(vaultUnlockedUntil).toISOString() }, {
-      "set-cookie": sessionCookie(request, encodeURIComponent(rawToken), SESSION_TTL_MS / 1000),
+      "set-cookie": sessionCookie(request, encodeURIComponent(rawToken), SESSION_TTL_MS / 1000, new Set([...trustedProxies, ...savedTrustedProxies])),
     });
   }
 
@@ -1434,14 +1573,51 @@ export function createAtlasServer(options = {}) {
     return normalizedSecuritySettings(document?.data?.settings);
   }
 
+  async function verifyMfaAttempt(request, response, user, code, { challengeRecord = null, challengeKey = "", allowRecovery = false, purpose = "mfa" } = {}) {
+    const ip = requestIp(request);
+    const userSubject = user?.id || "unknown";
+    const checks = [
+      { scope: "mfa-account", subject: userSubject, limit: MFA_ACCOUNT_LIMIT, windowMs: MFA_WINDOW_MS },
+      { scope: "mfa-ip", subject: ip, limit: MFA_IP_LIMIT, windowMs: MFA_WINDOW_MS },
+    ];
+    if (rejectWhenRateLimited(response, checks)) return { ok: false, blocked: true, recoveryIndex: -1 };
+    if (challengeRecord && challengeRecord.failures >= MFA_CHALLENGE_LIMIT) {
+      if (challengeKey) pendingMfa.delete(challengeKey);
+      errorResponse(response, 429, "mfa_challenge_locked", "Cette vérification MFA a été invalidée après trop d’échecs. Recommencez la connexion.", { "retry-after": "300" });
+      return { ok: false, blocked: true, recoveryIndex: -1 };
+    }
+    const normalizedCode = String(code || "").trim();
+    let valid = Boolean(user?.mfa?.enabled && verifyTotp(user.mfa.secret, normalizedCode));
+    let recoveryIndex = -1;
+    if (!valid && allowRecovery && Array.isArray(user?.mfa?.recoveryHashes)) {
+      recoveryIndex = user.mfa.recoveryHashes.indexOf(recoveryHash(normalizedCode));
+      valid = recoveryIndex >= 0;
+    }
+    if (valid) return { ok: true, blocked: false, recoveryIndex };
+    if (challengeRecord) challengeRecord.failures = (challengeRecord.failures || 0) + 1;
+    await recordRateLimitFailures(checks);
+    if (challengeRecord?.failures >= MFA_CHALLENGE_LIMIT) {
+      if (challengeKey) pendingMfa.delete(challengeKey);
+      errorResponse(response, 429, "mfa_challenge_locked", "Cette vérification MFA a été invalidée après trop d’échecs. Recommencez la connexion.", { "retry-after": "300" });
+      return { ok: false, blocked: true, recoveryIndex: -1 };
+    }
+    errorResponse(response, 401, "invalid_mfa", purpose === "privileged" ? "Un code MFA administrateur actuel est requis pour cette action sensible." : "Le code MFA ou le code de récupération est incorrect.");
+    return { ok: false, blocked: false, recoveryIndex: -1 };
+  }
+
+  async function rejectInvalidMfaChallenge(request, response) {
+    const check = { scope: "mfa-invalid-token-ip", subject: requestIp(request), limit: 8, windowMs: MFA_WINDOW_MS };
+    if (rejectWhenRateLimited(response, [check])) return;
+    await recordRateLimitFailures([check]);
+    if (rejectWhenRateLimited(response, [check])) return;
+    errorResponse(response, 401, "invalid_mfa", "La vérification MFA est invalide ou expirée.");
+  }
+
   async function requirePrivilegedMfa(user, body, response) {
     const settings = await securitySettings();
     if (!settings.privilegedMfaEnabled) return true;
-    if (!user?.mfa?.enabled || !verifyTotp(user.mfa.secret, body?.adminMfaCode)) {
-      errorResponse(response, 401, "invalid_mfa", "Un code MFA administrateur actuel est requis pour cette action sensible.");
-      return false;
-    }
-    return true;
+    const result = await verifyMfaAttempt(response.req, response, user, body?.adminMfaCode, { purpose: "privileged" });
+    return result.ok;
   }
 
   async function recordAudit(user, action, { assetRef = "", organizationId = "", details = {} } = {}) {
@@ -1455,10 +1631,12 @@ export function createAtlasServer(options = {}) {
     const settings = normalizedDeploymentSettings(document?.data?.settings || {});
     const backupSettings = await readBackupSettings();
     const auth = await readJson(authPath, null);
-    const httpsObserved = requestUsesHttps(request);
-    const forwardedHost = cleanText(String(request.headers["x-forwarded-host"] || "").split(",", 1)[0], 253) || "";
+    const activeTrustedProxies = new Set([...trustedProxies, ...savedTrustedProxies]);
+    const trustedProxyRequest = activeTrustedProxies.has(socketAddress(request));
+    const httpsObserved = requestUsesHttps(request, activeTrustedProxies);
+    const forwardedHost = trustedProxyRequest ? cleanText(String(request.headers["x-forwarded-host"] || "").split(",", 1)[0], 253) || "" : "";
     const observedHost = forwardedHost || cleanText(String(request.headers.host || ""), 253) || "";
-    const proxyObserved = Boolean(forwardedHost || request.headers["x-forwarded-proto"] || request.headers["x-real-ip"]);
+    const proxyObserved = trustedProxyRequest && Boolean(forwardedHost || request.headers["x-forwarded-proto"] || request.headers["x-real-ip"] || request.headers["x-forwarded-for"] || request.headers["cf-connecting-ip"]);
     let vaultKeyReady = false;
     try {
       const keyInfo = await stat(vaultKeyPath);
@@ -1504,6 +1682,7 @@ export function createAtlasServer(options = {}) {
       { id: "domain", status: settings.primaryDomain ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Domaine public", message: settings.primaryDomain ? `${publicUrl} est enregistré dans Atlas.` : settings.accessMode === "local" ? "Mode local : aucun domaine public requis." : "Ajoutez le domaine public servi par le proxy inverse." },
       { id: "https", status: httpsObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "HTTPS observé", message: httpsObserved ? "Cette requête est arrivée à Atlas avec le protocole HTTPS déclaré." : settings.accessMode === "local" ? "Accès local HTTP attendu; le navigateur public devra passer par HTTPS." : "Atlas ne voit pas X-Forwarded-Proto: https sur cette requête." },
       { id: "reverse-proxy", status: proxyObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Proxy inverse", message: proxyObserved ? `En-têtes de proxy observés${observedHost ? ` pour ${observedHost}` : ""}.` : settings.accessMode === "local" ? "Aucun proxy requis en mode local." : `Aucun en-tête de proxy n’est visible; vérifiez ${settings.reverseProxy.toUpperCase()}.` },
+      { id: "trusted-proxy", status: settings.accessMode === "local" ? "neutral" : settings.trustedProxies.length ? "ok" : "warning", label: "Proxy de confiance", message: settings.accessMode === "local" ? "Aucun proxy de confiance requis en mode local." : settings.trustedProxies.length ? `${settings.trustedProxies.length} adresse${settings.trustedProxies.length === 1 ? "" : "s"} de proxy explicitement autorisée${settings.trustedProxies.length === 1 ? "" : "s"}.` : "Ajoutez l’adresse IP exacte du proxy; Atlas ignore volontairement ses en-têtes tant qu’elle n’est pas déclarée." },
       { id: "origin", status: settings.primaryDomain && savedDeploymentOrigins.has(`https://${settings.primaryDomain}`) ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Origine autorisée", message: settings.primaryDomain ? "Les requêtes d’écriture HTTPS de ce domaine sont autorisées par Atlas." : "Aucune origine publique enregistrée." },
       { id: "updates", status: lastReleaseCheck?.updateAvailable ? "warning" : lastReleaseCheck ? "ok" : "neutral", label: "Mises à jour", message: lastReleaseCheck ? (lastReleaseCheck.updateAvailable ? `La version ${lastReleaseCheck.tag} est publiée, mais l’installation reste bloquée jusqu’à la vérification cryptographique et au retour arrière.` : `Dernière vérification : ${lastReleaseCheck.tag || "aucune version stable"}.`) : "La vérification GitHub est manuelle; aucun appel externe automatique n’est effectué." },
     ];
@@ -1549,10 +1728,11 @@ export function createAtlasServer(options = {}) {
     });
   }
 
-  const server = http.createServer(async (request, response) => {
+  const server = http.createServer({ maxHeaderSize: 16 * 1024, requestTimeout: 30_000, headersTimeout: 15_000, keepAliveTimeout: 5_000 }, async (request, response) => {
     setSecurityHeaders(response);
     try {
       const url = new URL(request.url || "/", `http://${request.headers.host || `${host}:${port}`}`);
+      request.atlasBodyLimit = requestBodyLimit(request.method || "GET", url.pathname);
       await ensureDeploymentOrigins();
       const requestOrigins = new Set([...allowedOrigins, ...savedDeploymentOrigins]);
       if (!sameOrigin(request, port, requestOrigins) && request.method !== "GET") {
@@ -1560,6 +1740,16 @@ export function createAtlasServer(options = {}) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/status") {
+        return jsonResponse(response, 200, { ok: true });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/bootstrap") {
+        const auth = await readJson(authPath, null);
+        return jsonResponse(response, 200, { setupRequired: !auth?.users?.length });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/status/details") {
+        if (!isLocalRequest(request)) return errorResponse(response, 403, "local_request_required", "Ce diagnostic est disponible seulement depuis cet ordinateur.");
         const auth = await readJson(authPath, null);
         const storage = (await getStore()).readDocument() ? "sqlite" : "uninitialized";
         return jsonResponse(response, 200, { product: "TRC Community Atlas", version: ATLAS_VERSION, initialized: Boolean(auth?.users?.length), storage });
@@ -1629,23 +1819,28 @@ export function createAtlasServer(options = {}) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/login") {
-        const remote = request.socket.remoteAddress || "local";
-        const attempts = (loginAttempts.get(remote) || []).filter((timestamp) => timestamp > Date.now() - LOGIN_WINDOW_MS);
-        if (attempts.length >= LOGIN_LIMIT) return errorResponse(response, 429, "too_many_attempts", "Trop de tentatives. Réessayez dans quelques minutes.");
+        const remote = requestIp(request);
+        const ipCheck = { scope: "password-ip", subject: remote, limit: 30, windowMs: LOGIN_WINDOW_MS };
+        if (rejectWhenRateLimited(response, [ipCheck])) return;
         const body = await readBody(request);
         const auth = await readJson(authPath, null);
         const username = cleanText(body.username, 64, true)?.toLowerCase() || "";
+        const accountCheck = { scope: "password-account", subject: username || "unknown", limit: LOGIN_LIMIT, windowMs: LOGIN_WINDOW_MS };
+        if (rejectWhenRateLimited(response, [accountCheck])) return;
         const password = typeof body.password === "string" ? body.password : "";
         const fallback = derivePassword(password || "invalid", "00000000000000000000000000000000");
         const user = auth?.users?.find((entry) => entry.username === username && entry.enabled !== false);
         const valid = user && verifyPassword(password, user);
         void fallback;
         if (!valid) {
-          attempts.push(Date.now());
-          loginAttempts.set(remote, attempts);
+          await recordRateLimitFailures([ipCheck, accountCheck]);
           return errorResponse(response, 401, "invalid_credentials", "Nom d’utilisateur ou mot de passe incorrect.");
         }
-        loginAttempts.delete(remote);
+        const mfaChecks = [
+          { scope: "mfa-account", subject: user.id, limit: MFA_ACCOUNT_LIMIT, windowMs: MFA_WINDOW_MS },
+          { scope: "mfa-ip", subject: remote, limit: MFA_IP_LIMIT, windowMs: MFA_WINDOW_MS },
+        ];
+        if (rejectWhenRateLimited(response, mfaChecks)) return;
         if (user.mustChangePassword) {
           return jsonResponse(response, 200, { passwordChangeRequired: true, pendingToken: createPendingPasswordChange(user) });
         }
@@ -1677,9 +1872,10 @@ export function createAtlasServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/api/mfa/confirm") {
         const body = await readBody(request);
         const pendingRecord = readPendingMfa(body.pendingToken);
-        if (!pendingRecord || pendingRecord.pending.type !== "enroll" || !verifyTotp(pendingRecord.pending.secret, body.code)) {
-          return errorResponse(response, 401, "invalid_mfa", "Le code MFA est invalide ou expiré.");
-        }
+        if (!pendingRecord || pendingRecord.pending.type !== "enroll") return await rejectInvalidMfaChallenge(request, response);
+        const enrollmentIdentity = { id: pendingRecord.pending.userId, mfa: { enabled: true, secret: pendingRecord.pending.secret, recoveryHashes: [] } };
+        const verification = await verifyMfaAttempt(request, response, enrollmentIdentity, body.code, { challengeRecord: pendingRecord.pending, challengeKey: pendingRecord.key });
+        if (!verification.ok) return;
         let enrolledUser;
         const recoveryCodes = generateRecoveryCodes();
         await enqueueWrite(async () => {
@@ -1703,18 +1899,15 @@ export function createAtlasServer(options = {}) {
         const auth = await readJson(authPath, null);
         const user = pendingRecord && auth?.users?.find((entry) => entry.id === pendingRecord.pending.userId && entry.enabled !== false);
         if (!pendingRecord || pendingRecord.pending.type !== "verify" || !user?.mfa?.enabled) {
-          return errorResponse(response, 401, "invalid_mfa", "La vérification MFA est invalide ou expirée.");
+          return await rejectInvalidMfaChallenge(request, response);
         }
         const code = String(body.code || "").trim();
-        let valid = verifyTotp(user.mfa.secret, code);
-        const hashedRecovery = recoveryHash(code);
-        const recoveryIndex = user.mfa.recoveryHashes.indexOf(hashedRecovery);
-        if (!valid && recoveryIndex >= 0) {
-          valid = true;
-          user.mfa.recoveryHashes.splice(recoveryIndex, 1);
+        const verification = await verifyMfaAttempt(request, response, user, code, { challengeRecord: pendingRecord.pending, challengeKey: pendingRecord.key, allowRecovery: true });
+        if (!verification.ok) return;
+        if (verification.recoveryIndex >= 0) {
+          user.mfa.recoveryHashes.splice(verification.recoveryIndex, 1);
           await enqueueWrite(() => writeJsonAtomic(authPath, auth));
         }
-        if (!valid) return errorResponse(response, 401, "invalid_mfa", "Le code MFA ou le code de récupération est incorrect.");
         pendingMfa.delete(pendingRecord.key);
         return await issueSession(request, response, user);
       }
@@ -1771,7 +1964,7 @@ export function createAtlasServer(options = {}) {
         sessions.delete(target[0]);
         await persistSessions();
         await recordAudit(userContext.user, "session-revoked", { details: { sessionId: target[1].id, current: target[1].id === session.id } });
-        return jsonResponse(response, 200, { revoked: true, current: target[1].id === session.id }, target[1].id === session.id ? { "set-cookie": sessionCookie(request, "", 0) } : {});
+        return jsonResponse(response, 200, { revoked: true, current: target[1].id === session.id }, target[1].id === session.id ? { "set-cookie": sessionCookie(request, "", 0, new Set([...trustedProxies, ...savedTrustedProxies])) } : {});
       }
 
       if (request.method === "POST" && url.pathname === "/api/me/change-password") {
@@ -1781,11 +1974,15 @@ export function createAtlasServer(options = {}) {
         const currentPassword = typeof body.currentPassword === "string" ? body.currentPassword : "";
         const password = typeof body.password === "string" ? body.password : "";
         if (password.length < 10 || password.length > 256) return errorResponse(response, 400, "invalid_password", "Le nouveau mot de passe doit contenir de 10 à 256 caractères.");
+        const currentAuth = await readJson(authPath, null);
+        const currentUser = currentAuth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
+        if (!currentUser || !verifyPassword(currentPassword, currentUser)) return errorResponse(response, 401, "invalid_mfa", "Le mot de passe actuel ou le code MFA est incorrect.");
+        if (!(await verifyMfaAttempt(request, response, currentUser, body.code, { purpose: "privileged" })).ok) return;
         let updatedUser;
         await enqueueWrite(async () => {
           const auth = await readJson(authPath, null);
           const user = auth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
-          if (!user || !verifyPassword(currentPassword, user) || !user.mfa?.enabled || !verifyTotp(user.mfa.secret, body.code)) {
+          if (!user || !verifyPassword(currentPassword, user)) {
             throw Object.assign(new Error("Le mot de passe actuel ou le code MFA est incorrect."), { statusCode: 401, code: "invalid_mfa" });
           }
           if (verifyPassword(password, user)) throw Object.assign(new Error("Choisissez un nouveau mot de passe différent."), { statusCode: 400 });
@@ -1803,12 +2000,15 @@ export function createAtlasServer(options = {}) {
         const session = requireSession(request, response, true);
         if (!session) return;
         const body = await readBody(request);
+        const currentAuth = await readJson(authPath, null);
+        const currentUser = currentAuth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
+        if (!(await verifyMfaAttempt(request, response, currentUser, body.code, { purpose: "privileged" })).ok) return;
         let updatedUser;
         const recoveryCodes = generateRecoveryCodes();
         await enqueueWrite(async () => {
           const auth = await readJson(authPath, null);
           const user = auth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
-          if (!user?.mfa?.enabled || !verifyTotp(user.mfa.secret, body.code)) throw Object.assign(new Error("Le code MFA est incorrect."), { statusCode: 401, code: "invalid_mfa" });
+          if (!user?.mfa?.enabled) throw Object.assign(new Error("Le code MFA est incorrect."), { statusCode: 401, code: "invalid_mfa" });
           user.mfa.recoveryHashes = recoveryCodes.map(recoveryHash);
           user.updatedAt = nowIso();
           await writeJsonAtomic(authPath, auth);
@@ -1824,9 +2024,10 @@ export function createAtlasServer(options = {}) {
         const body = await readBody(request);
         const auth = await readJson(authPath, null);
         const user = auth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
-        if (!user || !verifyPassword(String(body.password || ""), user) || !user.mfa?.enabled || !verifyTotp(user.mfa.secret, body.code)) {
+        if (!user || !verifyPassword(String(body.password || ""), user)) {
           return errorResponse(response, 401, "invalid_mfa", "Le mot de passe actuel ou le code MFA est incorrect.");
         }
+        if (!(await verifyMfaAttempt(request, response, user, body.code, { purpose: "privileged" })).ok) return;
         const pending = createPendingMfa(user, "enroll");
         const issuer = encodeURIComponent("TRC Community Atlas");
         const account = encodeURIComponent(user.username);
@@ -1950,9 +2151,7 @@ export function createAtlasServer(options = {}) {
         const auth = await readJson(authPath, null);
         const user = auth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
         if (!user || !requireVaultAccess(user, response)) return;
-        if (!user?.mfa?.enabled || !verifyTotp(user.mfa.secret, body.code)) {
-          return errorResponse(response, 401, "invalid_mfa", "Le code MFA est incorrect.");
-        }
+        if (!(await verifyMfaAttempt(request, response, user, body.code, { purpose: "privileged" })).ok) return;
         session.vaultUnlockedUntil = session.expiresAt;
         await persistSessions();
         await recordAudit(user, "vault-session-unlocked", { details: { sessionId: session.id } });
@@ -2105,7 +2304,7 @@ export function createAtlasServer(options = {}) {
         const token = parseCookies(request).atlas_session;
         sessions.delete(createHash("sha256").update(token).digest("hex"));
         await persistSessions();
-        return jsonResponse(response, 200, { signedOut: true }, { "set-cookie": sessionCookie(request, "", 0) });
+        return jsonResponse(response, 200, { signedOut: true }, { "set-cookie": sessionCookie(request, "", 0, new Set([...trustedProxies, ...savedTrustedProxies])) });
       }
 
       if (request.method === "GET" && url.pathname === "/api/users") {
@@ -2336,9 +2535,7 @@ export function createAtlasServer(options = {}) {
         const context = await requireAdmin(session, response);
         if (!context) return;
         const body = await readBody(request);
-        if (!context.user.mfa?.enabled || !verifyTotp(context.user.mfa.secret, body.code)) {
-          return errorResponse(response, 401, "invalid_mfa", "Le code MFA est incorrect ou expiré.");
-        }
+        if (!(await verifyMfaAttempt(request, response, context.user, body.code, { purpose: "privileged" })).ok) return;
         const confirmation = cleanText(body.confirmation, 120, true);
         if (!confirmation) return errorResponse(response, 400, "organization_confirmation_required", "Confirmez le nom exact de l’organisation.");
 
@@ -2884,12 +3081,6 @@ export function createAtlasServer(options = {}) {
         return;
       }
 
-      if (request.method === "GET" && !url.pathname.startsWith("/api/")) {
-        const filePath = path.join(publicRoot, "index.html");
-        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
-        response.end(await readFile(filePath));
-        return;
-      }
       errorResponse(response, 404, "not_found", "Ressource introuvable.");
     } catch (error) {
       const status = error?.statusCode || (error?.code === "ENOENT" ? 404 : 500);
@@ -2898,6 +3089,7 @@ export function createAtlasServer(options = {}) {
       errorResponse(response, status, code, status === 500 ? "Une erreur locale est survenue." : error.message);
     }
   });
+  server.maxRequestsPerSocket = 100;
 
   server.on("close", () => {
     sessions.clear();
