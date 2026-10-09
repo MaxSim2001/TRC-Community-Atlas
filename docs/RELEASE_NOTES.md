@@ -1,5 +1,12 @@
 # Notes de version — TRC Community Atlas
 
+## 0.14.2 — Connexion responsive
+
+- écran de connexion basculé en une seule colonne avant que ses largeurs
+  minimales puissent provoquer un débordement horizontal;
+- rendu validé dans le navigateur intégré à 807 px et sur téléphone;
+- nouvelle clé de cache pour distribuer immédiatement le correctif public.
+
 ## 0.14.1 — Finalisation visuelle et responsive
 
 - noms d’organisation longs désormais affichés au complet dans l’espace de la

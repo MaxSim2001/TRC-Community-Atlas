@@ -215,6 +215,16 @@ code { font-family: "Cascadia Code", Consolas, monospace; font-size: .88em; back
 .form-error:not(:empty) { padding: 9px 11px; background: var(--danger-soft); border-radius: 7px; }
 .error-symbol { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--danger-soft); color: var(--danger); font-size: 25px; font-weight: 800; }
 
+@media (max-width: 900px) {
+  .auth-screen { grid-template-columns: minmax(0, 1fr); background: var(--bg); }
+  .auth-brand-panel { min-height: 280px; padding: 42px 28px 60px; justify-content: flex-start; }
+  .auth-logo { width: 58px; height: 58px; margin-bottom: 20px; }
+  .auth-brand-copy h1 { font-size: 34px; letter-spacing: -1.4px; }
+  .auth-brand-copy > p:last-child { margin-top: 13px; font-size: 12px; }
+  .auth-local-note { display: none; }
+  .auth-form-panel { min-height: auto; padding: 34px 22px 60px; }
+}
+
 /* Console shell */
 .console-layout { min-height: 100vh; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 242px; display: flex; flex-direction: column; padding: 0 15px; background: #080f1d; color: #e6ecf5; border-right: 1px solid #1c2637; }

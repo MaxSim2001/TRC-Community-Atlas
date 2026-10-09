@@ -1,6 +1,6 @@
 # Guide utilisateur — TRC Community Atlas
 
-Version du guide : 0.14.1
+Version du guide : 0.14.2
 
 Ce guide accompagne le centre d’aide intégré accessible par l’icône `?` dans
 l’en-tête. Atlas reste autonome, self-hosted et sans appel externe pour afficher
