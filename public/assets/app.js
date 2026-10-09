@@ -2129,6 +2129,7 @@
         ${link("help/welcome", "layers", "Découvrir Atlas", "Discover Atlas", "Concepts essentiels", "Essential concepts")}
         ${link("help/accounts-permissions", "shield", "Sécurité et accès", "Security and access", "MFA, rôles et coffre", "MFA, roles and vault")}
         ${link("help/backups", "download", "Sauvegardes", "Backups", "Protection de l’instance", "Instance protection")}
+        ${link("help/updates", "refresh", "Mises à jour", "Updates", "Release signée et retour arrière", "Signed Release and rollback")}
         ${link("help/release-notes", "history", "Notes de version", "Release notes", "Nouveautés récentes", "Recent changes")}
         ${link("help/github-installation", "external", "GitHub et installation", "GitHub and installation", "Code source disponible", "Source code available")}
       </div>
@@ -2296,12 +2297,25 @@
     return helpCatalog.articles.find((article) => article.id === id) || null;
   }
 
+  function safeHelpLink(value) {
+    try {
+      const url = new URL(String(value || ""));
+      if (url.protocol !== "https:" || url.hostname !== "github.com") return "";
+      if (!url.pathname.startsWith("/MaxSim2001/TRC-Community-Atlas")) return "";
+      return url.href;
+    } catch {
+      return "";
+    }
+  }
+
   function helpArticleSearchText(article) {
     const sectionText = (article.sections || []).flatMap((sectionItem) => [
       helpText(sectionItem.heading),
       ...(sectionItem.paragraphs || []).map(helpText),
       ...(sectionItem.bullets || []).map(helpText),
       ...(sectionItem.steps || []).map(helpText),
+      helpText(sectionItem.image?.caption),
+      ...(sectionItem.links || []).flatMap((link) => [helpText(link.label), helpText(link.detail)]),
       helpText(sectionItem.callout?.title),
       helpText(sectionItem.callout?.text),
     ]);
@@ -2355,10 +2369,12 @@
 
   function helpSectionMarkup(sectionItem, index) {
     const paragraphs = (sectionItem.paragraphs || []).map((paragraph) => `<p>${escapeHtml(helpText(paragraph))}</p>`).join("");
+    const figure = sectionItem.image?.src ? `<figure class="help-figure"><img src="${escapeHtml(sectionItem.image.src)}" alt="${escapeHtml(helpText(sectionItem.image.alt))}" loading="lazy" decoding="async" />${sectionItem.image.caption ? `<figcaption>${escapeHtml(helpText(sectionItem.image.caption))}</figcaption>` : ""}</figure>` : "";
     const bullets = sectionItem.bullets?.length ? `<ul>${sectionItem.bullets.map((bullet) => `<li>${escapeHtml(helpText(bullet))}</li>`).join("")}</ul>` : "";
     const steps = sectionItem.steps?.length ? `<ol class="help-steps">${sectionItem.steps.map((step, stepIndex) => `<li><span>${stepIndex + 1}</span><p>${escapeHtml(helpText(step))}</p></li>`).join("")}</ol>` : "";
+    const links = sectionItem.links?.length ? `<div class="help-resource-links">${sectionItem.links.map((link) => { const href = safeHelpLink(link.href); return href ? `<a class="help-resource-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${icon("external", 17)}<span><strong>${escapeHtml(helpText(link.label))}</strong>${link.detail ? `<small>${escapeHtml(helpText(link.detail))}</small>` : ""}</span>${icon("chevron", 14)}</a>` : ""; }).join("")}</div>` : "";
     const callout = sectionItem.callout ? `<div class="help-callout ${escapeHtml(sectionItem.callout.tone || "info")}">${icon(sectionItem.callout.tone === "warning" ? "alert" : "info", 19)}<div><strong>${escapeHtml(helpText(sectionItem.callout.title))}</strong><p>${escapeHtml(helpText(sectionItem.callout.text))}</p></div></div>` : "";
-    return `<section class="help-article-section" id="help-section-${index + 1}"><h2>${escapeHtml(helpText(sectionItem.heading))}</h2>${paragraphs}${bullets}${steps}${callout}</section>`;
+    return `<section class="help-article-section" id="help-section-${index + 1}"><h2>${escapeHtml(helpText(sectionItem.heading))}</h2>${paragraphs}${figure}${bullets}${steps}${links}${callout}</section>`;
   }
 
   function renderHelpArticle(articleId) {

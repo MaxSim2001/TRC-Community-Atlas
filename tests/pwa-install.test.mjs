@@ -11,7 +11,7 @@ test("Atlas exposes a complete standalone mobile application manifest", async ()
   ]);
   const manifest = JSON.parse(manifestText);
 
-  assert.match(index, /rel="manifest" href="\/manifest\.webmanifest\?v=0\.15\.2-release-key-1"/);
+  assert.match(index, /rel="manifest" href="\/manifest\.webmanifest\?v=0\.15\.2-help-1"/);
   assert.match(index, /name="apple-mobile-web-app-capable" content="yes"/);
   assert.match(index, /id="pwa-install-root"/);
   assert.equal(manifest.display, "standalone");

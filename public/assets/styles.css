@@ -2289,6 +2289,17 @@ td { min-height: 60px; font-size: 12px; }
 .help-steps li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: start; gap: 11px; }
 .help-steps li > span { width: 30px; height: 30px; display: grid; place-items: center; color: var(--action); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--action) 25%, var(--line)); border-radius: 9px; font-size: 10px; font-weight: 800; }
 .help-steps li p { padding-top: 5px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.help-figure { overflow: hidden; margin: 17px 0; background: var(--panel-raised); border: 1px solid var(--line); border-radius: 12px; }
+.help-figure img { width: 100%; max-height: 520px; display: block; object-fit: contain; object-position: top center; background: #071224; }
+.help-figure figcaption { padding: 10px 13px; color: var(--text-muted); border-top: 1px solid var(--line-soft); font-size: 9px; line-height: 1.55; }
+.help-resource-links { display: grid; gap: 8px; margin-top: 16px; }
+.help-resource-link { min-height: 58px; display: grid; grid-template-columns: 29px minmax(0, 1fr) 15px; align-items: center; gap: 10px; padding: 10px 12px; color: var(--text); background: var(--panel-raised); border: 1px solid var(--line); border-radius: 10px; text-decoration: none; }
+.help-resource-link:hover, .help-resource-link:focus-visible { border-color: color-mix(in srgb, var(--action) 48%, var(--line)); background: var(--accent-soft); }
+.help-resource-link > svg:first-child { color: var(--action); }
+.help-resource-link > svg:last-child { color: var(--text-muted); }
+.help-resource-link strong, .help-resource-link small { display: block; }
+.help-resource-link strong { font-size: 11px; }
+.help-resource-link small { margin-top: 3px; color: var(--text-muted); font-size: 9px; line-height: 1.4; }
 .help-callout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; margin-top: 16px; padding: 14px 15px; color: var(--text-secondary); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--action) 28%, var(--line)); border-radius: 11px; }
 .help-callout > svg { margin-top: 1px; color: var(--action); }
 .help-callout strong { display: block; color: var(--text); font-size: 11px; }
@@ -2339,6 +2350,9 @@ td { min-height: 60px; font-size: 12px; }
   .help-article-section { padding: 22px 0; }
   .help-article-section h2 { font-size: 17px; }
   .help-article-section > p, .help-article-section ul, .help-steps li p { font-size: 11px; }
+  .help-figure { margin-inline: -4px; border-radius: 9px; }
+  .help-figure figcaption { font-size: 8px; }
+  .help-resource-link { grid-template-columns: 25px minmax(0, 1fr) 14px; padding: 9px 10px; }
   .help-related { padding: 21px 17px 25px; }
 }
 

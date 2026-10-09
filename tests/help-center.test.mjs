@@ -34,17 +34,33 @@ test("Atlas exposes a local searchable bilingual help center from the header", (
   assert.match(app, /function renderHelpArticle\(articleId\)/);
   assert.match(app, /data-help-search/);
   assert.match(app, /helpArticleSearchText/);
+  assert.match(app, /function safeHelpLink/);
+  assert.match(app, /class="help-figure"/);
+  assert.match(app, /class="help-resource-link"/);
   assert.match(app, /state\.page === "help" && state\.detailId/);
   assert.match(app, /state\.helpMenuOpen && event\.key === "Escape"/);
   assert.match(styles, /\.help-menu-popover/);
   assert.match(styles, /\.help-article-grid/);
   assert.match(styles, /@media \(max-width: 680px\)[\s\S]*\.help-menu-popover/);
 
-  const helpIndex = index.indexOf("/assets/help-content.js?v=0.15.2-release-key-1");
-  const appIndex = index.indexOf("/assets/app.js?v=0.15.2-release-key-1");
+  const helpIndex = index.indexOf("/assets/help-content.js?v=0.15.2-help-1");
+  const appIndex = index.indexOf("/assets/app.js?v=0.15.2-help-1");
   assert.ok(helpIndex >= 0 && appIndex > helpIndex);
-  assert.match(worker, /\/assets\/help-content\.js\?v=0\.15\.2-release-key-1/);
+  assert.match(worker, /\/assets\/help-content\.js\?v=0\.15\.2-help-1/);
   assert.match(source("server.mjs"), /\["\/assets\/help-content\.js", \["assets\/help-content\.js", "text\/javascript; charset=utf-8"\]\]/);
+
+  const imageSources = catalog.articles.flatMap((article) => article.sections.map((section) => section.image?.src).filter(Boolean));
+  assert.deepEqual([...new Set(imageSources)].sort(), [
+    "/assets/help/github-release-0.15.2.png",
+    "/assets/help/settings-backups.png",
+    "/assets/help/settings-updates.png",
+  ]);
+  for (const imageSource of imageSources) {
+    const imagePath = imageSource.replace(/^\//, "");
+    assert.ok(fs.statSync(path.join(root, "public", imagePath.replace(/^assets\//, "assets/"))).size > 20_000, `${imageSource} should contain a real screenshot`);
+    assert.match(worker, new RegExp(imageSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(source("server.mjs"), new RegExp(imageSource.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 test("the official GitHub repository documents the signed Windows release and guarded updater", () => {
@@ -61,6 +77,31 @@ test("the official GitHub repository documents the signed Windows release and gu
   assert.match(serialized, /signed Windows Release|stable Release includes/i);
   assert.match(serialized, /Ed25519/);
   assert.match(serialized, /SHA-256/);
+  assert.match(serialized, /TRC-Atlas-Portable-X\.Y\.Z-win-x64\.zip/);
+  assert.match(serialized, /PolyForm Noncommercial 1\.0\.0/);
+  assert.match(serialized, /un seul port configurable|one configurable port/);
+});
+
+test("backup and updater guides document the complete guarded workflows", () => {
+  const helpSource = source("public/assets/help-content.js");
+  const context = { window: {} };
+  vm.runInNewContext(helpSource, context);
+  const backup = context.window.ATLAS_HELP_CATALOG.articles.find((candidate) => candidate.id === "backups");
+  const updates = context.window.ATLAS_HELP_CATALOG.articles.find((candidate) => candidate.id === "updates");
+
+  assert.ok(backup);
+  assert.ok(updates);
+  const backupText = JSON.stringify(backup);
+  const updateText = JSON.stringify(updates);
+  assert.match(backupText, /Paramètres > Sauvegardes/);
+  assert.match(backupText, /DPAPI/);
+  assert.match(backupText, /RESTORE_ATLAS/);
+  assert.match(backupText, /restore-safety/);
+  assert.match(updateText, /Paramètres > Mises à jour/);
+  assert.match(updateText, /MFA/);
+  assert.match(updateText, /Ed25519/);
+  assert.match(updateText, /SHA-256/);
+  assert.match(updateText, /retour arrière automatique|automatic rollback/);
 });
 
 test("repository guides cover users, security, operations, releases and GitHub readiness", () => {
