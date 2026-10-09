@@ -1,5 +1,17 @@
 # Notes de version — TRC Community Atlas
 
+## 0.14.1 — Finalisation visuelle et responsive
+
+- noms d’organisation longs désormais affichés au complet dans l’espace de la
+  compagnie;
+- navigation des Paramètres transformée en grille lisible sur téléphone, sans
+  défilement horizontal pour atteindre une section;
+- tableau **Comptes et accès** ajusté sur ordinateur et présenté en fiches
+  verticales sur mobile;
+- cibles tactiles principales portées à 44 px dans l’en-tête et la navigation;
+- nouvelle clé de cache afin que les navigateurs et le mode PWA chargent les
+  corrections visuelles sans conserver les anciens fichiers.
+
 ## 0.14.0 — Centre d’exploitation et documentation avancée
 
 - gestion des sauvegardes complètes depuis les Paramètres : chemin local ou UNC,

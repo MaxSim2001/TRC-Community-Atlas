@@ -1,13 +1,13 @@
 # Installation Windows — TRC Community Atlas
 
-Version du guide : 0.14.0
+Version du guide : 0.14.1
 
 ## Parcours recommandé
 
 1. Télécharger l’artéfact `TRC-Atlas-Windows-…` d’une exécution GitHub Actions
    réussie du dépôt officiel.
 2. Décompresser complètement le ZIP téléchargé.
-3. Ouvrir le dossier `TRC Community Atlas 0.14.0`.
+3. Ouvrir le dossier `TRC Community Atlas 0.14.1`.
 4. Double-cliquer sur `Installer-Atlas.cmd`.
 5. Choisir le port, les dossiers et les options dans le configurateur.
 6. Cliquer sur **Installer Atlas**.

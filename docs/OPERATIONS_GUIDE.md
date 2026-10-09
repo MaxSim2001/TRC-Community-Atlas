@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.14.0
+Version du guide : 0.14.1
 
 ## Port et configuration de l’instance
 
@@ -128,7 +128,7 @@ La page **Paramètres > Mises à jour** effectue uniquement une vérification
 manuelle auprès de l’API officielle GitHub. Le mécanisme refuse toute
 installation lorsque la Release ne contient pas un manifeste et une signature
 attendus. Aucun téléchargement ni redémarrage silencieux n’est exécuté dans la
-version 0.14.0.
+version 0.14.1.
 
 ## API locale facultative
 

@@ -32,7 +32,7 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 8;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.14.0";
+const ATLAS_VERSION = "0.14.1";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
