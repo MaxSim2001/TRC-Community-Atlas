@@ -1165,10 +1165,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--panel-raised) 55%, transpa
 .nav-count { min-width: 20px; margin-left: auto; color: #7588a3; font-size: 10px; font-weight: 700; text-align: right; }
 .nav-item.active .nav-count { color: #77dfe3; }
 .sidebar-bottom { flex: none; background: #080f1d; }
-.sidebar-module-search { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; margin: 3px 4px 5px; background: #080f1d; }
-.sidebar-module-search svg { position: absolute; left: 10px; color: #72839c; }
-.sidebar-module-search input { height: 44px; padding: 0 10px 0 32px; color: #d8e2ef; background: #101a2a; border-color: #223047; font-size: 10px; }
-.sidebar-module-search input::placeholder { color: #6f819a; }
 
 .topbar { height: 68px; padding-inline: clamp(18px, 2.6vw, 38px); }
 .global-search input { height: 40px; font-size: 12px; }

@@ -5,7 +5,7 @@ import test from "node:test";
 const app = fs.readFileSync(new URL("../public/assets/app.js", import.meta.url), "utf8");
 const styles = fs.readFileSync(new URL("../public/assets/styles.css", import.meta.url), "utf8");
 
-test("sidebar keeps its scroll position and module filter across navigation renders", () => {
+test("sidebar keeps its scroll position across navigation renders", () => {
   assert.match(app, /sidebarScrollTop:\s*0/);
   assert.match(app, /preserveSidebarScroll:\s*false/);
   assert.match(app, /currentSidebarNavigation\.scrollTop/);
@@ -14,10 +14,9 @@ test("sidebar keeps its scroll position and module filter across navigation rend
   assert.match(app, /requestAnimationFrame\(\(\)\s*=>\s*\{\s*if\s*\(navigation\.isConnected\)\s*navigation\.scrollTop\s*=\s*scrollTop/);
   assert.match(app, /state\.preserveSidebarScroll\s*=\s*location\.hash\s*!==\s*nextHash/);
   assert.match(app, /if\s*\(sidebarNavigation\)\s*state\.sidebarScrollTop\s*=\s*sidebarNavigation\.scrollTop/);
-  assert.match(app, /value="\$\{escapeHtml\(state\.sidebarModuleSearch\)\}"/);
-  assert.match(app, /state\.sidebarModuleSearch\s*=\s*event\.target\.value/);
   assert.match(app, /requestAnimationFrame\(\(\)\s*=>\s*window\.scrollTo\(\{\s*top:\s*0,\s*left:\s*0,\s*behavior:\s*"auto"\s*\}\)\)/);
-  assert.match(styles, /\[hidden\]\s*\{\s*display:\s*none\s*!important;\s*\}/);
+  assert.doesNotMatch(app, /sidebarModuleSearch|data-sidebar-module-search|Filtrer les modules|applySidebarModuleFilter/);
+  assert.doesNotMatch(styles, /sidebar-module-search/);
 });
 
 test("Atlas tools are grouped and collapsed by default", () => {

@@ -149,7 +149,6 @@
     visibleModuleIds: new Set(),
     collapsedNavGroups: new Set(["custom", "tools"]),
     moduleSearch: "",
-    sidebarModuleSearch: "",
     sidebarScrollTop: 0,
     preserveSidebarScroll: false,
     listSearch: "",
@@ -2230,8 +2229,7 @@
 
   function renderOrganizationNavigation() {
     if (!activeOrganizationId()) return "";
-    return `<label class="sidebar-module-search">${icon("search", 14)}<input type="search" data-sidebar-module-search value="${escapeHtml(state.sidebarModuleSearch)}" placeholder="Filtrer les modules…" aria-label="Filtrer les modules visibles" /></label>
-      ${renderSidebarModuleGroup("core", "Actifs de base")}
+    return `${renderSidebarModuleGroup("core", "Actifs de base")}
       ${renderSidebarModuleGroup("services", "Apps & Services")}
       ${renderSidebarModuleGroup("custom", "Types personnalisés")}
       ${renderAtlasToolsNavigation()}`;
@@ -2254,23 +2252,11 @@
     </section>`;
   }
 
-  function applySidebarModuleFilter() {
-    const query = state.sidebarModuleSearch.trim().toLocaleLowerCase(state.locale);
-    document.querySelectorAll(".nav-module-group").forEach((group) => {
-      const links = [...group.querySelectorAll(".module-link")];
-      links.forEach((link) => { link.hidden = Boolean(query) && !link.dataset.moduleNavLabel.includes(query); });
-      const hasVisible = links.some((link) => !link.hidden);
-      group.hidden = Boolean(query) && !hasVisible;
-      group.classList.toggle("searching", Boolean(query) && hasVisible);
-    });
-  }
-
   function restoreSidebarNavigation() {
     const navigation = document.querySelector("#atlas-navigation > nav");
     if (!navigation) return;
     const scrollTop = Math.max(0, Number(state.sidebarScrollTop) || 0);
     navigation.scrollTop = scrollTop;
-    applySidebarModuleFilter();
     requestAnimationFrame(() => {
       if (navigation.isConnected) navigation.scrollTop = scrollTop;
       state.preserveSidebarScroll = false;
@@ -5407,10 +5393,6 @@
         group.hidden = Boolean(query) && !hasVisible;
         if (query && hasVisible) group.open = true;
       });
-    }
-    if (event.target.matches("[data-sidebar-module-search]")) {
-      state.sidebarModuleSearch = event.target.value;
-      applySidebarModuleFilter();
     }
     if (event.target.matches("[data-list-search]")) {
       state.listSearch = event.target.value;
