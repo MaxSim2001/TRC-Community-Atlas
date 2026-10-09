@@ -1,79 +1,94 @@
-# Sécurité et accès — TRC Community Atlas
+# Security and access
 
-Version du guide : 0.15.6
+Guide version: **0.15.6**
 
-## Modèle autonome
+## Autonomous security model
 
-Atlas possède ses comptes, organisations, rôles, sessions et données. Il ne
-dépend pas de TRC Account. Le futur SSO fourni par TRC RMM demeure facultatif,
-non configuré et désactivé par défaut.
+Atlas owns its local accounts, organizations, roles, sessions, and data. It
+does not depend on TRC Account. Any future RMM-provided SSO remains optional,
+unconfigured, and disabled by default.
 
-## Comptes et permissions
+## Accounts and permissions
 
-Trois rôles documentaires existent : administrateur, éditeur et lecture seule.
-Pour chaque compagnie, l’accès documentaire et l’accès au coffre sont séparés.
-Un compte peut donc :
+Atlas supports administrator, editor, and read-only documentation roles.
+Documentation access and vault access are separate for every organization. An
+account can therefore:
 
-- modifier une compagnie;
-- consulter seulement une autre compagnie;
-- accéder au coffre d’une compagnie sans pouvoir modifier ses autres fiches;
-- ne recevoir aucune donnée d’une compagnie non autorisée.
+- edit one organization;
+- read another organization without editing;
+- access one organization's vault without editing its other records;
+- receive no data at all from an unauthorized organization.
 
-Les restrictions sont appliquées côté serveur au workspace, au coffre, aux
-pièces jointes et aux historiques.
+The server enforces these boundaries for workspaces, vault records,
+attachments, history, export, and administrative actions.
 
-## MFA et sessions
+## MFA and sessions
 
-Le MFA TOTP est obligatoire à la première connexion. Les codes de récupération
-sont à usage unique. La session expire absolument huit heures après
-l’authentification; l’activité ne prolonge pas cette échéance.
+TOTP MFA is mandatory at first sign-in. Recovery codes are one-time values. A
+session has an absolute lifetime of eight hours; activity does not extend that
+deadline.
 
-Les échecs de mot de passe et de MFA sont limités séparément par compte et par
-adresse cliente. Ces compteurs sont conservés localement sous forme de sujets
-hachés afin qu’un redémarrage ne réinitialise pas la protection. Un défi MFA
-expire après cinq minutes et devient inutilisable après cinq codes incorrects.
-Atlas retourne alors `429` avec un délai de reprise.
+Password and MFA failures are throttled separately by account and client
+address. The counters are persisted locally using hashed subjects, so a restart
+does not reset the protection. An MFA challenge expires after five minutes and
+becomes unusable after five incorrect codes. Atlas then returns `429` with a
+retry delay.
 
-Une validation MFA déverrouille le coffre pour la session courante. Les secrets
-restent masqués jusqu’à leur affichage explicite. La révélation et la copie sont
-journalisées.
+A successful MFA verification unlocks the vault for the current authorized
+session. Secrets remain hidden until explicitly revealed. Reveal and copy
+events are audited.
 
-## Coffre
+## Vault protection
 
-Les secrets sont chiffrés avec AES-256-GCM et une clé locale distincte. Les mots
-de passe, codes OTP et notes confidentielles sont exclus :
+Secrets are encrypted with AES-256-GCM and a separate local key. Passwords, OTP
+values, and confidential notes are excluded from:
 
-- de la recherche documentaire;
-- des relations;
-- de l’export JSON;
-- du cache PWA;
-- des journaux applicatifs.
+- documentation search;
+- relationships;
+- normal JSON export;
+- the PWA cache;
+- application logs.
 
-## Actions renforcées
+Password-strength metadata may be stored after creation or editing, but the
+plaintext secret is not stored in the strength dashboard or search index.
 
-La politique de MFA renforcé peut obliger une nouvelle validation pour les
-actions administratives sensibles. La suppression d’une organisation exige
-toujours le nom exact et une validation MFA.
+## Privileged actions
 
-## Proxy et surface publique
+The reinforced-MFA policy can require fresh verification for sensitive
+administrative actions. Deleting an organization always requires its exact
+name and MFA confirmation.
 
-Atlas ne fait confiance à aucun en-tête de proxy par défaut. Le super
-administrateur doit déclarer l’adresse IP exacte de chaque proxy dans
-**Paramètres > Configuration initiale**. Les en-têtes `X-Forwarded-For`,
-`X-Real-IP`, `CF-Connecting-IP`, `X-Forwarded-Proto` et `X-Forwarded-Host` sont
-ignorés lorsqu’ils viennent d’une autre adresse.
+Account creation requires MFA enrollment. Authorized administrators can reset
+MFA, invalidate sessions, change organization permissions, and separately
+control read, edit, and vault access.
 
-`/api/status` publie uniquement `{ "ok": true }`. Le diagnostic détaillé
-`/api/status/details` est réservé aux connexions provenant de la VM. Les chemins
-non publiés retournent un vrai `404`; ils ne reçoivent jamais le shell HTML.
+## Proxy and public surface
 
-Les corps JSON sensibles sont limités à 8 Kio, les requêtes ordinaires à
-256 Kio, les imports à 16 Mio et l’enveloppe des pièces jointes à 12 Mio.
+Atlas trusts no proxy header by default. The super administrator must enter the
+exact IP address of each proxy under **Settings > Initial configuration**.
+`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`, `X-Forwarded-Proto`, and
+`X-Forwarded-Host` are ignored when sent by any other address.
 
-## Récupération
+`/api/status` exposes only `{ "ok": true }`. Detailed
+`/api/status/details` diagnostics are limited to requests from the VM.
+Unpublished paths return a real `404`; they never receive the application shell.
 
-La récupération hors bande est locale, réservée à un administrateur et doit
-commencer par un mode de simulation. Elle conserve une sauvegarde datée, invalide
-les sessions concernées et force un nouveau mot de passe ainsi qu’un nouvel
-enrôlement MFA.
+Sensitive JSON bodies are limited to 8 KiB, ordinary requests to 256 KiB,
+imports to 16 MiB, and attachment envelopes to 12 MiB.
+
+## Backup and update trust
+
+Backups must be encrypted, stored separately from live data, and restore-tested.
+An update is eligible for installation only after Atlas validates the Ed25519
+manifest signature, expected package size, and SHA-256 hash. A pre-update
+snapshot and automatic rollback protect the previous program and data state.
+
+## Local recovery
+
+Out-of-band recovery is a local administrator procedure and must begin in
+dry-run mode. It creates a dated backup, invalidates affected sessions, and
+requires a new password and fresh MFA enrollment.
+
+Do not publish databases, logs, MFA material, vault keys, backup archives, or
+environment-specific infrastructure details in an issue or support request.
 

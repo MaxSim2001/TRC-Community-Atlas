@@ -1,186 +1,267 @@
 # TRC Community Atlas
 
-Version actuelle : **0.15.6**.
+Current version: **0.15.6**
 
-[![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
+[![Atlas tests](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
-Code source officiel : [MaxSim2001/TRC-Community-Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas). La Release Windows autonome contient un manifeste signé Ed25519, un SHA-256 vérifié avant toute installation et un assistant de mise à jour avec instantané puis retour arrière automatique. La clé privée de publication demeure hors du dépôt.
+TRC Community Atlas is a free, self-hosted IT documentation and inventory
+platform for individuals, internal IT teams, businesses, and managed service
+providers (MSPs).
 
-Socle local de documentation et d’inventaire IT, inspiré du cahier des charges du 22 septembre 2026. Cette édition reste autonome : comptes, données et préférences sont stockés localement dans l’instance.
+Atlas keeps accounts, MFA, organizations, documentation, passwords, attachments,
+backups, and preferences inside the installed instance. It does not require a
+TRC Account, a cloud subscription, telemetry, or a separate database server.
 
-## Installation Windows simple
+> **MSPs may use Atlas free of charge for any number of clients and
+> technicians.** They may charge for installation, configuration, hosting,
+> training, support, and maintenance. Selling Atlas itself, commercializing a
+> renamed fork, or offering Atlas as the primary paid SaaS product requires
+> prior written authorization from TheRisingCloud.
 
-Le paquet Windows autonome contient déjà Node.js. Après avoir téléchargé le ZIP
-et son manifeste depuis la page **Releases** officielle :
+## Table of contents
 
-1. décompresser complètement le fichier ZIP;
-2. double-cliquer sur `Installer-Atlas.cmd`;
-3. choisir dans le configurateur le port, l’accès local ou réseau, les dossiers,
-   les origines HTTPS, les adresses IP des proxys de confiance et les options de démarrage;
-4. cliquer sur **Installer Atlas**;
-5. créer le premier compte administrateur et activer son MFA dans le navigateur.
+- [What Atlas includes](#what-atlas-includes)
+- [Windows installation](#windows-installation)
+- [First sign-in](#first-sign-in)
+- [Screenshots](#screenshots)
+- [Install from source](#install-from-source)
+- [Network and reverse proxy](#network-and-reverse-proxy)
+- [Backups and updates](#backups-and-updates)
+- [Security model](#security-model)
+- [Documentation](#documentation)
+- [License](#license)
 
-L’installation utilisateur par défaut place le programme dans
-`%LOCALAPPDATA%\Programs\TRC Community Atlas` et les données dans
-`%LOCALAPPDATA%\TRC Community Atlas\data`. Relancer l’installateur répare le
-programme sans effacer les comptes, le MFA, le coffre ou les pièces jointes.
-Atlas crée aussi un raccourci dans le menu Démarrer et se relance en arrière-plan
-au démarrage de Windows ou à la connexion, selon les droits disponibles. Le
-raccourci **Configurer TRC Community Atlas** permet ensuite de modifier ces
-choix; un changement de port conserve la même base de données.
+## What Atlas includes
 
-Atlas utilise un seul port HTTP pour l’interface Web et son API. SQLite est un
-fichier local et ne demande ni serveur, ni compte, ni port de base de données.
-Avec un proxy inverse, le public utilise généralement le port HTTPS `443`, puis
-le proxy transmet vers l’unique port Atlas choisi dans le configurateur.
+- organizations, sites, configurations, contacts, documents, procedures, and
+  passwords;
+- 179 structured documentation modules;
+- organization hierarchies up to three levels without sharing child-company
+  passwords or permissions;
+- role- and organization-scoped read, edit, and vault permissions;
+- mandatory TOTP MFA, one-time recovery codes, durable eight-hour sessions, and
+  throttled authentication;
+- an AES-256-GCM local password vault with OTP support;
+- SQLite storage with transactions, revisions, activity history, and audit
+  records;
+- bidirectional relationships between records;
+- a full-page Markdown document editor;
+- encrypted full backups and scheduled backup management;
+- signed GitHub updates with Ed25519, SHA-256 verification, MFA confirmation,
+  snapshots, and automatic rollback;
+- a bilingual English/French interface and mobile PWA support;
+- no telemetry and no external content dependency.
 
-Les artéfacts GitHub Actions demeurent destinés aux essais. Pour une installation
-stable, utiliser uniquement une Release officielle portant le manifeste et sa
-signature. Atlas 0.15.0 amorce cette chaîne de confiance; les versions suivantes
-pourront être préparées et installées depuis **Paramètres > Mises à jour**.
+## Windows installation
 
-Voir [Installation Windows](docs/INSTALLATION_WINDOWS.md) pour les paramètres
-avancés et le diagnostic.
+Atlas supports Windows 10 and Windows 11 x64. The standalone Release includes
+Node.js, so a non-technical user does not need to install Node.js separately.
 
-## Démarrage depuis le code source
+### Step-by-step
 
-Dans PowerShell :
+1. Open the
+   [latest official Atlas Release](https://github.com/MaxSim2001/TRC-Community-Atlas/releases/latest).
+2. Download `TRC-Atlas-Portable-X.Y.Z-win-x64.zip`. Use a stable Release, not a
+   temporary GitHub Actions artifact.
+3. Download the release manifest and signature when they are listed with the
+   Release.
+4. Right-click the ZIP, select **Extract All**, and wait until extraction is
+   complete.
+5. Open the extracted `TRC Community Atlas X.Y.Z` folder.
+6. Double-click `Installer-Atlas.cmd`.
+7. Keep **This computer only** for a normal local installation. Choose another
+   bind address only when you already understand the proxy and firewall
+   requirements.
+8. Select the Atlas port, program folder, persistent data folder, automatic
+   startup option, and Start menu shortcut.
+9. Select **Test port**, then select **Install Atlas**.
+10. Open the displayed Atlas address, create the first administrator account,
+    activate MFA, and save the recovery codes offline.
+
+The default installation uses:
+
+| Item | Default |
+| --- | --- |
+| Program | `%LOCALAPPDATA%\Programs\TRC Community Atlas` |
+| Persistent data | `%LOCALAPPDATA%\TRC Community Atlas\data` |
+| Configuration | `%LOCALAPPDATA%\TRC Community Atlas\config\instance.json` |
+| Logs | `%LOCALAPPDATA%\TRC Community Atlas\logs` |
+| Local address | `http://127.0.0.1:9092/` |
+
+Atlas uses one configurable HTTP port for both the user interface and API.
+SQLite is a local file and opens no additional port.
+
+For the complete installer walkthrough, repair procedure, advanced options, and
+troubleshooting, read the
+[Windows installation guide](docs/INSTALLATION_WINDOWS.md).
+
+## First sign-in
+
+After installation:
+
+1. create the first local administrator;
+2. choose a strong password;
+3. scan the TOTP QR code with an authenticator application;
+4. enter the current six-digit code;
+5. store the recovery codes separately from the Atlas server;
+6. open **Settings > Initial setup** and confirm the instance identity;
+7. open **Settings > Site health** and resolve any warning;
+8. configure and test the first encrypted backup before entering production
+   passwords.
+
+Do not store the backup passphrase only inside Atlas.
+
+## Screenshots
+
+### Official signed Release
+
+![Official TRC Community Atlas GitHub Release](public/assets/help/github-release-0.15.2.png)
+
+Download stable packages from **GitHub Releases**. GitHub Actions artifacts are
+intended for validation, not normal user installation.
+
+### Encrypted backup management
+
+![Atlas backup settings](public/assets/help/settings-backups.png)
+
+The backup page groups the destination, schedule, retention, history, and
+integrity checks in one place.
+
+### Guarded updates
+
+![Atlas update settings](public/assets/help/settings-updates.png)
+
+Atlas does not silently install updates. Preparation and installation require
+an administrator action, cryptographic verification, MFA, and a rollback point.
+
+The screenshots show the French interface. Atlas can be switched to English
+from the header.
+
+## Install from source
+
+Source-based installation is intended for development and testing. It requires
+Node.js 22 or newer.
 
 ```powershell
+git clone https://github.com/MaxSim2001/TRC-Community-Atlas.git
+cd TRC-Community-Atlas
 .\Start-TRCCommunityAtlas.ps1
 ```
 
-Ouvrir ensuite `http://127.0.0.1:9092`. Au premier démarrage, l’application demande la création du compte administrateur local. Les données sont écrites dans `data/`; le serveur écoute uniquement sur la boucle locale par défaut. Depuis une archive de code source sans runtime, Node.js 22 ou plus récent est requis.
+Open `http://127.0.0.1:9092/`.
 
-Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute, chaque origine HTTPS autorisée et l’adresse IP exacte de chaque proxy. Le configurateur Windows propose ces trois champs et les conserve pour les redémarrages. Exemple PowerShell : `Start-TRCCommunityAtlas.ps1 -BindAddress 10.0.0.12 -Port 9092 -AllowedOrigin https://atlas.exemple.com -TrustedProxy 10.0.0.5`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Atlas ignore les en-têtes `X-Forwarded-*`, `X-Real-IP` et `CF-Connecting-IP` venant de toute autre adresse.
+Run the checks before contributing:
 
-## Démarrage automatique Windows
+```powershell
+npm run check
+npm test
+```
 
-Le script `scripts/Install-TRCCommunityAtlasAutostart.ps1` installe une tâche
-Windows déclenchée au démarrage de la VM. Elle exécute directement une copie
-locale du runtime Node.js sous le compte `SYSTEM`, en arrière-plan et sans
-fenêtre PowerShell. Le script est idempotent, conserve une copie XML datée de
-toute tâche Atlas remplacée, puis valide l’état de l’API locale après démarrage.
+For normal installations, prefer the self-contained Windows Release.
 
-## Fonctions incluses
+## Network and reverse proxy
 
-- organisations, sites et configurations;
-- hiérarchie documentaire d’organisations limitée à trois niveaux, avec fil d’Ariane complet et sous-compagnies visibles sur l’accueil du parent, sans héritage ni mélange des accès, mots de passe, sites ou fiches;
-- bibliothèque de 9 actifs de base, 22 modules Apps & Services et 148 types personnalisés;
-- page « Gérer les modules » avec navigation configurable par compte local;
-- pages de registre pour chaque module, compteurs réels, filtres par organisation et fiches structurées;
-- création et modification en page complète pour chacun des 179 modules, les configurations et les sites, avec navigation gauche stable et organisation active implicite;
-- configurations complexes structurées : identité et rôle, hôte parent relié automatiquement, matériel, multiples interfaces réseau, cycle de vie, supervision, sauvegarde, maintenance, dépendances et attributs constructeur indexables;
-- profil File Sharing enrichi avec chemins réseau, sélecteur de serveurs et relations inverses automatiques;
-- profil Printing complet avec registre compact, export CSV, serveurs d’impression et imprimantes reliés aux configurations, déploiement, publication AD, pilotes, soutien et notes enrichies;
-- tableau de bord statistique et listes compactes recherchables/paginées pour les organisations et les registres volumineux;
-- bloc « Priorités documentaires » sans score arbitraire, fondé sur cinq critères explicites et ouvrables; les organisations `[TEST]` sont masquées par défaut et peuvent être incluses à la demande;
-- coffre local AES-256-GCM déverrouillé par le MFA de la session de 8 heures, verrouillage manuel et génération OTP;
-- stockage transactionnel SQLite local avec migration automatique depuis le JSON, copie JSON de compatibilité et 200 révisions complètes;
-- historique durable par fiche et journal d’audit local administrateur;
-- import/export JSON administrateur excluant explicitement comptes, MFA, sessions et coffre;
-- modèles de fiches réutilisables, checklists interactives avec progression et workflows locaux dotés d’une file d’actions ouvrable;
-- éditeur documentaire local complet avec Markdown assisté, aperçu sécurisé en direct, tableaux, listes de tâches, liens, citations, blocs de code, compteurs et mode plein écran;
-- modification des organisations, sites, configurations, procédures, relations et fiches de modules;
-- propriétaires, emplacements, garanties et criticité;
-- registre universel de relations bidirectionnelles entre sites, configurations, procédures, mots de passe et toutes les fiches des 179 modules, limité à l’organisation active, avec recherche compacte directement dans le panneau « Éléments liés »;
-- relations typées, liens inverses automatiques, conservation des liens archivés, historique par relation et vue d’impact multiniveau;
-- fiche plein espace universelle pour les sites, configurations, procédures, mots de passe et les 179 modules, avec navigation Atlas toujours disponible;
-- informations, éléments liés, impact, historique et sécurité visibles ensemble sans sous-onglets; une seule validation MFA ouvre le coffre jusqu’à la fin de la session, tandis que les mots de passe et OTP restent masqués jusqu’à leur affichage explicite;
-- pièces jointes universelles sur toutes les fiches : dépôt local jusqu’à 8 Mo, téléchargement, retrait contrôlé par rôle et historique avec auteur/date; les pièces jointes d’un mot de passe exigent aussi un MFA récent;
-- mentions `@nom-de-fiche` dans les procédures et notes documentaires pour créer rapidement une relation navigable;
-- recherche globale avec portée modifiable, recherche interne par organisation, organisations correspondantes toujours épinglées dans un groupe prioritaire et résultats ouvrables/modifiables selon le rôle;
-- espace propre à chaque organisation avec compteurs, raccourcis et recherche couvrant configurations, sites, documents, procédures, mots de passe et fiches de modules;
-- panneau « Quick Notes » toujours visible dans chaque espace de compagnie, vide par défaut, isolé par compagnie et modifiable avec aperçu Markdown par les comptes autorisés;
-- centre d’aide intégré accessible par l’icône `?`, avec menu compact, recherche locale, catégories, articles détaillés, notes de version et mise en page responsive;
-- assistant administrateur « Configuration initiale » séparant clairement le code d’instance, le domaine public, les alias et le proxy inverse; Atlas autorise les origines enregistrées mais ne modifie jamais le DNS, le certificat ou le pare-feu;
-- tableau « Santé du site » avec contrôles factuels du service, du port local, de l’autodémarrage Windows, de SQLite, des comptes, du coffre, du domaine, de HTTPS, du proxy et de l’origine, plus un test local limité au listener Atlas courant et un test public manuel limité au domaine enregistré;
-- activation ou désactivation du démarrage automatique depuis la Configuration initiale, via une tâche Windows masquée qui réutilise le port et le dossier de données actifs sans modifier le pare-feu;
-- dépôt public `MaxSim2001/TRC-Community-Atlas`, tests Windows automatisés, déploiement propre sur le port 9095, Release stable signée Ed25519 et mise à jour intégrée avec MFA, confirmation exacte, contrôle SHA-256, inventaire avant/après et retour arrière automatique;
-- journal d’activité;
-- interface français/anglais et thèmes clair/sombre;
-- statut explicite du raccordement RMM et du futur SSO facultatif via TRC RMM;
-- page dédiée « Comptes et accès » avec création, modification, activation/désactivation, changement du mot de passe temporaire, fermeture des sessions actives et réinitialisation MFA;
-- droits indépendants et combinables par compagnie : lecture ou édition et accès au coffre oui/non; un même compte peut donc modifier une compagnie, lire une autre et consulter seulement les mots de passe explicitement autorisés;
-- MFA TOTP obligatoire à la première connexion de chaque compte, codes de récupération, mot de passe dérivé par `scrypt` et protection contre la désactivation du dernier administrateur local;
-- politique configurable de MFA renforcé pour les actions administratives sensibles, avec validation serveur et journalisation locale;
-- politique configurable d’expiration et de rappels de rotation des mots de passe, dates et responsables par secret, score de force et détection locale des réutilisations sans indexer les secrets;
-- panneau « Santé des mots de passe » dans chaque espace de compagnie et vue consolidée dans le tableau de bord global, avec six niveaux factuels, ventilation par compagnie et explication transparente du calcul local;
-- page « Mon compte » avec changement autonome du mot de passe, remplacement MFA, régénération des codes de récupération et révocation session par session;
-- sauvegarde complète chiffrée AES-256-GCM incluant comptes, MFA, coffre, clé, SQLite et pièces jointes, avec restauration confirmée et copie de sécurité préalable; les sessions sont volontairement exclues;
-- gestionnaire de sauvegardes dans Paramètres : emplacement local ou UNC, phrase secrète planifiée protégée par Windows DPAPI, horaire quotidien ou hebdomadaire, rétention explicite, historique et test d’intégrité sans restauration;
-- contrôles de santé étendus pour SQLite, l’espace disque, la taille des données, l’âge de la dernière sauvegarde et l’état des mises à jour;
-- constructeur de modules locaux, cycle de révision documentaire et import CSV guidé avec aperçu, mappage et révision de retour arrière;
-- API locale facultative, désactivée par défaut, avec jetons hachés, portées de lecture minimales, restriction par compagnie et révocation MFA; webhooks HMAC limités à la boucle locale de cette VM; aucun secret du coffre n’est exposé;
-- outil de récupération hors bande local pour réinitialiser un administrateur, avec mot de passe temporaire, nouvel enrôlement MFA, sauvegarde datée et trace d’audit;
-- portée des comptes imposée côté serveur au workspace, au coffre, aux pièces jointes et aux historiques; le coffre est refusé par défaut aux nouveaux comptes tant qu’un administrateur ne l’autorise pas;
-- archivage et restauration directs des fiches sans rompre leurs relations;
-- vues volumineuses paginées et recherchables pour les organisations, sites, configurations, procédures, relations, activités, modèles, fiches de modules et coffre;
-- affichage en consultation adapté au rôle lecteur, sans commandes d’écriture trompeuses;
-- sessions locales durables protégées par jeton haché, cookie HttpOnly et contrôle CSRF, conservées pendant les redémarrages Atlas, avec expiration absolue après 8 heures et verrouillage automatique de l’interface.
-- installation PWA sur mobile avec bannière compacte dans le navigateur, instructions adaptées à iOS/Android et suppression automatique de cette bannière lorsque Atlas est ouvert comme application; le service worker ne met jamais en cache les API ni les données métier.
+The safest default is `127.0.0.1`, which makes Atlas accessible only from the
+same computer.
 
-## Limites de cette première version
+For an HTTPS reverse proxy:
 
-Le stockage documentaire principal est `data/atlas.sqlite` avec journal WAL, transactions et révisions. `data/workspace.json` et `data/workspace-history.json` restent générés comme copies de compatibilité; ils ne sont plus la source d’autorité après migration. Les secrets sont séparés dans `data/vault.json`, chiffrés avec une clé locale distincte `data/vault.key`; ils ne sont jamais inclus dans l’export documentaire. Les sessions actives sont conservées dans `data/sessions.json` uniquement sous forme de hachages de jetons et sont purgées à leur échéance; les jetons de cookie bruts ne sont jamais écrits sur disque. Les pièces jointes sont conservées séparément dans `data/attachments/` avec leurs métadonnées et leur journal dans `data/attachments.json`; l’export JSON documentaire ne transporte pas les fichiers binaires. La visibilité des modules est enregistrée dans le compte local, avec une copie de compatibilité dans le profil de navigateur. PostgreSQL, les connecteurs externes, la découverte réseau et le SSO facultatif via TRC RMM restent désactivés tant que leurs contrats ne sont pas cadrés.
+1. choose the exact private bind address instead of `0.0.0.0` when possible;
+2. select one internal Atlas port;
+3. add every allowed public HTTPS origin;
+4. add only the exact IP addresses of trusted proxies;
+5. terminate TLS in Nginx, IIS, Caddy, or another managed reverse proxy;
+6. forward `X-Forwarded-Proto: https`;
+7. configure DNS, the certificate, and firewall separately;
+8. verify the result from **Settings > Site health**.
 
-## Licence et propriété
+Example:
 
-TRC Community Atlas est un logiciel **source disponible**, et non un logiciel
-open source au sens OSI. La
-[TRC Community Atlas Source-Available License 1.0](LICENSE.txt) autorise
-gratuitement l'utilisation personnelle, professionnelle et interne en entreprise.
+```powershell
+.\Start-TRCCommunityAtlas.ps1 `
+  -BindAddress 10.0.0.12 `
+  -Port 9092 `
+  -AllowedOrigin https://atlas.example.com `
+  -TrustedProxy 10.0.0.5
+```
 
-**Les MSP peuvent utiliser Atlas gratuitement pour documenter et gérer un nombre
-illimité de clients avec un nombre illimité de techniciens.** Ils peuvent
-installer ou héberger Atlas, l'adapter aux besoins internes ou d'un client et
-facturer l'installation, la configuration, la migration, la formation, le
-soutien, la maintenance et leurs autres prestations informatiques. Atlas ne peut
-toutefois pas être revendu comme logiciel, commercialisé sous un autre nom, ni
-proposé comme produit SaaS payant principal sans autorisation écrite préalable
-de TheRisingCloud. Les exemples et la frontière détaillée se trouvent dans le
-[guide de licence](docs/LICENSING.md).
+Atlas never configures the router, DNS, TLS certificate, or network firewall for
+the administrator.
 
-Cette licence est personnalisée. Une validation juridique indépendante demeure
-recommandée pour réduire les ambiguïtés dans un contexte commercial ou
-contentieux, mais elle n'est pas une condition technique d'utilisation d'Atlas.
+## Backups and updates
 
-TheRisingCloud demeure titulaire du projet. Une contribution externe ne peut
-être fusionnée qu'après signature d'une entente de cession conforme à
-[`CONTRIBUTING.md`](CONTRIBUTING.md) et à la
-[politique de propriété](docs/CONTRIBUTOR_OWNERSHIP.md).
-
-## Jeu de charge QA
-
-`npm run seed:qa` ajoute une organisation clairement marquée `[TEST]` et plus de mille éléments fictifs pour valider la recherche, les filtres et la pagination. Le script est idempotent par refus : s’il détecte déjà `org-qa-scale`, il s’arrête sans modifier les données. Avant l’ajout, il conserve une copie datée dans `data/qa-backups` et ajoute l’état courant à l’historique Atlas. Le jeu ne contient aucun mot de passe, jeton ou renseignement réel.
-
-## Sauvegarde complète et récupération locale
-
-La sauvegarde complète demande sa phrase secrète dans une saisie PowerShell protégée; elle ne la place ni dans la ligne de commande ni dans un fichier :
+### Create and inspect an encrypted backup
 
 ```powershell
 .\scripts\Invoke-AtlasFullBackup.ps1 -Mode Create
+
+.\scripts\Invoke-AtlasFullBackup.ps1 `
+  -Mode Inspect `
+  -InputPath .\backups\TRC_Community_Atlas_Full_Backup_YYYY-MM-DD_HH-mm-ss.trcatlas
 ```
 
-Pour valider un fichier sans le restaurer :
+A restore must be performed while Atlas is stopped. It requires the exact
+confirmation `RESTORE_ATLAS`, creates a safety copy under
+`data\restore-safety\`, and invalidates active sessions.
 
-```powershell
-.\scripts\Invoke-AtlasFullBackup.ps1 -Mode Inspect -InputPath .\backups\TRC_Community_Atlas_Full_Backup_YYYY-MM-DD_HH-mm-ss.trcatlas
-```
+### Install an update
 
-Une restauration doit être effectuée service Atlas arrêté. Le script exige la confirmation exacte `RESTORE_ATLAS`, déplace l’état remplacé dans `data\restore-safety\` et invalide toutes les sessions.
+Use **Settings > Updates**. Atlas checks the official GitHub Release only when
+requested. A package is not installable until the Ed25519 signature, package
+size, SHA-256 hash, administrator MFA, and rollback preparation all pass.
 
-En récupération hors bande, exécuter d’abord `atlas-break-glass.mjs` avec `--dry-run`, puis avec `--confirm RESET_MFA`. L’outil accepte uniquement un compte administrateur local, conserve `auth.json` et `sessions.json` dans un dossier daté sous `data\emergency-backups\`, génère un mot de passe temporaire et exige un changement de mot de passe suivi d’un nouvel enrôlement MFA.
+## Security model
 
-## Conventions
+- local accounts and mandatory TOTP MFA;
+- `scrypt` password derivation;
+- HttpOnly, SameSite=Strict session cookies and CSRF protection;
+- absolute eight-hour session lifetime;
+- account- and client-address-based password and MFA throttling;
+- organization-scoped data, attachment, history, and vault authorization;
+- secrets excluded from search, relations, logs, PWA cache, and JSON exports;
+- trusted-proxy allowlist;
+- endpoint-specific request-size limits;
+- no telemetry.
 
-- TRC Style adopté : version 1.1.1, ressources copiées localement et aucune police distante.
-- Bibliothèque de 179 modules auditée automatiquement : 9 registres de base, 22 Apps & Services et 148 types spécialisés.
-- Plus de 30 profils métier alimentent les formulaires pleine page (serveurs, postes, stockage, SQL, sécurité, téléphonie, cloud, OT, supervision et autres) au lieu d’un formulaire générique minimal.
-- La page Gérer les modules affiche la couverture, le profil et le nombre de champs de chaque type; une matrice QA valide tous les schémas et leur persistance SQLite.
-- Aucun lien ni aucune dépendance à TRC Account.
-- TRC RMM demeure autonome; son connecteur et son SSO seront des options configurables et désactivées par défaut.
-- Aucune télémétrie. La vérification de version GitHub est manuelle; Atlas n’autorise l’installation qu’après validation Ed25519 du manifeste, contrôle SHA-256 du paquet, MFA administrateur et préparation d’un instantané local de retour arrière.
-- Un seul port Atlas, `9092` par défaut, configurable graphiquement ou avec
-  `-Port`; la base SQLite locale n’ouvre aucun port supplémentaire.
+Atlas does not replace disk encryption, operating-system hardening, tested
+backups, TLS, or normal infrastructure security.
 
+## Documentation
+
+Start with the [documentation index](docs/README.md).
+
+- [Windows installation](docs/INSTALLATION_WINDOWS.md)
+- [User guide](docs/USER_GUIDE.md)
+- [Security and access](docs/SECURITY_AND_ACCESS.md)
+- [Operations guide](docs/OPERATIONS_GUIDE.md)
+- [Licensing and free MSP use](docs/LICENSING.md)
+- [Release notes](docs/RELEASE_NOTES.md)
+- [Code signing](docs/CODE_SIGNING.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [GitHub distribution readiness](docs/GITHUB_READINESS.md)
+
+## License
+
+TRC Community Atlas is **source-available**, not OSI-approved open source. It is
+distributed under the
+[TRC Community Atlas Source-Available License 1.0](LICENSE.txt).
+
+Personal, professional, internal business, and MSP use is free. MSPs may manage
+unlimited clients and technicians and charge for their professional services.
+Reselling Atlas, commercializing a modified or renamed version, or offering a
+paid service where Atlas is the primary product requires prior written
+authorization from TheRisingCloud.
+
+TheRisingCloud retains ownership of the original software. External
+contributions require the copyright-assignment process described in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+The custom license is published as the project's chosen terms. Independent
+legal review remains advisable but is not a technical requirement for using or
+publishing Atlas.
+
+## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Never
+include real client data, passwords, tokens, private keys, backups, or internal
+infrastructure details in an issue or contribution.

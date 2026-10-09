@@ -1,55 +1,124 @@
-# Architecture locale — TRC Community Atlas
+# TRC Community Atlas architecture
 
-## Autorités et données
+## Authority and data ownership
 
-TRC Community Atlas est une application autonome. Elle possède ses comptes, sessions, organisations, sites, rôles, préférences et données documentaires. Elle ne communique pas avec TRC Account et ne dépend d’aucun service Account.
+TRC Community Atlas is autonomous. It owns its local accounts, sessions,
+organizations, sites, roles, preferences, and documentation data. It does not
+communicate with or depend on TRC Account.
 
-TRC Community RMM demeure un produit distinct. Deux options pourront être configurées séparément à la fin du projet :
+TRC Community RMM is a separate product. Two integrations may be configured
+independently in a future dedicated phase:
 
-1. un connecteur d’inventaire et de métadonnées explicitement sélectionnées;
-2. un SSO OIDC facultatif fourni par TRC RMM.
+1. an inventory connector for explicitly selected metadata;
+2. optional OIDC SSO provided by TRC Community RMM.
 
-Les deux options seront désactivées par défaut. Un raccordement de données n’activera pas le SSO, et le SSO ne déclenchera aucune synchronisation. Atlas conservera ses propres sessions, permissions et rôles.
+Both remain disabled by default. Enabling a data connector must not enable SSO,
+and SSO must not start synchronization. Atlas retains its own sessions,
+permissions, roles, and business data.
 
-## Socle actuel
+## Runtime
 
-- serveur Node.js sans dépendance externe;
-- écoute exclusive sur `127.0.0.1:9092`;
-- comptes locaux administrables avec rôles `administrator`, `editor` et `viewer`;
-- dérivation de mot de passe `scrypt`, MFA TOTP obligatoire et codes de récupération à usage unique;
-- sessions locales persistantes par hachage de jeton, cookie HttpOnly/SameSite Strict et protection CSRF; un redémarrage du processus ne déconnecte plus les sessions non expirées, sans jamais écrire le jeton de cookie brut sur disque;
-- stockage documentaire SQLite local en mode WAL, avec contraintes d’intégrité, transactions atomiques et miroir JSON de compatibilité;
-- historique tournant des 200 versions précédentes, révisions durables par fiche, journal d’audit et import/export documentaire versionné;
-- coffre séparé chiffré `AES-256-GCM`, clé aléatoire locale distincte et déverrouillage lié à la session locale de 8 heures après MFA; verrouillage manuel disponible et secrets masqués par défaut;
-- pièces jointes binaires séparées dans `data/attachments/`, métadonnées et journal dans `data/attachments.json`, limite de 8 Mo et extensions exécutables refusées;
-- listes volumineuses paginées côté interface avec recherche locale, sans chargement de centaines de lignes visibles à la fois;
-- index de recherche local transversal construit en mémoire à partir des données autorisées : portée globale sélectionnable ou portée limitée à une organisation, sans indexer les secrets du coffre;
-- page d’organisation autonome avec recherche interne, raccourcis filtrés et actions de modification soumises aux rôles existants;
-- hiérarchie documentaire facultative par `parentOrganizationId`, limitée à trois niveaux et validée côté serveur contre les cycles; ce rattachement n’accorde aucun droit et n’agrège jamais les sites, fiches, relations ou secrets d’une organisation enfant dans sa parente;
-- schéma documentaire version 4 avec registre universel `relations`, références typées (`site:`, `configuration:`, `procedure:`, `module:` et `vault:`) et journal `relationshipEvents`;
-- relations bidirectionnelles limitées à une organisation, ajout rapide par recherche universelle dans la fiche, libellés avant/arrière, types directionnels, état archivé et navigation dans une fiche plein espace;
-- graphe d’impact calculé localement sur plusieurs niveaux et synchronisation des mentions `@fiche` vers des relations automatiques;
-- références de coffre limitées à l’identifiant et aux métadonnées autorisées; aucun secret, nom d’utilisateur ou code OTP n’est copié dans une relation, la recherche ou l’espace documentaire;
-- générateur de charge QA déterministe avec sauvegarde locale datée avant insertion et refus des doublons;
-- préférences de modules et portées d’organisations enregistrées par compte local; les comptes limités ne reçoivent jamais les objets, secrets ou pièces jointes des autres organisations;
-- interface statique locale sans police, CDN, télémétrie ou appel sortant.
-- installation Windows avec programme et runtime sous un répertoire applicatif,
-  tandis que SQLite, les comptes, le MFA, le coffre, les pièces jointes, la
-  configuration et les journaux demeurent dans un répertoire d’instance séparé;
-- paquet Windows autonome produit par la CI et test de déploiement propre sur
-  `127.0.0.1:9095`, sans modification du pare-feu, du DNS ou du réseau;
-- paramètres de déploiement locaux séparant code d’instance, domaine principal,
-  alias et proxy inverse; les origines HTTPS enregistrées sont chargées par le
-  serveur sans importer de certificat ni modifier le DNS ou le réseau;
-- tableau de santé administrateur calculé localement et sonde HTTPS publique
-  uniquement manuelle, limitée au domaine enregistré, sans redirection et avec
-  refus des adresses privées, locales, réservées ou de documentation;
-- gestion administrateur d’une tâche Windows masquée pour l’autodémarrage,
-  appelée avec des arguments fixes sans shell et protégée par session, CSRF et
-  MFA renforcé; son état réel est exposé dans la santé du site;
-- sonde TCP locale limitée au listener courant d’Atlas, sans paramètre d’adresse
-  ou de port fourni par le navigateur et sans exploration du LAN.
-- manifeste PWA et service worker limité au shell statique : la bannière d’installation est réservée aux petits écrans de navigateur et disparaît en mode `standalone`; toutes les routes `/api/` restent strictement réseau et ne sont jamais placées dans le cache PWA.
+- Node.js server with no runtime package dependency;
+- one configurable HTTP listener for the UI and API;
+- local SQLite database in WAL mode;
+- static local front end with no CDN, external font, telemetry, or required
+  outbound content service;
+- Windows standalone package with its own Node.js runtime;
+- separate immutable program and persistent instance-data directories.
 
-Le stockage PostgreSQL n’est pas requis pour cette instance locale mono-nœud. Les protections avancées de production, le connecteur RMM et le SSO feront l’objet de lots distincts avant une exposition publique. Les pièces jointes ne sont pas incluses dans l’export JSON documentaire et doivent être couvertes par la sauvegarde du dossier `data/`. Le coffre et les pièces jointes ne remplacent pas le chiffrement du disque ni la protection des sauvegardes de la VM.
+SQLite is an embedded file and does not open a database port. PostgreSQL is not
+required for the current single-node local architecture.
+
+## Identity and authorization
+
+- Local administrator, editor, and viewer roles.
+- Mandatory TOTP MFA and one-time recovery codes.
+- Persistent sessions stored as token hashes, never raw cookie tokens.
+- HttpOnly, SameSite Strict cookies and CSRF protection.
+- Absolute eight-hour session lifetime.
+- Separate per-organization documentation and vault permissions.
+- Persistent password and MFA throttling by account and trusted client address.
+
+## Documentation storage
+
+- SQLite transactions and integrity constraints.
+- Durable record revisions and audit events.
+- Compatibility JSON mirror and versioned documentation import/export.
+- Universal bidirectional relationships scoped to one organization.
+- Typed references for sites, configurations, procedures, modules, and vault
+  metadata.
+- Multi-level impact graph and `@record` mention synchronization.
+- Organization hierarchies limited to three levels and checked for cycles.
+
+A parent-child organization link grants no permission and never merges sites,
+records, relationships, attachments, or passwords.
+
+## Vault and attachments
+
+- AES-256-GCM vault with a separate random local key.
+- Vault unlock bound to an MFA-authorized local session.
+- Secrets hidden by default and never copied into search, relationships, PWA
+  caches, normal exports, or logs.
+- Attachments stored separately under `data/attachments/`.
+- Attachment metadata and audit information stored locally.
+- Executable file extensions rejected and upload size limited.
+
+Disk encryption, operating-system access control, and protected backup storage
+remain required. Application encryption does not replace host security.
+
+## Search and interface
+
+- Global or single-organization search built from authorized metadata only.
+- Organization results before record results.
+- No indexing of vault plaintext.
+- Pagination for large collections.
+- Full organization home page, Quick Notes, module shortcuts, and internal
+  search.
+- Mobile Progressive Web App with a static-shell cache only.
+- All `/api/` routes remain network-only and are never cached by the service
+  worker.
+
+## Installation and instance configuration
+
+The Windows installer configures:
+
+- program and data roots;
+- bind address and a single port;
+- exact HTTPS allowed origins;
+- update channel;
+- shortcuts and hidden Windows startup.
+
+It does not change DNS, install a TLS private key, open Windows Firewall, edit a
+router, or expose Atlas to the Internet. Those remain explicit administrator
+actions outside Atlas.
+
+The super administrator can record an instance code, public domain, aliases,
+reverse-proxy type, and exact trusted proxy addresses. Forwarded client headers
+are accepted only from configured proxies.
+
+## Health and updates
+
+The administrator health dashboard checks the local process, listener, storage,
+vault metadata, backup state, startup task, update state, and configured domain.
+The public HTTPS probe is manual, limited to the recorded domain, rejects
+redirects, and refuses private, local, reserved, and documentation addresses.
+
+Stable updates use:
+
+1. an Ed25519-signed manifest;
+2. package size and SHA-256 verification;
+3. an MFA-protected exact-version confirmation;
+4. a program and data snapshot;
+5. transactional replacement and migration;
+6. post-restart health and business-count checks;
+7. automatic rollback after failure.
+
+## Optional local integrations
+
+The local read-only API uses the existing Atlas port and minimal scopes.
+Webhook destinations are limited to explicit loopback URLs. Vault plaintext,
+MFA material, Quick Notes, and attachments are excluded.
+
+No module label by itself enables an external integration, network discovery,
+RMM connection, PSA synchronization, or public API.
 

@@ -1,46 +1,47 @@
-# Propriété et contributions externes
+# Contributor ownership policy
 
-## Décision
+## Decision
 
-TheRisingCloud demeure titulaire de TRC Community Atlas. Les contributions
-externes ne sont pas acceptées selon un simple modèle « inbound = outbound ».
-Avant toute fusion, le contributeur doit céder à TheRisingCloud les droits
-nécessaires sur sa contribution.
+TheRisingCloud remains the rights holder for TRC Community Atlas. External
+contributions are not accepted under a simple “inbound equals outbound” model.
+Before merge, a contributor must assign the necessary rights in the
+contribution to TheRisingCloud.
 
-## Entente retenue
+## Selected agreement
 
-Utiliser le modèle **Harmony Individual Contributor Assignment Agreement** pour
-une personne et le modèle **Harmony Entity Contributor Assignment Agreement**
-pour une organisation :
+Use the **Harmony Individual Contributor Assignment Agreement** for an
+individual and the **Harmony Entity Contributor Assignment Agreement** for an
+organization:
 
 https://www.harmonyagreements.org/agreements
 
-Configurer le modèle en mode **Copyright Assignment**, avec :
+Configure the agreement for **Copyright Assignment** with:
 
-- projet : `TRC Community Atlas`;
-- bénéficiaire : `TheRisingCloud`;
-- licence de retour au contributeur limitée aux conditions publiques en vigueur;
-- possibilité pour TheRisingCloud de publier ou de concéder séparément le projet;
-- cession des droits d'auteur et licence exclusive de remplacement pour les
-  droits qui ne peuvent légalement être cédés;
-- traitement des droits moraux selon la loi applicable;
-- déclaration d'autorité de l'employeur lorsque nécessaire.
+- project: `TRC Community Atlas`;
+- beneficiary: `TheRisingCloud`;
+- a license back to the contributor under the current public terms;
+- the right for TheRisingCloud to publish or license the project separately;
+- copyright assignment and an exclusive fallback license where assignment is
+  not legally available;
+- moral-rights treatment appropriate to applicable law;
+- employer authorization where required.
 
-## Processus obligatoire
+## Required process
 
-1. Le mainteneur envoie l'entente individuelle ou entité appropriée.
-2. L'identité du signataire et son autorité sont vérifiées.
-3. La version signée est conservée dans un registre privé, jamais dans le dépôt
-   public.
-4. Le mainteneur associe la signature au compte GitHub du contributeur.
-5. La demande de fusion peut ensuite être révisée et fusionnée.
+1. The maintainer sends the appropriate individual or entity agreement.
+2. The signer's identity and authority are verified.
+3. The signed document is stored in a private registry, never in the public
+   repository.
+4. The maintainer associates the agreement with the contributor's GitHub
+   account.
+5. The pull request may then be reviewed and merged.
 
-Une case cochée dans une demande GitHub ne remplace pas à elle seule l'entente
-signée. Les ententes contiennent des renseignements personnels et ne doivent
-pas être publiées dans le dépôt.
+A checked box in a GitHub pull request does not replace the signed agreement.
+Agreements contain personal information and must not be committed publicly.
 
-## Limite juridique
+## Legal note
 
-Cette politique met en place le contrôle opérationnel demandé, mais une cession
-de droits est un contrat. Le modèle rempli doit être validé par un juriste de la
-juridiction de TheRisingCloud avant d'accepter la première contribution externe.
+This policy implements the requested operational control, but a rights
+assignment is a contract. The project owner is responsible for deciding whether
+additional jurisdiction-specific review is appropriate before accepting an
+external contribution.

@@ -1,44 +1,57 @@
-# Couverture fonctionnelle inspirée d’IT Glue
+# Functional coverage inspired by IT documentation platforms
 
-Date de revue : 5 octobre 2026.
+Review date: **October 5, 2026**
 
-Ce document décrit la couverture d’usage retenue pour TRC Community Atlas. Il ne copie ni le code, ni les textes, ni l’identité visuelle d’IT Glue. Les sources officielles ont servi à comprendre les catégories de fonctions seulement :
+This document records the use cases selected for TRC Community Atlas. Atlas
+does not copy IT Glue code, text, or visual identity. Public product and help
+material was used only to understand common categories of IT documentation.
+
+Reference sources:
 
 - https://www.itglue.com/features/
 - https://help.itglue.kaseya.com/help/Content/1-admin/getting-started/best-practices-for-using-it-glue.htm
 - https://help.itglue.kaseya.com/help/Content/2-using/get-to-know-it-glue/introduction-to-the-key-concepts.html
 - https://api.itglue.com/developer/
 
-## Couverture livrée dans le lot actuel
+## Atlas coverage
 
-| Famille | Couverture Atlas |
-|---|---|
-| Actifs de base | Configurations, Checklists, Contacts, Documents, Charge de compte technique, Domain Tracker, Locations, Passwords et SSL Tracker |
-| Apps & Services | Les 22 modules fournis par l’utilisateur, de M365 à Wireless |
-| Types personnalisés | Les 148 types fournis par l’utilisateur, conservés comme bibliothèque activable |
-| Gestion de navigation | Page Gérer les modules, recherche, groupes repliables, préréglages et choix par compte local/profil navigateur |
-| Registres | Compteurs réels, recherche, filtre par organisation/état, pagination par 25, création et modification de fiches, propriétaire, échéance, référence, étiquettes et notes |
-| Volumétrie d’interface | Dashboard statistique, liste complète des organisations en tableau compact et navigation filtrable même avec de nombreux modules activés |
-| Recherche | Portée globale ou organisation sélectionnée, page interne par organisation, recherche accent-insensible sur tous les registres et modification directe selon le rôle; seuls les titres et métadonnées du coffre sont indexés |
-| Documentation existante | Organisations, emplacements, configurations, procédures/SOP, relations et journal d’activité |
-| Relations universelles | Liens typés et bidirectionnels entre tous les objets d’une organisation, y compris les 179 modules, les sites, procédures et métadonnées du coffre; liens archivés conservés |
-| Fiche universelle | Page plein espace uniforme avec détails, pièces jointes, éléments liés, impact, historique et sécurité, tout en conservant la navigation Atlas |
-| Pièces jointes | Ajout, téléchargement et retrait local sur tous les objets, journal d’auteur/date, limite de 8 Mo et MFA récent pour les fiches de mot de passe |
-| Mentions rapides | Syntaxe `@nom-de-fiche` dans les procédures et notes documentaires, avec sélecteur limité à l’organisation active et création automatique du lien inverse |
-| Analyse d’impact | Parcours multiniveau des dépendants et dépendances depuis une fiche ou le registre universel |
-| Sécurité locale | Comptes locaux, rôles et MFA obligatoires conservés; aucun lien TRC Account |
-| Coffre | Secrets chiffrés AES-256-GCM, clé locale distincte, MFA réutilisé pendant la session locale de 8 heures, verrouillage manuel et code OTP calculé à la demande |
-| Volumétrie | Pagination et recherche sur toutes les collections susceptibles de contenir des centaines d’éléments; jeu QA local de plus de 1 300 éléments |
-| Rôles | Commandes d’écriture masquées pour les lecteurs; contrôles serveur appliqués aux administrateurs, éditeurs et lecteurs; portée facultative par organisation pour chaque compte local |
-| Résilience | SQLite transactionnel en WAL, historique automatique de 200 révisions, historique durable par fiche, journal d’audit, restauration avec conservation de l’état courant et export/import documentaire versionné |
-| Standardisation | Modèles applicables aux fiches, checklists structurées et seuils locaux de workflow |
+| Area | Atlas implementation |
+| --- | --- |
+| Core assets | Configurations, checklists, contacts, documents, technical-account load, Domain Tracker, locations, passwords, and SSL Tracker |
+| Apps and services | 22 supplied modules, including Microsoft 365 and wireless documentation |
+| Structured record types | 148 additional module definitions available as an optional library |
+| Navigation | Manage Modules, grouped navigation, collapsible tool sections, presets, and per-account preferences |
+| Records | Real counts, organization and state filtering, pagination, create/edit forms, ownership, due date, reference, tags, notes, and archives |
+| Search | Global or active-organization scope, accent-insensitive metadata search, and direct editing according to role; vault plaintext is excluded |
+| Documentation | Organizations, locations, configurations, procedures/SOPs, relationships, versions, and activity history |
+| Universal relationships | Typed, bidirectional same-organization links across modules, sites, procedures, and permitted vault metadata |
+| Universal detail page | Full-page details, attachments, related items, impact, history, and security while preserving Atlas navigation |
+| Attachments | Local upload, download, and removal with author/date audit, size limits, executable-file refusal, and recent MFA for password records |
+| Mentions | `@record-name` in procedures and notes with an active-organization selector and automatic reverse relation |
+| Impact analysis | Multi-level dependent and dependency traversal |
+| Local security | Atlas-owned accounts, roles, MFA, sessions, and organization scopes with no TRC Account dependency |
+| Vault | AES-256-GCM secrets, separate local key, session-bound MFA unlock, manual lock, explicit reveal, and on-demand OTP |
+| Scale | Pagination and search for large collections; deterministic local QA data above 1,300 records |
+| Resilience | SQLite WAL transactions, rotating history, durable record revisions, audit, rollback-preserving import, and versioned documentation export |
+| Standardization | Templates, structured checklists, reusable module definitions, and local workflow thresholds |
+| MSP use | Unlimited organizations and child organizations, separate permissions and vaults, and no per-client or per-technician license limit |
 
-Les nombres visibles dans les captures de référence n’ont pas été importés. Tous les compteurs Atlas proviennent uniquement des données locales de l’instance.
+Reference screenshot counts were not imported. Every Atlas counter comes only
+from the local instance's own authorized data.
 
-## Limites explicites
+## Explicit boundaries
 
-- Les secrets du coffre sont chiffrés au repos et exclus des exports documentaires. La protection complète dépend encore de la sécurité du compte Windows, du disque et des sauvegardes de la VM.
-- Les intégrations RMM, PSA, Microsoft 365, Network Glue, API publique, webhooks et découverte réseau ne sont pas activées par l’existence d’un module.
-- Le connecteur et le SSO via TRC RMM restent facultatifs, non configurés et prévus en fin de projet.
-- Les fonctions externes ou commerciales d’IT Glue (MyGlue, GlueConnect, applications mobiles, extensions de navigateur, Office Cloud Editor et services de migration) ne sont pas simulées comme si elles étaient opérationnelles.
-- L’édition collaborative simultanée reste hors de ce lot local. Les pièces jointes sont locales et ne sont pas incluses dans l’export JSON documentaire.
+- Vault plaintext is encrypted at rest and excluded from normal documentation
+  exports. Complete protection still depends on Windows account security, disk
+  encryption, and protected backups.
+- A module's presence does not enable an RMM, PSA, Microsoft 365, Network Glue,
+  public API, webhook, or discovery integration.
+- Any future TRC Community RMM connector or SSO remains optional, unconfigured,
+  and reserved for a dedicated final phase.
+- External commercial features from another platform are not represented as
+  operational when Atlas does not implement them.
+- Simultaneous collaborative editing is outside the current local scope.
+- Binary attachments are local and are not included in documentation-only JSON
+  export; full backups protect them.
+- Atlas is source-available and autonomous, not a hosted service operated by
+  TheRisingCloud.

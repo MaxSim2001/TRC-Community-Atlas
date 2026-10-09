@@ -1,73 +1,76 @@
-# GitHub — code source et état de la distribution
+# GitHub source and distribution status
 
-Le code source officiel d’Atlas est publié dans
+The official Atlas source is published at
 [`MaxSim2001/TRC-Community-Atlas`](https://github.com/MaxSim2001/TRC-Community-Atlas).
-Le dépôt public appartient directement au compte GitHub du propriétaire. La
-version 0.15.0 introduit la première Release stable avec manifeste Ed25519,
-paquet Windows autonome, contrôle SHA-256 et assistant de mise à jour
-transactionnelle. Les artéfacts produits automatiquement par GitHub Actions
-demeurent des artéfacts de validation; les utilisateurs doivent télécharger les
-versions stables depuis **Releases**.
+The public repository is owned directly by the project owner. Users should
+download stable versions from **Releases**. GitHub Actions artifacts are
+temporary validation outputs, not production distributions.
 
-Le plan proposé pour l'installateur, les GitHub Releases, la vérification des
-paquets, les migrations et le retour arrière est consigné dans
-[`PLAN_GITHUB_INSTALL_UPDATE.md`](PLAN_GITHUB_INSTALL_UPDATE.md). Les phases de
-signature du manifeste, préparation, installation et retour arrière sont
-implémentées; les éléments encore ouverts y restent identifiés.
+The installation, GitHub Release, package-verification, migration, and rollback
+design is recorded in
+[`PLAN_GITHUB_INSTALL_UPDATE.md`](PLAN_GITHUB_INSTALL_UPDATE.md).
 
-## Décisions confirmées
+## Confirmed decisions
 
-- dépôt officiel actuel : `MaxSim2001/TRC-Community-Atlas`;
-- titulaire : TheRisingCloud;
-- licence : TRC Community Atlas Source-Available License 1.0; utilisation
-  personnelle, professionnelle et MSP gratuite, revente et commercialisation
-  d'Atlas interdites sans autorisation écrite;
-- contributions externes : cession de droits signée avant fusion;
-- plateformes initiales : Windows 10 et Windows 11 x64;
-- signature de manifeste : Ed25519 avec clé privée chiffrée et ACL locale
-  restreinte, clé publique embarquée dans Atlas;
-- signature Authenticode publique cible : Azure Artifact Signing; certificat
-  autosigné réservé aux essais locaux;
+- Official repository: `MaxSim2001/TRC-Community-Atlas`.
+- Rights holder: TheRisingCloud.
+- License: TRC Community Atlas Source-Available License 1.0.
+- Free use: personal, professional, business, and MSP use.
+- Restricted use: resale or commercialization of Atlas itself without written
+  permission.
+- External contributions: signed copyright assignment before merge.
+- Initial platforms: Windows 10 and Windows 11 x64.
+- Manifest signing: Ed25519 with an encrypted, access-controlled private key and
+  a public key embedded in Atlas.
+- Target public Windows reputation: Azure Artifact Signing.
+- Self-signed certificates: local release-pipeline testing only.
 
-## À compléter après la première distribution stable
+## Ready now
 
-- signature Authenticode reconnue par Windows pour le futur exécutable
-  d’installation;
-- configuration HTTPS et mandataire inverse pour les déploiements publics;
-- politique de sécurité et canal de signalement des vulnérabilités;
-- conventions de branches et cycle de versions;
-- matrice de migration et compatibilité des sauvegardes.
+- Owner-controlled public repository.
+- GitHub Actions validation on Windows.
+- English README and public documentation.
+- One-click Windows configurator with a bundled Node.js runtime.
+- Separate program and persistent-data locations.
+- Configurable bind address, port, allowed origins, update channel, shortcuts,
+  and background startup.
+- Clean-deployment testing on a secondary port.
+- Windows ZIP and SHA-256 generation.
+- Ed25519-signed release manifest.
+- Second signature and hash verification immediately before mutation.
+- Downloads restricted to approved GitHub hosts.
+- MFA and exact-version confirmation before installation.
+- Program and data snapshot, before/after inventory, health check, and automatic
+  rollback.
+- [QA evidence for signed update and rollback](QA_SIGNED_UPDATE_2026-10-09.md).
+- Architecture, user, security, operations, licensing, and installation guides.
+- Local assets, PWA API-cache exclusions, and no telemetry.
 
-## Déjà prêt
+## Remaining distribution work
 
-- dépôt public détenu par le propriétaire;
-- workflow GitHub Actions exécutant les validations JavaScript et les tests sur Windows;
-- installation guidée en un double-clic avec runtime Node.js inclus;
-- séparation du programme et des données persistantes;
-- test de déploiement propre sur le port 9095;
-- génération du ZIP Windows et de son SHA-256 comme artéfacts de validation;
-- manifeste JSON signé Ed25519, seconde vérification avant mutation et
-  téléchargements limités aux hôtes GitHub approuvés;
-- mise à jour avec contrôle MFA, confirmation exacte, instantané du programme et
-  des données, inventaire avant/après et retour arrière automatique testé;
-- [preuve QA du cycle signé et du retour arrière](QA_SIGNED_UPDATE_2026-10-09.md);
-- README fonctionnel;
-- architecture et frontières d’autonomie;
-- guides utilisateur, sécurité et exploitation;
-- tests automatisés du serveur et de l’interface;
-- actifs locaux versionnés, PWA sans cache des API et absence de télémétrie.
+- Public Authenticode trust for the future Windows installer executable.
+- Windows 10 and Windows 11 clean-VM validation for each stable Release.
+- A documented security-reporting channel.
+- A maintained migration and backup-compatibility matrix.
+- Final production-specific HTTPS and reverse-proxy configuration by each
+  instance administrator.
 
-## Règle documentaire
+## Release rule
 
-Le centre d’aide pointe vers le dépôt officiel et distingue les artéfacts de CI
-des Releases stables. Une version n’est présentée comme installable qu’après
-validation Ed25519 du manifeste et du SHA-256 du paquet. Atlas 0.15.0 est la
-version d’amorçage : son installation initiale est manuelle; le bouton intégré
-sert aux versions stables ultérieures.
+A version is described as installable only when:
 
-Une validation juridique indépendante de cette licence personnalisée demeure
-recommandée, sans être une condition technique de publication. Atlas doit être
-présenté comme un logiciel « source disponible »,
-jamais comme un logiciel open source approuvé par l'OSI. Le détail des usages MSP
-permis et des offres interdites est consigné dans [`LICENSING.md`](LICENSING.md).
+1. the test workflow passes;
+2. the standalone Windows package is built;
+3. the manifest is signed with the Atlas Ed25519 release key;
+4. package size and SHA-256 are recorded in the signed manifest;
+5. installation and post-start health pass on a clean Windows environment;
+6. rollback evidence exists for a forced failure;
+7. the immutable assets are attached to an official GitHub Release.
+
+Never replace an asset attached to an existing version. Publish a new version
+instead.
+
+Atlas must be described as **source-available**, not as OSI-approved open-source
+software. See [`LICENSING.md`](LICENSING.md) for permitted MSP services and
+restricted product commercialization.
 

@@ -1,92 +1,90 @@
-# Signature des versions Windows
+# Signing Windows releases
 
-## Deux niveaux de confiance
+## Two trust layers
 
-Les Releases Atlas utilisent dès la version 0.15.0 un manifeste signé
-**Ed25519**. Atlas embarque uniquement la clé publique, vérifie la signature du
-manifeste puis la taille et le SHA-256 du ZIP. La clé privée chiffrée et sa phrase
-secrète protégée par DPAPI restent dans `%ProgramData%\TRC\AtlasReleaseSigning`,
-hors du dépôt et avec des ACL limitées à l’administrateur, `SYSTEM` et au groupe
-Administrateurs.
+Atlas Releases use an **Ed25519-signed manifest**. Atlas embeds only the public
+key, verifies the manifest signature, and then verifies the ZIP size and
+SHA-256. The encrypted private key and its DPAPI-protected passphrase remain in
+`%ProgramData%\TRC\AtlasReleaseSigning`, outside the repository, with ACLs
+limited to the publishing administrator, `SYSTEM`, and Administrators.
 
-La cible complémentaire pour la réputation Windows 10 et 11 demeure **Azure
-Artifact Signing** (anciennement Trusted Signing), avec identité de publication
-TheRisingCloud. Authenticode concerne le futur exécutable Windows; il ne remplace
-pas la vérification Ed25519 interne de la chaîne de mise à jour.
+The complementary target for Windows 10 and Windows 11 reputation is **Azure
+Artifact Signing** under TheRisingCloud's verified publisher identity.
+Authenticode protects the future Windows executable; it does not replace the
+internal Ed25519 update-chain verification.
 
-Initialiser une seule fois la clé de manifeste sur la machine de publication :
+## Initialize the manifest key
 
-```powershell
+Run once on the controlled publishing computer:
+
+~~~powershell
 .\scripts\Initialize-AtlasReleaseSigning.ps1
-```
+~~~
 
-Construire, signer puis revérifier une Release :
+Build, sign, and re-verify a Release:
 
-```powershell
+~~~powershell
 .\scripts\New-AtlasSignedRelease.ps1
-```
+~~~
 
-La commande produit le ZIP, `SHA256SUMS.txt`,
-`atlas-release-manifest.json` et `atlas-release-manifest.sig`. Aucun de ces
-scripts n’écrit la phrase secrète en ligne de commande, dans Git ou dans les
-journaux.
+The command produces the Windows ZIP, `SHA256SUMS.txt`,
+`atlas-release-manifest.json`, and `atlas-release-manifest.sig`. The scripts
+must never place a passphrase in a command line, Git, or logs.
 
-Un certificat autosigné ne doit jamais être présenté comme une signature
-publique fiable. Windows ne lui fait pas confiance par défaut. Il sert seulement
-à tester la fabrication, la signature, la vérification et le refus d'un fichier
-altéré sur cette VM.
+## Development certificate
 
-## Certificat de développement
+A self-signed certificate must never be presented as publicly trusted. Windows
+does not trust it by default. It is only for locally testing build, signing,
+verification, and tamper rejection.
 
-Créer ou retrouver le certificat local non exportable :
+Create or locate the non-exportable local certificate:
 
-```powershell
+~~~powershell
 .\scripts\New-AtlasDevelopmentSigningCertificate.ps1
-```
+~~~
 
-La clé privée demeure dans `Cert:\CurrentUser\My`. Aucun fichier PFX et aucun
-mot de passe de certificat ne doivent être placés dans Git, un journal ou une
-variable GitHub en clair.
+The private key remains in `Cert:\CurrentUser\My`. Do not place a PFX file or a
+certificate password in Git, logs, or plaintext GitHub variables.
 
-Signer un artefact de test :
+Sign a test artifact:
 
-```powershell
+~~~powershell
 .\scripts\Sign-AtlasWindowsArtifact.ps1 `
   -Path .\dist\TRC-Atlas-Setup-test.exe `
   -Thumbprint CERTIFICATE_THUMBPRINT
-```
+~~~
 
-Vérifier sa présence et son identité :
+Verify its presence and identity:
 
-```powershell
+~~~powershell
 .\scripts\Test-AtlasWindowsArtifactSignature.ps1 `
   -Path .\dist\TRC-Atlas-Setup-test.exe `
   -ExpectedThumbprint CERTIFICATE_THUMBPRINT
-```
+~~~
 
-`-RequireTrusted` est réservé au certificat public reconnu ou à une machine de
-test sur laquelle la racine de développement a été installée volontairement.
+Use `-RequireTrusted` only with the recognized public certificate or on a test
+machine where the development root was deliberately installed.
 
-## Authenticode public à compléter
+## Public Authenticode work
 
-Avant de présenter un futur exécutable comme reconnu par Windows :
+Before describing a future executable as trusted by Windows:
 
-1. créer le compte Azure Artifact Signing au nom de TheRisingCloud;
-2. compléter la vérification d'identité exigée par Microsoft;
-3. limiter l'accès de signature au workflow GitHub protégé;
-4. exiger une approbation humaine pour l'environnement `release`;
-5. signer l'installateur et les exécutables avec SHA-256 et horodatage;
-6. vérifier Authenticode, SHA-256 et l'attestation GitHub après téléchargement;
-7. ne publier la release qu'après réussite de l'installation sur Windows 10 et 11.
+1. Create Azure Artifact Signing under TheRisingCloud.
+2. Complete Microsoft's publisher identity verification.
+3. Limit signing access to the protected GitHub release workflow.
+4. Require human approval for the `release` environment.
+5. Sign executables with SHA-256 and a trusted timestamp.
+6. Verify Authenticode, SHA-256, and GitHub attestation after download.
+7. Publish only after clean Windows 10 and Windows 11 installation tests pass.
 
-La configuration Azure implique une identité externe et possiblement des frais.
-Elle doit être réalisée par le propriétaire du compte; aucun secret Azure ne
-doit être conservé dans le dépôt ou sur les machines des utilisateurs.
+Azure configuration uses an external identity and may involve cost. The account
+owner must complete it; no Azure secret belongs in the repository or on end-user
+computers.
 
-## Rotation et incident
+## Rotation and incidents
 
-- consigner l'identité et la période de validité de chaque certificat;
-- autoriser plusieurs clés publiques pendant une rotation contrôlée;
-- arrêter les publications si une clé ou un compte de signature est compromis;
-- révoquer la clé, publier un avis de sécurité et produire une nouvelle version;
-- ne jamais remplacer silencieusement un artefact attaché à une release existante.
+- Record every key or certificate identity and validity period.
+- Permit multiple public keys only during a controlled rotation.
+- Stop publishing immediately if a key or signing account may be compromised.
+- Revoke the affected key, publish a security notice, and issue a new version.
+- Never silently replace an artifact attached to an existing Release.

@@ -1,161 +1,220 @@
-# Guide opérateur — TRC Community Atlas
+# TRC Community Atlas operations guide
 
-Version du guide : 0.15.6
+Guide version: **0.15.6**
 
-## Port et configuration de l’instance
+## Instance port and configuration
 
-Atlas utilise un seul port pour son interface et son API. SQLite est un fichier
-local et n’ouvre aucun port de base de données. Le port par défaut est `9092`.
+Atlas uses one port for both its interface and API. SQLite is a local file and
+does not open a database port. The default Atlas port is `9092`.
 
-Ouvrir **Configurer TRC Community Atlas** dans le menu Démarrer pour relire et
-modifier l’adresse d’écoute, le port, les origines HTTPS, les dossiers, le canal
-ou le démarrage automatique. Un changement de port arrête uniquement le
-processus Atlas identifié, conserve le même dossier `data` et relance le contrôle
-de santé sur la nouvelle adresse. Aucun pare-feu, DNS ou proxy n’est modifié.
+Open **Configure TRC Community Atlas** from the Start menu to review or change
+the bind address, port, HTTPS origins, folders, update channel, or automatic
+startup. A port change stops only the identified Atlas process, keeps the same
+data folder, restarts Atlas, and checks the new listener. It does not modify a
+firewall, DNS, certificate, router, or proxy.
 
-L’état enregistré se trouve dans
-`%LOCALAPPDATA%\TRC Community Atlas\config\instance.json` avec les emplacements
-par défaut. Une installation utilisant un dossier de données personnalisé garde
-son fichier `instance.json` à côté de ce dossier et le programme conserve un
-pointeur local vers cette configuration.
+The default saved configuration is
+`%LOCALAPPDATA%\TRC Community Atlas\config\instance.json`. An installation with
+a custom data root keeps the instance configuration with that root and stores a
+local pointer for the program.
 
-## Configuration initiale du domaine
+## Initial domain and proxy configuration
 
-Dans **Paramètres > Configuration initiale**, distinguer toujours :
+Under **Settings > Initial configuration**, distinguish:
 
-- le code court de l’instance, par exemple `ABC`;
-- le domaine public complet, par exemple `atlas.abcp.com`;
-- les domaines secondaires facultatifs;
-- le proxy inverse réellement utilisé : Nginx, IIS, Caddy ou autre;
-- l’adresse IP exacte de chaque proxy de confiance.
+- the short instance code, such as `ABC`;
+- the complete public domain, such as `atlas.example.com`;
+- optional secondary domains;
+- the actual reverse proxy: Nginx, IIS, Caddy, or another product;
+- the exact IP address of every trusted proxy.
 
-Atlas enregistre ces noms et autorise leurs origines HTTPS. Il ne crée pas
-l’entrée DNS, n’installe pas le certificat et ne modifie aucun pare-feu. La clé
-privée TLS reste uniquement dans le proxy inverse. Celui-ci doit transmettre
-`X-Forwarded-Proto: https` et le nom demandé à Atlas. Tant que son adresse n’est
-pas déclarée comme proxy de confiance, Atlas ignore volontairement ces
-en-têtes et utilise l’adresse de connexion directe pour les limites de sécurité.
+Atlas records these names and exact HTTPS origins. It does not create a DNS
+record, issue or import a certificate, or change a firewall. The TLS private key
+belongs only in the reverse proxy.
 
-Le bouton **Tester le domaine public** est volontairement manuel. Il appelle
-uniquement `https://<domaine-enregistré>/api/status`, ne suit aucune redirection,
-valide TLS et refuse les domaines qui résolvent vers une adresse locale, privée,
-réservée ou de test. Il ne remplace pas une vérification indépendante du DNS et
-du proxy.
+The proxy must forward the HTTPS scheme and original host. Atlas accepts client
+forwarding headers only when the direct connection comes from an explicitly
+trusted proxy.
 
-## Démarrage automatique depuis Atlas
+**Test public domain** is a deliberate manual action. It requests only the saved
+domain's `/api/status` endpoint over HTTPS, follows no redirect, validates TLS,
+and rejects names resolving to private, local, reserved, or documentation
+addresses.
 
-Dans **Paramètres > Configuration initiale**, le super administrateur peut
-activer ou désactiver **Démarrer Atlas automatiquement**, saisir son code MFA
-si la validation renforcée est active, puis choisir **Configurer et appliquer**.
-Atlas crée ou met à jour la tâche Windows masquée `TRC Community Atlas`. Avec
-des droits administrateur, elle utilise le déclencheur de démarrage et le compte
-`SYSTEM`; sinon, elle utilise l’ouverture de session du compte Windows courant.
+## Background startup
 
-Cette action ne redémarre pas le processus actif et ne modifie ni le pare-feu,
-ni le DNS, ni le proxy. Elle reprend exactement le port, l’adresse d’écoute, les
-origines HTTPS et le dossier de données de l’instance courante. Désactiver
-l’option conserve la tâche de façon réversible, mais la désactive.
+The super administrator can enable **Start Atlas automatically** under
+**Settings > Initial configuration**, enter MFA when reinforced confirmation is
+active, and select **Configure and apply**.
 
-## Vérification de santé
+Atlas creates or updates the hidden `TRC Community Atlas` Windows task:
 
-Avant un redémarrage ou une modification, comparer :
+- with administrative rights, it uses a startup trigger and `SYSTEM`;
+- otherwise, it starts at sign-in for the current Windows account.
 
-1. l’état de la tâche ou du processus Atlas;
-2. le listener local attendu;
-3. la réponse locale détaillée de `/api/status/details`;
-4. la réponse publique, lorsqu’une publication a été autorisée;
-5. les contrôles séparés dans **Paramètres > Santé du site**;
-6. les journaux applicatifs et ceux du mandataire inverse.
+Disabling the option disables the task reversibly. Applying this setting does
+not restart the current process or change networking.
 
-Le bouton **Tester le port local** ouvre une connexion TCP seulement vers le
-listener réellement utilisé par le processus Atlas courant et sur cet
-ordinateur. Il n’accepte aucune adresse fournie par l’utilisateur, ne balaie
-aucun autre port et ne contacte aucune autre machine du réseau.
+## Health checks
 
-Un problème public avec une API locale saine ne prouve pas un arrêt d’Atlas.
+Before restarting or modifying Atlas, compare:
 
-## Sauvegarde complète
+1. the Atlas task or process state;
+2. the expected local listener;
+3. local `/api/status/details`;
+4. the public response only when public exposure was deliberately configured;
+5. individual checks under **Settings > Site health**;
+6. Atlas and reverse-proxy logs.
 
-La sauvegarde complète chiffrée inclut les comptes, le MFA, le coffre, sa clé,
-SQLite et les pièces jointes. Les sessions sont volontairement exclues.
+**Test local port** connects only to the listener already used by the current
+Atlas process on this computer. It accepts no browser-provided address or port,
+does not scan the LAN, and never contacts another computer.
 
-```powershell
+A public failure while the local API is healthy does not prove Atlas is down.
+Check the proxy, certificate, DNS, and allowed origin independently.
+
+## Full encrypted backup
+
+The full backup includes accounts, MFA state, the vault, vault key, SQLite,
+attachments, and configuration. Sessions are intentionally excluded.
+
+~~~powershell
 .\scripts\Invoke-AtlasFullBackup.ps1 -Mode Create
-```
+~~~
 
-La phrase secrète est saisie dans une invite protégée. Elle ne doit pas être
-placée dans la commande, un journal ou un fichier non protégé.
+Enter the passphrase only through the protected prompt. Never place it in a
+command, script, log, issue, or unprotected file.
 
-Le super administrateur peut aussi utiliser **Paramètres > Sauvegardes**. Cette
-page permet de choisir un dossier absolu local ou UNC, une exécution quotidienne
-ou hebdomadaire et une rétention facultative. La phrase secrète planifiée est
-chiffrée avec DPAPI pour le compte Windows qui exécute Atlas. Elle n’est ni
-retournée par l’API ni affichée après enregistrement. Le planificateur fonctionne
-seulement lorsque le service Atlas est actif; activer le démarrage automatique
-Windows est donc recommandé.
+### Create a backup in the interface
 
-La rétention est désactivée par défaut. Lorsqu’elle est activée, Atlas ne retire
-que les anciens fichiers portant exactement son préfixe de sauvegarde gérée et
-ne touche à aucun autre fichier dans le dossier. Chaque fichier existant peut
-être déchiffré et contrôlé en mémoire depuis la page, sans écrire de restauration.
+1. Open **Settings > Backups**.
+2. Choose an absolute local or UNC destination that the Atlas Windows identity
+   can write to.
+3. Select **Create backup now**.
+4. Wait for the completed result.
+5. Confirm the timestamp, size, and validation status.
+6. Store the passphrase separately from the backup.
+7. Run **Inspect** or a controlled restore rehearsal.
 
-Valider périodiquement une sauvegarde sans la restaurer :
+![Atlas backup management](../public/assets/help/settings-backups.png)
 
-```powershell
-.\scripts\Invoke-AtlasFullBackup.ps1 -Mode Inspect -InputPath .\backups\TRC_Community_Atlas_Full_Backup_YYYY-MM-DD_HH-mm-ss.trcatlas
-```
+### Schedule backups
 
-## Restauration
+1. Complete one successful manual backup first.
+2. Choose daily or weekly frequency.
+3. Choose the execution time.
+4. Enable retention only after choosing the minimum number of copies to keep.
+5. Save the schedule.
+6. Confirm background startup is enabled so Atlas is running at the scheduled
+   time.
+7. Review the next run and the last result under **Site health**.
 
-Arrêter Atlas avant la restauration. Le processus demande la confirmation exacte
-`RESTORE_ATLAS`, conserve l’état remplacé dans un dossier de sécurité daté puis
-invalide toutes les sessions.
+The scheduled passphrase is protected with DPAPI for the Windows identity that
+runs Atlas. It is never returned by the API after saving.
 
-## Import/export
+Retention is disabled by default. When enabled, Atlas removes only old files
+with its exact managed-backup prefix and does not touch other files in the
+folder.
 
-L’export JSON est documentaire. Il exclut les comptes, le MFA, les sessions, le
-coffre et les fichiers binaires. L’import remplace le workspace actif après avoir
-créé une révision de retour arrière. Il ne remplace pas une sauvegarde complète.
+Validate an existing backup without restoring it:
 
-## Mise à jour
+~~~powershell
+.\scripts\Invoke-AtlasFullBackup.ps1 -Mode Inspect `
+  -InputPath .\backups\TRC_Community_Atlas_Full_Backup_YYYY-MM-DD_HH-mm-ss.trcatlas
+~~~
 
-Avant chaque mise à jour :
+## Restore
 
-- créer une sauvegarde datée sans écraser les précédentes;
-- conserver le dossier `data/` de production;
-- mettre à jour les URL versionnées des actifs publics;
-- exécuter les tests sur les fichiers déployés;
-- vérifier la version locale et publique après redémarrage.
+1. Confirm the intended backup path and timestamp.
+2. Inspect the backup before stopping Atlas.
+3. Record the current data path.
+4. Stop Atlas.
+5. Start restore and enter the protected passphrase.
+6. Enter the exact confirmation `RESTORE_ATLAS`.
+7. Keep the automatically created dated safety copy.
+8. Start Atlas and check health, organization counts, vault metadata, and
+   attachments.
+9. Sign in again because restored sessions are invalidated.
 
-La page **Paramètres > Mises à jour** vérifie manuellement l’API officielle
-GitHub. **Télécharger et vérifier** récupère uniquement le manifeste, sa
-signature et le paquet depuis des hôtes GitHub approuvés, sans modifier le
-programme actif. Atlas contrôle Ed25519, la taille et SHA-256. **Installer**
-exige ensuite un super administrateur, le MFA et la confirmation exacte
-`INSTALLER <version>`. L’assistant crée un instantané, redémarre Atlas, vérifie
-SQLite, le coffre et les compteurs métier, puis restaure automatiquement la
-version antérieure si un contrôle échoue. Aucune installation n’est automatique.
+Never overwrite or delete the source backup during a restore.
 
-## API locale facultative
+## Documentation import and export
 
-Dans **Paramètres > Intégrations**, le super administrateur peut activer une API
-de lecture et créer des jetons limités aux portées `read:health`,
-`read:organizations` et `read:records`. Les jetons utilisent le port Atlas
-existant, peuvent être limités à certaines compagnies et sont affichés une seule
-fois. Atlas n’enregistre que leur empreinte SHA-256. Le coffre, les mots de
-passe, les OTP, les notes rapides, les pièces jointes et le MFA ne sont jamais
-retournés par ces routes. La création, l’activation et la révocation sont
-protégées par la politique MFA renforcée et journalisées.
+JSON export is documentation-only. It excludes accounts, MFA, sessions, vault
+plaintext, vault keys, and binary attachments. Import replaces the active
+workspace after creating a rollback revision. It is not a full backup.
 
-La même page peut émettre des webhooks signés pour les modifications du
-workspace et les résultats de sauvegarde. Par sécurité, une destination doit
-être une URL HTTP explicite sur `localhost`, `127.0.0.1` ou `::1`; Atlas refuse
-les adresses du LAN et Internet. Le secret HMAC est affiché une seule fois et
-chiffré localement dans le registre Atlas.
+## Signed updates
 
-## Cache navigateur et PWA
+Before every update:
 
-Le service worker utilise un nom de cache lié à la version. Les CSS, JavaScript
-et le manifeste portent aussi une version dans leur URL. Les routes `/api/` ne
-sont jamais mises en cache.
+- create a new dated backup without replacing older backups;
+- keep the production data directory;
+- confirm adequate free space;
+- review the target version and Release notes;
+- ensure no restore or backup is running.
+
+### Update from the interface
+
+1. Open **Settings > Updates**.
+2. Select **Check for updates**.
+3. Review the installed version and selected channel.
+4. Select **Download and verify**.
+5. Confirm that the Ed25519 signature, size, and SHA-256 pass.
+6. Enter administrator MFA.
+7. Enter the exact requested `INSTALL <version>` confirmation.
+8. Start installation.
+9. Wait for the snapshot, restart, health checks, and final status.
+10. Sign in and review **Site health** and organization counts.
+
+![Atlas signed update management](../public/assets/help/settings-updates.png)
+
+Atlas downloads only from approved GitHub hosts. Downloading and verifying do
+not mutate the active program. Installation creates a full rollback snapshot
+and verifies the program version, SQLite, vault readability, attachments, and
+business counts after restart. A failed control restores the previous version.
+Atlas never installs an update silently.
+
+## Optional local API and webhooks
+
+Under **Settings > Integrations**, the super administrator can enable a
+read-only API and create tokens with minimal scopes:
+
+- `read:health`;
+- `read:organizations`;
+- `read:records`.
+
+Tokens use the existing Atlas port, can be restricted to organizations, and are
+displayed once. Atlas stores only their SHA-256 fingerprint. Vault plaintext,
+passwords, OTP values, Quick Notes, attachments, and MFA material are never
+returned.
+
+Local webhooks may report workspace changes and backup results. Destinations
+must be explicit loopback HTTP URLs on `localhost`, `127.0.0.1`, or `::1`.
+Atlas rejects LAN and Internet destinations. The HMAC secret is displayed once
+and encrypted locally.
+
+## Browser cache and PWA
+
+The service worker uses a versioned static cache. CSS, JavaScript, and the
+manifest use versioned URLs. `/api/` routes are never cached. After an update,
+reload the browser if an old visual asset remains visible.
+
+## Routine operator checklist
+
+Weekly:
+
+- review **Site health**;
+- verify the last backup and next scheduled run;
+- inspect failed authentication and privileged-action audit events;
+- check available signed updates without automatically installing them;
+- confirm the expected Windows startup task is healthy.
+
+Monthly:
+
+- inspect or restore-test one backup;
+- verify free space for data, attachments, backups, and rollback snapshots;
+- review administrators, organization scopes, and vault permissions;
+- revoke unused API tokens and local webhooks;
+- confirm the proxy certificate and trusted-proxy list.
 
