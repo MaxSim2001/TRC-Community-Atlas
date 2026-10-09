@@ -228,5 +228,11 @@ test("operations UI exposes backup, safe update and scoped local API controls", 
   assert.match(app, /WEBHOOKS LOCAUX/);
   assert.match(app, /127\.0\.0\.1/);
   assert.match(styles, /\.local-api-settings/);
+  assert.match(app, /local-api-feature-grid/);
+  assert.match(app, /local-api-card-header/);
+  assert.match(app, /local-api-scope-option/);
+  assert.match(styles, /\.local-api-columns\s*\{[^}]*align-items:\s*start/);
+  assert.match(styles, /\.local-api-settings input\[type="checkbox"\]\s*\{[^}]*width:\s*18px/);
+  assert.match(styles, /\.local-api-form-actions/);
   assert.match(releaseNotes, /0\.14\.0/);
 });

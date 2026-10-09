@@ -11,7 +11,7 @@ test("Atlas exposes a complete standalone mobile application manifest", async ()
   ]);
   const manifest = JSON.parse(manifestText);
 
-  assert.match(index, /rel="manifest" href="\/manifest\.webmanifest\?v=0\.15\.3"/);
+  assert.match(index, /rel="manifest" href="\/manifest\.webmanifest\?v=0\.15\.4"/);
   assert.match(index, /name="apple-mobile-web-app-capable" content="yes"/);
   assert.match(index, /id="pwa-install-root"/);
   assert.equal(manifest.display, "standalone");
@@ -29,7 +29,7 @@ test("the service worker caches only the shell and explicitly bypasses every API
     readFile(new URL("../server.mjs", import.meta.url), "utf8"),
   ]);
 
-  assert.match(worker, /trc-atlas-shell-0\.15\.3/);
+  assert.match(worker, /trc-atlas-shell-0\.15\.4/);
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /if \(request\.method !== "GET"\) return/);
   assert.doesNotMatch(worker, /\/api\/(?:status|me|workspace|vault)/);

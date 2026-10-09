@@ -1,5 +1,16 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.4 — Intégrations locales réalignées
+
+- page Intégrations restructurée avec une hiérarchie plus claire entre
+  activation, confirmation MFA, création de jeton et accès existants;
+- cases à cocher normalisées et accompagnées d’une description lisible pour
+  chaque portée API;
+- cartes de création et de liste indépendantes afin d’éviter les grands espaces
+  vides et les hauteurs forcées;
+- mise en page adaptée aux écrans étroits sans défilement horizontal, avec les
+  actions principales sur toute la largeur au besoin.
+
 ## 0.15.3 — Centre d’aide enrichi et alertes guidées
 
 - centre d’aide complété avec les parcours GitHub, installation Windows,
