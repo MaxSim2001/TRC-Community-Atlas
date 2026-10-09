@@ -2418,6 +2418,8 @@ td { min-height: 60px; font-size: 12px; }
 .local-webhook-section { display: grid; gap: 16px; padding-top: 22px; border-top: 1px solid var(--line); }
 .local-webhook-section > div:first-child p:last-child { max-width: 820px; margin-top: 6px; }
 .local-webhook-section .local-api-columns > form, .local-webhook-section .local-api-columns > div { min-width: 0; display: grid; align-content: start; gap: 13px; padding: 20px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; }
+.local-webhook-section .settings-sensitive-confirmation { grid-template-columns: auto minmax(0, 1fr); }
+.local-webhook-section .settings-sensitive-confirmation label { grid-column: 1 / -1; }
 .webhook-actions { display: grid; gap: 7px; }
 .webhook-actions form { grid-template-columns: 112px auto; }
 .danger-text { color: var(--danger) !important; }

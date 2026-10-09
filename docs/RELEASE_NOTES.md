@@ -1,5 +1,10 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.5 — Confirmation MFA des webhooks finalisée
+
+- carte MFA des webhooks réorganisée verticalement dans sa colonne afin de
+  conserver un titre, une explication et un champ lisibles à toutes les tailles.
+
 ## 0.15.4 — Intégrations locales réalignées
 
 - page Intégrations restructurée avec une hiérarchie plus claire entre

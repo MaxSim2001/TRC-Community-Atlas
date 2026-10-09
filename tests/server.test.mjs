@@ -83,7 +83,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.deepEqual(result.payload, { setupRequired: true });
   result = await request("/api/status/details");
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.15.4");
+  assert.equal(result.payload.version, "0.15.5");
   assert.equal(result.payload.storage, "uninitialized");
 
   result = await request("/api/setup", { method: "POST", headers: { origin: "https://malicious.invalid" }, body: { displayName: "Intrus", username: "intrus", password: "invalid-password" } });
@@ -183,7 +183,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 401);
   result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.version, "0.15.4");
+  assert.equal(result.payload.version, "0.15.5");
   result = await request("/api/v1/organizations", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
   assert.ok(result.payload.items.length >= 1);

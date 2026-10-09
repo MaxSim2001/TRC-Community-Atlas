@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.15.4
+Version du guide : 0.15.5
 
 ## Port et configuration de l’instance
 

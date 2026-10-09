@@ -234,5 +234,6 @@ test("operations UI exposes backup, safe update and scoped local API controls", 
   assert.match(styles, /\.local-api-columns\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.local-api-settings input\[type="checkbox"\]\s*\{[^}]*width:\s*18px/);
   assert.match(styles, /\.local-api-form-actions/);
+  assert.match(styles, /\.local-webhook-section \.settings-sensitive-confirmation\s*\{[^}]*grid-template-columns:\s*auto minmax\(0, 1fr\)/);
   assert.match(releaseNotes, /0\.14\.0/);
 });
