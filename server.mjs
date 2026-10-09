@@ -43,7 +43,7 @@ const MFA_IP_LIMIT = 30;
 const MFA_CHALLENGE_LIMIT = 5;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.15.5";
+const ATLAS_VERSION = "0.15.6";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],

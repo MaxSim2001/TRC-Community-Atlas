@@ -1,5 +1,13 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.6 — Profil regroupé dans l’en-tête
+
+- profil retiré du bas de la navigation afin d’éliminer le doublon;
+- menu compact ajouté au profil supérieur avec l’identité du compte, le compte
+  local, le coffre autorisé, les paramètres administratifs et la déconnexion;
+- ouverture au clavier, fermeture avec Échap ou clic extérieur et mise en page
+  adaptée aux petits écrans.
+
 ## 0.15.5 — Confirmation MFA des webhooks finalisée
 
 - carte MFA des webhooks réorganisée verticalement dans sa colonne afin de

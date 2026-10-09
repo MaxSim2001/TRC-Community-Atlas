@@ -15,7 +15,7 @@ test("security policies, self-service sessions and password lifecycle remain wir
 
   assert.match(app, /MFA renforcé pour les actions sensibles/);
   assert.match(app, /Expiration et rappels de rotation/);
-  assert.match(app, /data-route="my-account"/);
+  assert.match(app, /route\("my-account", "users"/);
   assert.match(app, /data-form="self-password"/);
   assert.match(app, /recovery-codes-regenerate/);
   assert.match(app, /revoke-own-session/);

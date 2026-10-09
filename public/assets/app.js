@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.15.5";
+  const ATLAS_VERSION = "0.15.6";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -173,6 +173,7 @@
     relationQuickFiltersOpen: false,
     dashboardIncludeTests: localStorage.getItem(storageKeys.dashboardTests) === "true",
     helpMenuOpen: false,
+    profileMenuOpen: false,
     helpSearch: "",
     helpCategory: "all",
     deploymentHealth: null,
@@ -2137,6 +2138,27 @@
     </div>`;
   }
 
+  function profileMenuMarkup() {
+    if (!state.profileMenuOpen) return "";
+    const french = state.locale === "fr";
+    const route = (value, iconName, label, note = "") => `<button type="button" role="menuitem" data-route="${value}">${icon(iconName, 17)}<span><strong>${label}</strong>${note ? `<small>${note}</small>` : ""}</span>${icon("chevron", 14)}</button>`;
+    const vaultRoute = activeOrganizationId() && canAccessVault()
+      ? route("module/passwords", "key", french ? "Coffre de mots de passe" : "Password vault", french ? `Compagnie : ${orgName(activeOrganizationId())}` : `Organization: ${orgName(activeOrganizationId())}`)
+      : "";
+    const settingsRoute = isAdministrator()
+      ? route("settings", "settings", french ? "Paramètres Atlas" : "Atlas settings", french ? "Administration de l’instance" : "Instance administration")
+      : "";
+    return `<div class="profile-menu-popover" role="menu" aria-label="${french ? "Menu du profil" : "Profile menu"}">
+      <header><span class="avatar">${initials(state.user.displayName)}</span><span><strong>${escapeHtml(state.user.displayName)}</strong><small>@${escapeHtml(state.user.username)} · ${escapeHtml(roleLabel(state.user.role))}</small></span></header>
+      <div class="profile-menu-links">
+        ${route("my-account", "users", french ? "Mon compte" : "My account", french ? "Sécurité, MFA et sessions" : "Security, MFA and sessions")}
+        ${vaultRoute}
+        ${settingsRoute}
+      </div>
+      <footer><button type="button" role="menuitem" data-action="logout">${icon("logout", 17)}<span>${french ? "Déconnexion" : "Sign out"}</span></button></footer>
+    </div>`;
+  }
+
   function renderShell() {
     const currentSidebarNavigation = document.querySelector("#atlas-navigation > nav");
     if (currentSidebarNavigation && !state.preserveSidebarScroll) state.sidebarScrollTop = currentSidebarNavigation.scrollTop;
@@ -2168,7 +2190,6 @@
           <div class="sidebar-bottom">
             ${isAdministrator() ? `<button class="sidebar-system-link ${state.page === "settings" || state.page === "accounts" ? "active" : ""}" type="button" data-route="settings">${icon("settings", 16)}<span><strong>Paramètres</strong><small>Administration Atlas</small></span>${state.deploymentHealth?.summary?.warning ? `<b>${state.deploymentHealth.summary.warning}</b>` : icon("chevron", 14)}</button>` : ""}
             <div class="local-note">${icon("shield", 15)} <span>${t("localOnly")}</span></div>
-            <div class="sidebar-user"><span class="avatar">${initials(state.user.displayName)}</span><div><strong>${escapeHtml(state.user.displayName)}</strong><span>${escapeHtml(roleLabel(state.user.role))}</span></div><button class="icon-button" data-action="logout" title="${t("signOut")}" aria-label="${t("signOut")}">${icon("logout", 17)}</button></div>
           </div>
         </aside>
         <button class="navigation-scrim" data-action="close-nav" aria-label="${t("close")}"></button>
@@ -2194,7 +2215,10 @@
                 <button class="icon-button help-menu-trigger ${state.helpMenuOpen ? "active" : ""}" type="button" data-action="toggle-help-menu" title="${state.locale === "fr" ? "Aide" : "Help"}" aria-label="${state.locale === "fr" ? "Ouvrir l’aide Atlas" : "Open Atlas help"}" aria-haspopup="menu" aria-expanded="${state.helpMenuOpen}">${icon("help", 21)}<span class="help-update-dot" aria-hidden="true"></span></button>
                 ${helpMenuMarkup()}
               </div>
-              <button class="profile-button" data-route="my-account"><span class="avatar small">${initials(state.user.displayName)}</span><span class="desktop-only">${escapeHtml(state.user.displayName.split(" ")[0])}</span></button>
+              <div class="profile-menu-root" data-profile-menu-root>
+                <button class="profile-button ${state.profileMenuOpen ? "active" : ""}" type="button" data-action="toggle-profile-menu" aria-label="${state.locale === "fr" ? "Ouvrir le menu du profil" : "Open profile menu"}" aria-haspopup="menu" aria-expanded="${state.profileMenuOpen}"><span class="avatar small">${initials(state.user.displayName)}</span><span class="desktop-only">${escapeHtml(state.user.displayName.split(" ")[0])}</span>${icon("chevron", 13)}</button>
+                ${profileMenuMarkup()}
+              </div>
             </div>
           </header>
           <main id="main-content" tabindex="-1">${renderPage()}</main>
@@ -4704,6 +4728,7 @@
     }
     state.mobileNavigation = false;
     state.helpMenuOpen = false;
+    state.profileMenuOpen = false;
     state.search = "";
     location.hash = nextHash;
   }
@@ -4714,6 +4739,12 @@
       state.helpMenuOpen = false;
       document.querySelector(".help-menu-popover")?.remove();
       document.querySelector("[data-action='toggle-help-menu']")?.setAttribute("aria-expanded", "false");
+    }
+    const profileMenuRoot = event.target.closest("[data-profile-menu-root]");
+    if (!profileMenuRoot && state.profileMenuOpen) {
+      state.profileMenuOpen = false;
+      document.querySelector(".profile-menu-popover")?.remove();
+      document.querySelector("[data-action='toggle-profile-menu']")?.setAttribute("aria-expanded", "false");
     }
     const searchScopeRoot = event.target.closest("[data-search-scope-root]");
     if (!searchScopeRoot && state.searchScopeOpen) {
@@ -4750,9 +4781,18 @@
     }
     if (action === "toggle-help-menu") {
       state.helpMenuOpen = !state.helpMenuOpen;
+      state.profileMenuOpen = false;
       state.searchScopeOpen = false;
       render();
       if (state.helpMenuOpen) requestAnimationFrame(() => document.querySelector(".help-menu-popover [data-route]")?.focus());
+      return;
+    }
+    if (action === "toggle-profile-menu") {
+      state.profileMenuOpen = !state.profileMenuOpen;
+      state.helpMenuOpen = false;
+      state.searchScopeOpen = false;
+      render();
+      if (state.profileMenuOpen) requestAnimationFrame(() => document.querySelector(".profile-menu-popover [role='menuitem']")?.focus());
       return;
     }
     if (action === "select-help-category") {
@@ -5512,6 +5552,13 @@
   }
 
   document.addEventListener("keydown", (event) => {
+    if (state.profileMenuOpen && event.key === "Escape") {
+      event.preventDefault();
+      state.profileMenuOpen = false;
+      render();
+      requestAnimationFrame(() => document.querySelector("[data-action='toggle-profile-menu']")?.focus());
+      return;
+    }
     if (state.helpMenuOpen && event.key === "Escape") {
       event.preventDefault();
       state.helpMenuOpen = false;

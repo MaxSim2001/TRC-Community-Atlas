@@ -1,6 +1,6 @@
 # Sécurité et accès — TRC Community Atlas
 
-Version du guide : 0.15.5
+Version du guide : 0.15.6
 
 ## Modèle autonome
 
