@@ -4,9 +4,9 @@ Version du guide : 0.15.2
 
 ## Parcours recommandé
 
-1. Télécharger l’artéfact `TRC-Atlas-Windows-…` d’une exécution GitHub Actions
-   réussie du dépôt officiel.
-2. Décompresser complètement le ZIP téléchargé.
+1. Ouvrir la page [Dernière Release Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/releases/latest).
+2. Télécharger `TRC-Atlas-Portable-0.15.2-win-x64.zip`, puis le décompresser
+   complètement. Les artéfacts GitHub Actions sont réservés aux essais.
 3. Ouvrir le dossier `TRC Community Atlas 0.15.2`.
 4. Double-cliquer sur `Installer-Atlas.cmd`.
 5. Choisir le port, les dossiers et les options dans le configurateur.
@@ -121,8 +121,8 @@ En cas d’échec :
 
 ## Statut de distribution
 
-Le paquet produit par GitHub Actions sert actuellement à la validation. La
-La Release stable contient `atlas-release-manifest.json` et
+Les paquets produits par GitHub Actions servent à la validation. La Release
+stable contient `atlas-release-manifest.json` et
 `atlas-release-manifest.sig`. À partir d’Atlas 0.15.0, les versions suivantes se
 préparent dans **Paramètres > Mises à jour** et ne sont installées qu’après
 validation Ed25519, SHA-256, MFA et création d’un instantané de retour arrière.
