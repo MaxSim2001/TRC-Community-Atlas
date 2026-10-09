@@ -3,7 +3,7 @@ param(
     [string]$OutputDirectory = '',
     [string]$SigningRoot = "$env:ProgramData\TRC\AtlasReleaseSigning",
     [string]$NodePath = '',
-    [string]$CurrentVersion = '0.14.3'
+    [string]$CurrentVersion = '0.15.2'
 )
 
 $ErrorActionPreference = 'Stop'

@@ -43,7 +43,7 @@ const MFA_IP_LIMIT = 30;
 const MFA_CHALLENGE_LIMIT = 5;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.15.2";
+const ATLAS_VERSION = "0.15.3";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -2809,6 +2809,7 @@ export function createAtlasServer(options = {}) {
             port,
             host,
             allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])],
+            trustedProxies: [...new Set([...trustedProxies, ...savedTrustedProxies])],
           });
         } catch (error) {
           await writeJsonAtomic(jobPath, { schemaVersion: 1, jobId, status: "failed", message: "L’assistant de mise à jour n’a pas pu démarrer.", currentVersion: ATLAS_VERSION, targetVersion: prepared.targetVersion, failedReason: String(error?.message || error).slice(0, 500), updatedAt: nowIso() });

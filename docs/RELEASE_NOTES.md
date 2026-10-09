@@ -1,5 +1,20 @@
 # Notes de version — TRC Community Atlas
 
+## 0.15.3 — Centre d’aide enrichi et alertes guidées
+
+- centre d’aide complété avec les parcours GitHub, installation Windows,
+  mises à jour signées, sauvegardes, restauration et liens officiels;
+- captures réelles produites depuis une instance QA locale avec des données
+  factices, sans exposer la documentation ni les secrets de production;
+- compteur d’alerte repris dans la navigation des Paramètres sur **Santé du
+  site** et sur la page qui permet de corriger le problème;
+- alertes dirigées vers Configuration initiale, Sauvegardes, Mises à jour ou
+  Comptes et accès selon le contrôle en erreur;
+- mise à jour Windows corrigée pour conserver les proxys de confiance déjà
+  configurés pendant l’installation d’une nouvelle version;
+- cache PWA renouvelé et tests de régression étendus aux nouveaux guides et
+  indicateurs d’état.
+
 ## 0.15.2 — Mise à jour GitHub tolérante aux fins de ligne
 
 - identité de la clé de publication vérifiée à partir de la clé Ed25519 réelle,

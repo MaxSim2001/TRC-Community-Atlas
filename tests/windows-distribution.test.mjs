@@ -37,6 +37,8 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   const installer = source("scripts/Install-TRCCommunityAtlas.ps1");
   const deploymentTest = source("scripts/Test-TRCCommunityAtlasDeployment.ps1");
   const updateLifecycleTest = source("scripts/Test-AtlasSignedUpdateLifecycle.ps1");
+  const releaseUpdater = source("scripts/Invoke-AtlasReleaseUpdate.ps1");
+  const operations = source("lib/atlas-operations.mjs");
   const autostartManager = source("scripts/Set-TRCCommunityAtlasAutostart.ps1");
   const workflow = source(".github/workflows/tests.yml");
 
@@ -57,6 +59,10 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(updateLifecycleTest, /SuccessfulUpdate = \$successState\.status/);
   assert.match(updateLifecycleTest, /Rollback = \$rollbackState\.status/);
   assert.match(updateLifecycleTest, /-SimulateHealthFailure/);
+  assert.match(releaseUpdater, /\[string\]\$TrustedProxies = ''/);
+  assert.match(releaseUpdater, /-TrustedProxy \$trustedProxyList/);
+  assert.match(operations, /deployment\.trustedProxies/);
+  assert.match(operations, /"-TrustedProxies"/);
   assert.match(autostartManager, /ValidateSet\('Status', 'Enable', 'Disable'\)/);
   assert.match(autostartManager, /TaskName = 'TRC Community Atlas'/);
   assert.match(autostartManager, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);

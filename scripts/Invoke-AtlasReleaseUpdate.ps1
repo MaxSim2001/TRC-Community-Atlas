@@ -13,6 +13,7 @@ param(
     [ValidateRange(1024,65535)][int]$Port = 9092,
     [ValidatePattern('^[a-zA-Z0-9.:-]+$')][string]$BindAddress = '127.0.0.1',
     [string]$AllowedOrigins = '',
+    [string]$TrustedProxies = '',
     [int]$ParentProcessId = 0,
     [switch]$SimulateHealthFailure
 )
@@ -164,7 +165,8 @@ try {
     $mutationStarted = $true
     Clear-ProgramContent $InstallRoot
     $originList = @($AllowedOrigins -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    & (Join-Path $candidateRoot.FullName 'scripts\Install-TRCCommunityAtlas.ps1') -InstallRoot $InstallRoot -DataRoot $DataRoot -Port $Port -BindAddress $BindAddress -AllowedOrigin $originList -NodePath (Join-Path $candidateRoot.FullName 'runtime\node.exe') -TaskName $TaskName -Channel stable -SkipShortcuts -SkipStart -Json | Out-Null
+    $trustedProxyList = @($TrustedProxies -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    & (Join-Path $candidateRoot.FullName 'scripts\Install-TRCCommunityAtlas.ps1') -InstallRoot $InstallRoot -DataRoot $DataRoot -Port $Port -BindAddress $BindAddress -AllowedOrigin $originList -TrustedProxy $trustedProxyList -NodePath (Join-Path $candidateRoot.FullName 'runtime\node.exe') -TaskName $TaskName -Channel stable -SkipShortcuts -SkipStart -Json | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Installation du paquet Atlas echouee.' }
     Start-ScheduledTask -TaskName $TaskName
     if ($SimulateHealthFailure) { throw 'Échec de santé simulé pour valider le retour arrière.' }

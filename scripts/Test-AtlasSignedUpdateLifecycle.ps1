@@ -46,7 +46,7 @@ function New-CandidateRelease {
 if (-not $NodePath) { $NodePath = (Get-Command node -ErrorAction Stop).Source }
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 $baselineVersion = [string](Get-Content -LiteralPath (Join-Path $sourceRoot 'package.json') -Raw | ConvertFrom-Json).version
-if ($baselineVersion -ne '0.15.2') { throw "Ce scénario QA attend Atlas 0.15.2 comme base; version trouvée : $baselineVersion." }
+if ($baselineVersion -ne '0.15.3') { throw "Ce scénario QA attend Atlas 0.15.3 comme base; version trouvée : $baselineVersion." }
 if (netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $Port) | Select-Object -First 1) {
     throw "Le port QA $Port est déjà occupé; aucun test n’a été lancé."
 }
@@ -75,24 +75,24 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'La preparation des donnees QA a echoue.' }
     $before = (& (Join-Path $installRoot 'runtime\node.exe') (Join-Path $installRoot 'scripts\atlas-update-inventory.mjs') $dataRoot | ConvertFrom-Json)
 
-    $successRelease = New-CandidateRelease -Version '0.15.3' -FromVersion $baselineVersion -Destination (Join-Path $TestRoot 'candidate-0.15.3')
+    $successRelease = New-CandidateRelease -Version '0.15.4' -FromVersion $baselineVersion -Destination (Join-Path $TestRoot 'candidate-0.15.4')
     $successJob = 'qa-success'
-    $successArgs = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $installRoot 'scripts\Invoke-AtlasReleaseUpdate.ps1'),'-JobId',$successJob,'-InstallRoot',$installRoot,'-DataRoot',$dataRoot,'-UpdateRoot',$updateRoot,'-PackagePath',[string]$successRelease.Archive,'-ManifestPath',[string]$successRelease.Manifest,'-SignaturePath',[string]$successRelease.Signature,'-PublicKeyPath',(Join-Path $installRoot 'resources\atlas-release-public-key.pem'),'-ExpectedVersion','0.15.3','-TaskName',$taskName,'-Port',[string]$Port,'-BindAddress','127.0.0.1')
+    $successArgs = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $installRoot 'scripts\Invoke-AtlasReleaseUpdate.ps1'),'-JobId',$successJob,'-InstallRoot',$installRoot,'-DataRoot',$dataRoot,'-UpdateRoot',$updateRoot,'-PackagePath',[string]$successRelease.Archive,'-ManifestPath',[string]$successRelease.Manifest,'-SignaturePath',[string]$successRelease.Signature,'-PublicKeyPath',(Join-Path $installRoot 'resources\atlas-release-public-key.pem'),'-ExpectedVersion','0.15.4','-TaskName',$taskName,'-Port',[string]$Port,'-BindAddress','127.0.0.1')
     & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @successArgs
     $successExitCode = $LASTEXITCODE
     if ($successExitCode -ne 0) { throw "Le scénario de mise à jour a échoué avec le code $successExitCode." }
-    Wait-Status '0.15.3' | Out-Null
+    Wait-Status '0.15.4' | Out-Null
     $successState = Get-Content -LiteralPath (Join-Path $updateRoot "jobs\$successJob.json") -Raw | ConvertFrom-Json
     if ($successState.status -ne 'succeeded') { throw "État de mise à jour inattendu : $($successState.status)" }
     $afterSuccess = (& (Join-Path $installRoot 'runtime\node.exe') (Join-Path $installRoot 'scripts\atlas-update-inventory.mjs') $dataRoot | ConvertFrom-Json)
 
-    $rollbackRelease = New-CandidateRelease -Version '0.15.4' -FromVersion '0.15.3' -Destination (Join-Path $TestRoot 'candidate-0.15.4')
+    $rollbackRelease = New-CandidateRelease -Version '0.15.5' -FromVersion '0.15.4' -Destination (Join-Path $TestRoot 'candidate-0.15.5')
     $rollbackJob = 'qa-rollback'
-    $rollbackArgs = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $installRoot 'scripts\Invoke-AtlasReleaseUpdate.ps1'),'-JobId',$rollbackJob,'-InstallRoot',$installRoot,'-DataRoot',$dataRoot,'-UpdateRoot',$updateRoot,'-PackagePath',[string]$rollbackRelease.Archive,'-ManifestPath',[string]$rollbackRelease.Manifest,'-SignaturePath',[string]$rollbackRelease.Signature,'-PublicKeyPath',(Join-Path $installRoot 'resources\atlas-release-public-key.pem'),'-ExpectedVersion','0.15.4','-TaskName',$taskName,'-Port',[string]$Port,'-BindAddress','127.0.0.1','-SimulateHealthFailure')
+    $rollbackArgs = @('-NoLogo','-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $installRoot 'scripts\Invoke-AtlasReleaseUpdate.ps1'),'-JobId',$rollbackJob,'-InstallRoot',$installRoot,'-DataRoot',$dataRoot,'-UpdateRoot',$updateRoot,'-PackagePath',[string]$rollbackRelease.Archive,'-ManifestPath',[string]$rollbackRelease.Manifest,'-SignaturePath',[string]$rollbackRelease.Signature,'-PublicKeyPath',(Join-Path $installRoot 'resources\atlas-release-public-key.pem'),'-ExpectedVersion','0.15.5','-TaskName',$taskName,'-Port',[string]$Port,'-BindAddress','127.0.0.1','-SimulateHealthFailure')
     & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" @rollbackArgs
     $rollbackExitCode = $LASTEXITCODE
     if ($rollbackExitCode -eq 0) { throw 'Le scénario de retour arrière devait simuler un échec.' }
-    Wait-Status '0.15.3' | Out-Null
+    Wait-Status '0.15.4' | Out-Null
     $rollbackState = Get-Content -LiteralPath (Join-Path $updateRoot "jobs\$rollbackJob.json") -Raw | ConvertFrom-Json
     if ($rollbackState.status -ne 'rolled-back') { throw "État de retour arrière inattendu : $($rollbackState.status)" }
     $afterRollback = (& (Join-Path $installRoot 'runtime\node.exe') (Join-Path $installRoot 'scripts\atlas-update-inventory.mjs') $dataRoot | ConvertFrom-Json)
@@ -103,11 +103,11 @@ try {
     $report = [ordered]@{
         Result = 'PASS'
         BaselineVersion = $baselineVersion
-        UpdatedVersion = '0.15.3'
+        UpdatedVersion = '0.15.4'
         SuccessfulUpdate = $successState.status
-        SimulatedFailure = '0.15.4'
+        SimulatedFailure = '0.15.5'
         Rollback = $rollbackState.status
-        RestoredVersion = '0.15.3'
+        RestoredVersion = '0.15.4'
         Sqlite = $afterRollback.quickCheck
         VaultWitness = [bool]$afterRollback.vaultWitness
         BusinessCountsPreserved = $true
