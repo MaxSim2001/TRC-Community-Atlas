@@ -17,6 +17,8 @@ test("the Windows installer keeps program and instance data separate", () => {
   assert.match(installer, /Programs\\TRC Community Atlas/);
   assert.match(installer, /TRC Community Atlas\\data/);
   assert.match(installer, /--data/);
+  assert.match(installer, /--trusted-proxy/);
+  assert.match(installer, /trustedProxies = @\(\$TrustedProxy\)/);
   assert.match(installer, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);
   assert.match(installer, /LogonType S4U/);
   assert.match(installer, /TRC Community Atlas - \$\(\[int\]\$previousConfiguration\.port\)/);
@@ -26,6 +28,8 @@ test("the Windows installer keeps program and instance data separate", () => {
   assert.match(configurator, /Tester le port/);
   assert.match(configurator, /aucun serveur ni port de base de donnees/);
   assert.match(configurator, /AllowedOrigin = \$origins/);
+  assert.match(configurator, /TrustedProxy = \$trustedProxies/);
+  assert.match(configurator, /Proxys de confiance/);
 });
 
 test("the portable package includes a runtime, a hash and a real port 9095 deployment test", () => {
@@ -57,6 +61,7 @@ test("the portable package includes a runtime, a hash and a real port 9095 deplo
   assert.match(autostartManager, /TaskName = 'TRC Community Atlas'/);
   assert.match(autostartManager, /New-ScheduledTaskSettingsSet[\s\S]*-Hidden/);
   assert.match(autostartManager, /Disable-ScheduledTask/);
+  assert.match(autostartManager, /--trusted-proxy/);
   assert.doesNotMatch(autostartManager, /New-NetFirewallRule|Set-NetFirewallProfile|netsh|Remove-ScheduledTask/);
   assert.match(workflow, /Test-TRCCommunityAtlasDeployment\.ps1/);
   assert.match(workflow, /-Port 9095/);

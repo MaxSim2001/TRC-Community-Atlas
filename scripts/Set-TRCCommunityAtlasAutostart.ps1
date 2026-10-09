@@ -12,6 +12,7 @@ param(
     [ValidatePattern('^[a-zA-Z0-9.:-]+$')]
     [string]$BindAddress = '127.0.0.1',
     [string]$AllowedOrigins = '',
+    [string]$TrustedProxies = '',
     [switch]$Json
 )
 
@@ -122,6 +123,16 @@ foreach ($origin in $allowedOriginList) {
         throw "Origine HTTPS invalide : $origin"
     }
 }
+$trustedProxyList = @($TrustedProxies -split '[|,;\r\n]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+if ($trustedProxyList.Count -gt 16) {
+    throw 'Un maximum de 16 proxys de confiance peut etre configure.'
+}
+foreach ($proxyAddress in $trustedProxyList) {
+    $parsedProxyAddress = $null
+    if (-not [Net.IPAddress]::TryParse($proxyAddress, [ref]$parsedProxyAddress)) {
+        throw "Adresse de proxy de confiance invalide : $proxyAddress"
+    }
+}
 
 if ($Mode -eq 'Enable') {
     $serverPath = Join-Path $ProjectRoot 'server.mjs'
@@ -148,6 +159,9 @@ if ($Mode -eq 'Enable') {
     )
     foreach ($origin in $allowedOriginList) {
         $arguments += @('--origin', (Quote-AtlasArgument $origin))
+    }
+    foreach ($proxyAddress in $trustedProxyList) {
+        $arguments += @('--trusted-proxy', (Quote-AtlasArgument $proxyAddress))
     }
     $action = New-ScheduledTaskAction -Execute $NodePath -Argument ($arguments -join ' ') -WorkingDirectory $ProjectRoot
     if (Test-IsAdministrator) {

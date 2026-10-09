@@ -16,7 +16,7 @@ et son manifeste depuis la page **Releases** officielle :
 1. décompresser complètement le fichier ZIP;
 2. double-cliquer sur `Installer-Atlas.cmd`;
 3. choisir dans le configurateur le port, l’accès local ou réseau, les dossiers,
-   les origines HTTPS et les options de démarrage;
+   les origines HTTPS, les adresses IP des proxys de confiance et les options de démarrage;
 4. cliquer sur **Installer Atlas**;
 5. créer le premier compte administrateur et activer son MFA dans le navigateur.
 
@@ -52,7 +52,7 @@ Dans PowerShell :
 
 Ouvrir ensuite `http://127.0.0.1:9092`. Au premier démarrage, l’application demande la création du compte administrateur local. Les données sont écrites dans `data/`; le serveur écoute uniquement sur la boucle locale par défaut. Depuis une archive de code source sans runtime, Node.js 22 ou plus récent est requis.
 
-Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute et chaque origine HTTPS autorisée. Exemple : `Start-TRCCommunityAtlas.ps1 -BindAddress 10.0.0.12 -Port 9092 -AllowedOrigin https://atlas.exemple.com`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Dans **Paramètres > Configuration initiale**, ajouter ensuite l’adresse IP exacte du proxy à la liste des proxys de confiance. Atlas ignore les en-têtes `X-Forwarded-*`, `X-Real-IP` et `CF-Connecting-IP` venant de toute autre adresse.
+Pour publier Atlas derrière un mandataire inverse de confiance, fournir explicitement l’adresse privée d’écoute, chaque origine HTTPS autorisée et l’adresse IP exacte de chaque proxy. Le configurateur Windows propose ces trois champs et les conserve pour les redémarrages. Exemple PowerShell : `Start-TRCCommunityAtlas.ps1 -BindAddress 10.0.0.12 -Port 9092 -AllowedOrigin https://atlas.exemple.com -TrustedProxy 10.0.0.5`. Ne pas utiliser `0.0.0.0` lorsqu’une adresse privée précise est disponible. Atlas ignore les en-têtes `X-Forwarded-*`, `X-Real-IP` et `CF-Connecting-IP` venant de toute autre adresse.
 
 ## Démarrage automatique Windows
 

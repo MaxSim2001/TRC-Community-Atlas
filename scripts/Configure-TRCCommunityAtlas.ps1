@@ -33,6 +33,7 @@ $defaults = [ordered]@{
     bindAddress = '127.0.0.1'
     port = 9092
     allowedOrigins = @()
+    trustedProxies = @()
     channel = 'stable'
     autostart = $true
     shortcut = $true
@@ -41,7 +42,7 @@ $defaults = [ordered]@{
 if (Test-Path -LiteralPath $configPathToLoad -PathType Leaf) {
     try {
         $saved = Get-Content -LiteralPath $configPathToLoad -Raw | ConvertFrom-Json
-        foreach ($name in @('installRoot', 'dataRoot', 'bindAddress', 'port', 'allowedOrigins', 'channel', 'autostart', 'shortcut')) {
+        foreach ($name in @('installRoot', 'dataRoot', 'bindAddress', 'port', 'allowedOrigins', 'trustedProxies', 'channel', 'autostart', 'shortcut')) {
             if ($null -ne $saved.$name) {
                 $defaults[$name] = $saved.$name
             }
@@ -123,8 +124,8 @@ function Select-AtlasFolder {
 $form = [Windows.Forms.Form]::new()
 $form.Text = "TRC Community Atlas $($package.version) - Configuration"
 $form.StartPosition = [Windows.Forms.FormStartPosition]::CenterScreen
-$form.ClientSize = [Drawing.Size]::new(820, 730)
-$form.MinimumSize = [Drawing.Size]::new(836, 769)
+$form.ClientSize = [Drawing.Size]::new(820, 820)
+$form.MinimumSize = [Drawing.Size]::new(836, 859)
 $form.BackColor = [Drawing.ColorTranslator]::FromHtml('#080f1d')
 $form.ForeColor = [Drawing.Color]::White
 $form.Font = [Drawing.Font]::new('Segoe UI', 9)
@@ -137,7 +138,7 @@ $form.Controls.Add((New-AtlasLabel -Text 'Tous les choix sont conserves localeme
 $networkGroup = [Windows.Forms.GroupBox]::new()
 $networkGroup.Text = ' Acces a Atlas '
 $networkGroup.Location = [Drawing.Point]::new(30, 128)
-$networkGroup.Size = [Drawing.Size]::new(760, 224)
+$networkGroup.Size = [Drawing.Size]::new(760, 300)
 $networkGroup.ForeColor = [Drawing.Color]::White
 $networkGroup.BackColor = [Drawing.ColorTranslator]::FromHtml('#0d1729')
 $form.Controls.Add($networkGroup)
@@ -193,9 +194,19 @@ $originsBox.Text = (@($defaults.allowedOrigins) -join [Environment]::NewLine)
 Set-AtlasTextBoxStyle $originsBox
 $networkGroup.Controls.Add($originsBox)
 
+$networkGroup.Controls.Add((New-AtlasLabel -Text 'Proxys de confiance (adresses IP, une par ligne, optionnel)' -X 20 -Y 211 -Width 560))
+$trustedProxiesBox = [Windows.Forms.TextBox]::new()
+$trustedProxiesBox.Location = [Drawing.Point]::new(20, 235)
+$trustedProxiesBox.Size = [Drawing.Size]::new(700, 44)
+$trustedProxiesBox.Multiline = $true
+$trustedProxiesBox.ScrollBars = [Windows.Forms.ScrollBars]::Vertical
+$trustedProxiesBox.Text = (@($defaults.trustedProxies) -join [Environment]::NewLine)
+Set-AtlasTextBoxStyle $trustedProxiesBox
+$networkGroup.Controls.Add($trustedProxiesBox)
+
 $storageGroup = [Windows.Forms.GroupBox]::new()
 $storageGroup.Text = ' Programme et donnees '
-$storageGroup.Location = [Drawing.Point]::new(30, 366)
+$storageGroup.Location = [Drawing.Point]::new(30, 442)
 $storageGroup.Size = [Drawing.Size]::new(760, 176)
 $storageGroup.ForeColor = [Drawing.Color]::White
 $storageGroup.BackColor = [Drawing.ColorTranslator]::FromHtml('#0d1729')
@@ -230,7 +241,7 @@ $storageGroup.Controls.Add((New-AtlasLabel -Text 'SQLite est un fichier local : 
 
 $optionsGroup = [Windows.Forms.GroupBox]::new()
 $optionsGroup.Text = ' Options '
-$optionsGroup.Location = [Drawing.Point]::new(30, 556)
+$optionsGroup.Location = [Drawing.Point]::new(30, 632)
 $optionsGroup.Size = [Drawing.Size]::new(760, 88)
 $optionsGroup.ForeColor = [Drawing.Color]::White
 $optionsGroup.BackColor = [Drawing.ColorTranslator]::FromHtml('#0d1729')
@@ -269,12 +280,12 @@ if ($channelBox.SelectedIndex -lt 0) {
 }
 $optionsGroup.Controls.Add($channelBox)
 
-$statusLabel = New-AtlasLabel -Text 'Pret a installer ou reconfigurer Atlas.' -X 32 -Y 660 -Width 520 -Height 36 -Color ([Drawing.ColorTranslator]::FromHtml('#a9bad4'))
+$statusLabel = New-AtlasLabel -Text 'Pret a installer ou reconfigurer Atlas.' -X 32 -Y 736 -Width 520 -Height 36 -Color ([Drawing.ColorTranslator]::FromHtml('#a9bad4'))
 $form.Controls.Add($statusLabel)
 
 $cancelButton = [Windows.Forms.Button]::new()
 $cancelButton.Text = 'Annuler'
-$cancelButton.Location = [Drawing.Point]::new(580, 661)
+$cancelButton.Location = [Drawing.Point]::new(580, 737)
 $cancelButton.Size = [Drawing.Size]::new(92, 36)
 $cancelButton.FlatStyle = [Windows.Forms.FlatStyle]::Flat
 $cancelButton.DialogResult = [Windows.Forms.DialogResult]::Cancel
@@ -283,7 +294,7 @@ $form.CancelButton = $cancelButton
 
 $installButton = [Windows.Forms.Button]::new()
 $installButton.Text = 'Installer Atlas'
-$installButton.Location = [Drawing.Point]::new(682, 661)
+$installButton.Location = [Drawing.Point]::new(682, 737)
 $installButton.Size = [Drawing.Size]::new(108, 36)
 $installButton.FlatStyle = [Windows.Forms.FlatStyle]::Flat
 $installButton.BackColor = [Drawing.ColorTranslator]::FromHtml('#43d7de')
@@ -357,6 +368,17 @@ $installButton.Add_Click({
             }
         }
 
+        $trustedProxies = @($trustedProxiesBox.Text -split '[,;\r\n]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+        if ($trustedProxies.Count -gt 16) {
+            throw 'Saisissez au maximum 16 adresses de proxy de confiance.'
+        }
+        foreach ($proxyAddress in $trustedProxies) {
+            $parsedProxyAddress = $null
+            if (-not [Net.IPAddress]::TryParse($proxyAddress, [ref]$parsedProxyAddress)) {
+                throw "Adresse de proxy de confiance invalide : $proxyAddress"
+            }
+        }
+
         if ($bindAddress -ne '127.0.0.1' -and $bindAddress -ne '::1') {
             $answer = [Windows.Forms.MessageBox]::Show(
                 "Atlas ecoutera sur $bindAddress. L installateur n ouvre aucun pare-feu. Configurez le proxy, TLS et le pare-feu separement. Continuer ?",
@@ -381,6 +403,7 @@ $installButton.Add_Click({
             Port = [int]$portBox.Value
             BindAddress = $bindAddress
             AllowedOrigin = $origins
+            TrustedProxy = $trustedProxies
             Channel = [string]$channelBox.SelectedItem
         }
         if (-not $autostartBox.Checked) { $arguments.SkipAutostart = $true }

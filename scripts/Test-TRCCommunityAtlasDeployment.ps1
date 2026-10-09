@@ -36,6 +36,7 @@ $arguments = @{
     DataRoot = $dataRoot
     Port = $Port
     BindAddress = '127.0.0.1'
+    TrustedProxy = @('127.0.0.1', '::1')
     SkipAutostart = $true
     SkipShortcuts = $true
     Json = $true
@@ -68,6 +69,9 @@ try {
     if ([IO.Path]::GetFullPath([string]$config.dataRoot) -ne [IO.Path]::GetFullPath($dataRoot)) {
         throw 'Le repertoire de donnees configure ne correspond pas au repertoire isole demande.'
     }
+    if (@($config.trustedProxies).Count -ne 2 -or @($config.trustedProxies) -notcontains '127.0.0.1' -or @($config.trustedProxies) -notcontains '::1') {
+        throw 'Les proxys de confiance ne sont pas conserves dans la configuration installee.'
+    }
 
     $databasePath = Join-Path $dataRoot 'atlas.sqlite'
     Stop-Process -Id ([int]$deployment.processId)
@@ -87,6 +91,7 @@ try {
         DataRoot = $dataRoot
         Port = $ReconfiguredPort
         BindAddress = '127.0.0.1'
+        TrustedProxy = @('127.0.0.1', '::1')
         SkipAutostart = $true
         SkipShortcuts = $true
         Json = $true
@@ -103,7 +108,7 @@ try {
     }
     $installedConfigurator = Join-Path $installRoot 'scripts\Configure-TRCCommunityAtlas.ps1'
     $rememberedConfiguration = (& $installedConfigurator -DefaultsOnly | ConvertFrom-Json)
-    if ([int]$rememberedConfiguration.port -ne $ReconfiguredPort -or [IO.Path]::GetFullPath([string]$rememberedConfiguration.dataRoot) -ne [IO.Path]::GetFullPath($dataRoot)) {
+    if ([int]$rememberedConfiguration.port -ne $ReconfiguredPort -or [IO.Path]::GetFullPath([string]$rememberedConfiguration.dataRoot) -ne [IO.Path]::GetFullPath($dataRoot) -or @($rememberedConfiguration.trustedProxies).Count -ne 2) {
         throw 'Le configurateur installe ne recharge pas la configuration active.'
     }
     if ($TestAutostart) {
@@ -117,6 +122,7 @@ try {
             -TaskName $autostartTaskName `
             -Port $ReconfiguredPort `
             -BindAddress '127.0.0.1' `
+            -TrustedProxies '127.0.0.1|::1' `
             -Json | ConvertFrom-Json)
         if (-not $enabledAutostart.installed -or -not $enabledAutostart.enabled -or -not $enabledAutostart.hidden -or $enabledAutostart.trigger -notin @('startup', 'logon')) {
             throw 'La tache de demarrage Atlas n a pas ete configuree correctement.'

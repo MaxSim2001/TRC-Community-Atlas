@@ -7,7 +7,8 @@ param(
     [ValidateRange(1, 65535)]
     [int]$Port = 9092,
     [string]$BindAddress = '127.0.0.1',
-    [string[]]$AllowedOrigin = @()
+    [string[]]$AllowedOrigin = @(),
+    [string[]]$TrustedProxy = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,6 +81,12 @@ foreach ($origin in $AllowedOrigin) {
         throw "Origine HTTPS invalide : $origin"
     }
 }
+foreach ($proxyAddress in $TrustedProxy) {
+    $parsedProxyAddress = $null
+    if (-not [Net.IPAddress]::TryParse($proxyAddress, [ref]$parsedProxyAddress)) {
+        throw "Adresse de proxy de confiance invalide : $proxyAddress"
+    }
+}
 
 $runtimeDirectory = Join-Path $ProjectRoot 'runtime'
 $runtimeNodePath = Join-Path $runtimeDirectory 'node.exe'
@@ -107,6 +114,9 @@ if ($existingTask) {
 $arguments = ('"{0}" --port {1} --host {2} --data "{3}"' -f $serverPath, $Port, $BindAddress, $DataRoot)
 foreach ($origin in $AllowedOrigin) {
     $arguments += (' --origin "{0}"' -f $origin)
+}
+foreach ($proxyAddress in $TrustedProxy) {
+    $arguments += (' --trusted-proxy "{0}"' -f $proxyAddress)
 }
 $action = New-ScheduledTaskAction `
     -Execute $runtimeNodePath `

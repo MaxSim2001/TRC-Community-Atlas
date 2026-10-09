@@ -10,6 +10,7 @@ param(
     [string]$BindAddress = '127.0.0.1',
 
     [string[]]$AllowedOrigin = @(),
+    [string[]]$TrustedProxy = @(),
     [string]$NodePath = '',
     [ValidatePattern('^[^\\/:*?"<>|]{1,180}$')]
     [string]$TaskName = 'TRC Community Atlas',
@@ -168,6 +169,17 @@ foreach ($origin in $AllowedOrigin) {
     }
 }
 
+$TrustedProxy = @($TrustedProxy | ForEach-Object { [string]$_ } | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
+if ($TrustedProxy.Count -gt 16) {
+    throw 'Un maximum de 16 proxys de confiance peut etre configure.'
+}
+foreach ($proxyAddress in $TrustedProxy) {
+    $parsedProxyAddress = $null
+    if (-not [Net.IPAddress]::TryParse($proxyAddress, [ref]$parsedProxyAddress)) {
+        throw "Adresse de proxy de confiance invalide : $proxyAddress"
+    }
+}
+
 $runtimeSource = Resolve-NodeRuntime -RequestedPath $NodePath -SourceRoot $sourceRoot
 
 if ($previousConfiguration -and $previousConfiguration.port -and $previousConfiguration.installRoot) {
@@ -263,6 +275,7 @@ $configuration = [ordered]@{
     bindAddress = $BindAddress
     port = $Port
     allowedOrigins = @($AllowedOrigin)
+    trustedProxies = @($TrustedProxy)
     channel = $Channel
     autostart = -not $SkipAutostart
     shortcut = -not $SkipShortcuts
@@ -285,6 +298,9 @@ $serverArguments = @(
 )
 foreach ($origin in $AllowedOrigin) {
     $serverArguments += @('--origin', (Quote-CommandArgument $origin))
+}
+foreach ($proxyAddress in $TrustedProxy) {
+    $serverArguments += @('--trusted-proxy', (Quote-CommandArgument $proxyAddress))
 }
 $argumentLine = $serverArguments -join ' '
 
