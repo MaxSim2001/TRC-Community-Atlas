@@ -65,8 +65,9 @@ validation Ed25519 du manifeste et du SHA-256 du paquet. Atlas 0.15.0 est la
 version d’amorçage : son installation initiale est manuelle; le bouton intégré
 sert aux versions stables ultérieures.
 
-La licence est personnalisée et doit être validée par un juriste avant
-publication. Atlas doit être présenté comme un logiciel « source disponible »,
+Une validation juridique indépendante de cette licence personnalisée demeure
+recommandée, sans être une condition technique de publication. Atlas doit être
+présenté comme un logiciel « source disponible »,
 jamais comme un logiciel open source approuvé par l'OSI. Le détail des usages MSP
 permis et des offres interdites est consigné dans [`LICENSING.md`](LICENSING.md).
 

@@ -47,8 +47,9 @@ télémétrie. Atlas demeure autonome et ne dépend pas de TRC Account.
 | Autres plateformes | Hors portée initiale |
 
 La disponibilité du code sous cette licence personnalisée doit être présentée
-comme « source disponible » et non « open source ». Son texte doit être validé
-par un juriste avant publication. La configuration du service
+comme « source disponible » et non « open source ». Une validation juridique
+indépendante reste recommandée, sans être une condition technique de
+publication. La configuration du service
 de signature public nécessite encore la vérification externe de l'identité
 TheRisingCloud et l'approbation de ses éventuels frais.
 

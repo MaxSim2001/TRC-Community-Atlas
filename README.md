@@ -141,9 +141,9 @@ proposé comme produit SaaS payant principal sans autorisation écrite préalabl
 de TheRisingCloud. Les exemples et la frontière détaillée se trouvent dans le
 [guide de licence](docs/LICENSING.md).
 
-Cette licence est personnalisée et doit faire l'objet d'une validation juridique
-avant sa publication ou avant que TheRisingCloud s'y fie dans un contexte
-commercial ou contentieux.
+Cette licence est personnalisée. Une validation juridique indépendante demeure
+recommandée pour réduire les ambiguïtés dans un contexte commercial ou
+contentieux, mais elle n'est pas une condition technique d'utilisation d'Atlas.
 
 TheRisingCloud demeure titulaire du projet. Une contribution externe ne peut
 être fusionnée qu'après signature d'une entente de cession conforme à

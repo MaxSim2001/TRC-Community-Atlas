@@ -91,12 +91,13 @@ soutien, de maintenance, de correction ou de mise à jour. Chaque utilisateur es
 responsable de son infrastructure, de sa sécurité, de sa conformité et de ses
 sauvegardes.
 
-## Validation juridique requise
+## Prudence juridique
 
 Cette licence personnalisée traduit l'intention fonctionnelle du projet, mais
 elle n'a pas été présentée comme un texte standard approuvé par un organisme de
-licences. **TheRisingCloud doit la faire valider par un juriste compétent avant
-sa publication ou avant de s'y fier pour une utilisation commerciale ou un
-litige.** La validation devrait notamment couvrir la juridiction applicable, la
-limitation de responsabilité, les droits sur les contributions et la frontière
-entre services MSP permis et offre Atlas interdite.
+licences. TheRisingCloud a choisi de ne pas faire d'une validation juridique une
+condition préalable à sa publication ou à son utilisation. Une validation
+indépendante demeure néanmoins recommandée pour réduire les ambiguïtés relatives
+à la juridiction applicable, à la limitation de responsabilité, aux droits sur
+les contributions et à la frontière entre services MSP permis et offre Atlas
+interdite.

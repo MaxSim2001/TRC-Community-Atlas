@@ -25,7 +25,8 @@ La licence retenue est la TRC Community Atlas Source-Available License 1.0. Elle
 autorise gratuitement les usages personnels, professionnels, internes et MSP,
 tout en interdisant la revente, les forks commercialisés et les offres SaaS dont
 Atlas est le produit principal sans autorisation écrite. Cette licence
-personnalisée doit être validée juridiquement avant publication.
+personnalisée peut faire l'objet d'une validation juridique indépendante, qui
+reste recommandée sans constituer une condition technique du projet.
 
 ## 2. Deux produits autonomes
 
