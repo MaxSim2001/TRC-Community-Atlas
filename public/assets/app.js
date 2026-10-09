@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.13.2";
+  const ATLAS_VERSION = "0.14.0";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -179,6 +179,15 @@
     deploymentProbe: null,
     deploymentPortProbe: null,
     deploymentHealthLoading: false,
+    backupStatus: null,
+    backupLoading: false,
+    updateStatus: null,
+    updateLoading: false,
+    localApiStatus: null,
+    localApiLoading: false,
+    createdApiToken: "",
+    createdWebhookSecret: "",
+    importPreview: null,
   };
 
   let sessionExpiryTimer = null;
@@ -253,7 +262,8 @@
   ];
 
   const customModules = customModuleLabels.map((label) => ({ id: `custom-${slug(label)}`, label, icon: moduleIcon(label), group: "custom", description: `Type de documentation personnalisé : ${label}.` }));
-  const moduleDefinitions = [...coreModules, ...appServiceModules, ...customModules];
+  const builtInModuleDefinitions = [...coreModules, ...appServiceModules, ...customModules];
+  let moduleDefinitions = [...builtInModuleDefinitions];
   const moduleMap = new Map(moduleDefinitions.map((module) => [module.id, module]));
   const defaultVisibleModuleIds = coreModules.map((module) => module.id);
 
@@ -943,10 +953,21 @@
   }
 
   function moduleProfile(module) {
+    if (module?.userDefined) {
+      return {
+        ...moduleProfileCatalog.generic,
+        listLabel: "Fiche",
+        titleLabel: module.titleLabel || "Nom de la fiche",
+        fields: module.fields || [],
+      };
+    }
     return moduleProfileCatalog[moduleProfileKey(module)] || moduleProfileCatalog.generic;
   }
 
   function moduleEditorAuditEntry(module) {
+    if (module?.userDefined) {
+      return { ...module, profileKey: "customDefinition", profileLabel: "Schéma personnalisé", fieldCount: module.fields?.length || 0, fields: module.fields || [], editorKind: "shared" };
+    }
     const dedicated = {
       configurations: { profileKey: "configuration", profileLabel: "Configuration avancée", fieldCount: 39, editorKind: "dedicated", fields: [] },
       locations: { profileKey: "location", profileLabel: "Site et emplacement", fieldCount: 8, editorKind: "dedicated", fields: [] },
@@ -969,7 +990,7 @@
       ids.add(module.id);
       if (module.fieldCount < 4) issues.push(`${module.id}: moins de quatre champs métier`);
       if (module.editorKind === "dedicated") continue;
-      const profile = moduleProfileCatalog[module.profileKey];
+      const profile = module.userDefined ? { fields: module.fields || [] } : moduleProfileCatalog[module.profileKey];
       if (!profile) { issues.push(`${module.id}: profil ${module.profileKey} absent`); continue; }
       const fieldKeys = new Set();
       for (const field of profile.fields) {
@@ -1450,6 +1471,9 @@
     state.sessions = [];
     state.auditEntries = [];
     state.pendingPrivilegedAction = null;
+    state.localApiStatus = null;
+    state.createdApiToken = "";
+    state.createdWebhookSecret = "";
     state.search = "";
     resetQuickRelationPicker();
     state.page = "dashboard";
@@ -1630,6 +1654,10 @@
     const rawRecordId = state.page === "record" ? parts[2] || null : null;
     try { state.recordId = rawRecordId ? decodeURIComponent(rawRecordId) : null; } catch { state.recordId = rawRecordId; }
     if (state.page === "organization" && state.detailId) state.searchScope = state.detailId;
+    if (!(state.page === "settings" && state.detailId === "integrations")) {
+      state.createdApiToken = "";
+      state.createdWebhookSecret = "";
+    }
   }
 
   async function boot() {
@@ -1672,6 +1700,7 @@
     state.workspace = document.data;
     normalizeWorkspace();
     state.revision = document.revision;
+    loadModulePreferences();
   }
 
   async function loadDeploymentHealth({ renderAfter = true } = {}) {
@@ -1688,8 +1717,54 @@
     }
   }
 
+  async function loadBackupStatus({ renderAfter = true } = {}) {
+    if (!isAdministrator() || state.backupLoading) return;
+    state.backupLoading = true;
+    if (renderAfter) render();
+    try { state.backupStatus = await api("/api/settings/backups"); }
+    catch (error) { state.backupStatus = { error: error.message, files: [], settings: null }; }
+    finally { state.backupLoading = false; if (renderAfter) render(); }
+  }
+
+  async function loadUpdateStatus({ renderAfter = true } = {}) {
+    if (!isAdministrator() || state.updateLoading) return;
+    state.updateLoading = true;
+    if (renderAfter) render();
+    try { state.updateStatus = await api("/api/settings/updates"); }
+    catch (error) { state.updateStatus = { error: error.message, currentVersion: ATLAS_VERSION, lastCheck: null }; }
+    finally { state.updateLoading = false; if (renderAfter) render(); }
+  }
+
+  async function loadLocalApiStatus({ renderAfter = true } = {}) {
+    if (!isAdministrator() || state.localApiLoading) return;
+    state.localApiLoading = true;
+    if (renderAfter) render();
+    try { state.localApiStatus = await api("/api/settings/local-api"); }
+    catch (error) { state.localApiStatus = { error: error.message, enabled: false, tokens: [] }; }
+    finally { state.localApiLoading = false; if (renderAfter) render(); }
+  }
+
+  function refreshModuleDefinitions() {
+    const allowedIcons = new Set(["grid", "server", "book", "users", "globe", "pin", "key", "lock", "network", "refresh", "mail", "file", "printer", "phone", "wifi", "shield", "activity"]);
+    const localModules = (state.workspace?.customModuleDefinitions || []).map((definition) => ({
+      id: definition.id,
+      label: definition.label,
+      icon: allowedIcons.has(definition.icon) ? definition.icon : "grid",
+      group: "custom",
+      description: definition.description || `Module personnalisé : ${definition.label}.`,
+      titleLabel: definition.titleLabel || "Nom de la fiche",
+      fields: definition.fields || [],
+      userDefined: true,
+      archived: definition.archived === true,
+    })).filter((module) => !module.archived && !builtInModuleDefinitions.some((builtIn) => builtIn.id === module.id));
+    moduleDefinitions = [...builtInModuleDefinitions, ...localModules];
+    moduleMap.clear();
+    moduleDefinitions.forEach((module) => moduleMap.set(module.id, module));
+  }
+
   function normalizeWorkspace() {
     if (!Array.isArray(state.workspace.moduleRecords)) state.workspace.moduleRecords = [];
+    if (!Array.isArray(state.workspace.customModuleDefinitions)) state.workspace.customModuleDefinitions = [];
     if (!Array.isArray(state.workspace.relations)) state.workspace.relations = [];
     if (!Array.isArray(state.workspace.relationshipEvents)) state.workspace.relationshipEvents = [];
     if (!Array.isArray(state.workspace.templates)) state.workspace.templates = [
@@ -1775,6 +1850,7 @@
       }
     }
     state.workspace.schemaVersion = Math.max(Number(state.workspace.schemaVersion) || 1, 5);
+    refreshModuleDefinitions();
   }
 
   function modulePreferenceKey() {
@@ -2979,6 +3055,16 @@
               ${module.id === "checklists" ? `<label class="span-2">Étapes de la checklist<textarea name="checklistSteps" maxlength="5000" rows="8" placeholder="[ ] Étape à faire&#10;[x] Étape terminée">${escapeHtml((item?.checklist || []).map((step) => `[${step.done ? "x" : " "}] ${step.label}`).join("\n"))}</textarea><small>Utilisez [x] pour une étape terminée et [ ] pour une étape à faire.</small></label>` : ""}
             </div>
           </section>
+          <section class="record-editor-section record-review-section">
+            <header><span class="record-editor-section-icon">${icon("check", 19)}</span><div><h2>Cycle de révision</h2><p>Attribuez la vérification, une échéance et un état d’approbation distinct de l’état opérationnel.</p></div></header>
+            <div class="record-editor-fields">
+              <label>État de révision<select name="reviewState"><option value="draft" ${item?.reviewState === "draft" || !item ? "selected" : ""}>Brouillon</option><option value="in-review" ${item?.reviewState === "in-review" ? "selected" : ""}>En révision</option><option value="approved" ${item?.reviewState === "approved" ? "selected" : ""}>Approuvée</option><option value="stale" ${item?.reviewState === "stale" ? "selected" : ""}>À revoir</option></select></label>
+              <label>Responsable de révision<input name="reviewOwner" value="${escapeHtml(item?.reviewOwner || item?.owner || "")}" maxlength="120" /></label>
+              <label>Révision prévue<input name="reviewDueAt" type="date" value="${escapeHtml(item?.reviewDueAt || "")}" /></label>
+              <label>Cadence (jours)<input name="reviewIntervalDays" type="number" min="0" max="730" value="${Number(item?.reviewIntervalDays) || ""}" placeholder="Ex. 90" /></label>
+              ${item?.approvedAt ? `<div class="file-sharing-access-summary span-2">${icon("shield", 17)}<span><strong>Approuvée par ${escapeHtml(item.approvedBy || "un administrateur")}</strong><small>${formatDateTime(item.approvedAt)}</small></span></div>` : ""}
+            </div>
+          </section>
           <section class="record-editor-section record-editor-security-section"><header><span class="record-editor-section-icon">${icon("shield", 19)}</span><div><h2>Sécurité et portée</h2><p>Cette fiche reste dans Atlas et suit les permissions de l’organisation active.</p></div></header><div class="record-editor-fields"><div class="file-sharing-access-summary span-2">${icon("lock", 18)}<span><strong>Accessible aux comptes Atlas autorisés pour ${escapeHtml(orgName(organizationId))}.</strong><small>Aucune donnée n’est envoyée à TRC Account, au RMM ou à un service externe.</small></span></div></div></section>
         </div>
         <footer class="record-editor-actions"><div class="form-error" role="alert"></div><button class="secondary" type="button" data-action="cancel-record-editor" data-module-id="${module.id}">Annuler</button><button class="primary" type="submit">${item ? "Enregistrer les modifications" : "Créer la fiche"}</button></footer>
@@ -3224,6 +3310,7 @@
       <div class="data-tool-grid">
         <section class="panel data-tool-card"><span class="module-hero-icon">${icon("download", 22)}</span><div><p class="eyebrow">SAUVEGARDE DOCUMENTAIRE</p><h2>Exporter Atlas</h2><p>Télécharge les organisations, configurations, procédures, relations, modules et paramètres documentaires.</p></div><ul><li>Aucun mot de passe du coffre</li><li>Aucun compte, MFA ou session</li><li>Format JSON versionné</li></ul><button class="primary" data-action="export-workspace" ${admin ? "" : "disabled"}>${icon("download", 16)} Télécharger l’export</button></section>
         <section class="panel data-tool-card"><span class="module-hero-icon">${icon("upload", 22)}</span><div><p class="eyebrow">RESTAURATION</p><h2>Importer un export</h2><p>Valide le format, conserve automatiquement la version actuelle, puis remplace la documentation.</p></div><ul><li>Administrateur local requis</li><li>Confirmation obligatoire</li><li>Retour arrière par Versions</li></ul><label class="secondary file-button ${admin ? "" : "disabled"}">${icon("upload", 16)} Choisir un fichier<input type="file" data-import-workspace accept="application/json,.json" ${admin ? "" : "disabled"} /></label></section>
+        <section class="panel data-tool-card guided-import-card"><span class="module-hero-icon">${icon("grid", 22)}</span><div><p class="eyebrow">IMPORT GUIDÉ</p><h2>Ajouter depuis un CSV</h2><p>Prévisualisez le fichier, associez les colonnes puis ajoutez les fiches dans une seule révision restaurable.</p></div><label>Destination<select data-guided-import-target ${admin ? "" : "disabled"}><option value="organizations">Organisations</option><option value="configurations">Configurations</option>${moduleDefinitions.filter((module) => !["passwords", "locations", "configurations"].includes(module.id)).map((module) => `<option value="module:${escapeHtml(module.id)}">${escapeHtml(module.label)}</option>`).join("")}</select></label><label class="secondary file-button ${admin ? "" : "disabled"}">${icon("upload", 16)} Choisir un CSV<input type="file" data-guided-import-file accept="text/csv,.csv" ${admin ? "" : "disabled"} /></label><ul><li>Aucun secret accepté</li><li>Aperçu avant import</li><li>Maximum 1 000 lignes</li></ul></section>
         <section class="panel data-tool-card full-backup-card"><span class="module-hero-icon">${icon("shield", 22)}</span><div><p class="eyebrow">SAUVEGARDE COMPLÈTE CHIFFRÉE</p><h2>Protéger toute l’instance</h2><p>Inclut comptes, MFA, coffre, clé locale, base SQLite et pièces jointes dans un fichier AES-256-GCM.</p></div><ul><li>Phrase secrète saisie sans historique shell</li><li>Sessions volontairement exclues</li><li>Restauration avec copie de sécurité préalable</li></ul><button class="secondary" type="button" data-action="copy-full-backup-command" ${admin ? "" : "disabled"}>${icon("copy", 15)} Copier la commande locale</button></section>
         <section class="panel data-tool-card"><span class="module-hero-icon">${icon("key", 22)}</span><div><p class="eyebrow">RÉCUPÉRATION HORS BANDE</p><h2>Compte de secours</h2><p>Un outil local réinitialise le MFA d’un administrateur, génère un mot de passe temporaire et conserve une sauvegarde datée.</p></div><ul><li>Aucun accès réseau</li><li>Confirmation RESET_MFA obligatoire</li><li>Action inscrite dans l’audit si SQLite est disponible</li></ul><code>scripts/atlas-break-glass.mjs</code></section>
       </div>
@@ -3251,6 +3338,8 @@
       return reviewedAt && ((now - new Date(`${reviewedAt}T12:00:00`)) / 86400000) >= rules.staleDays;
     });
     const missingOwnerAssets = rules.requireOwner ? operationalAssets.filter((asset) => !String(asset.raw.owner || "").trim()) : [];
+    const reviewAssets = operationalAssets.filter((asset) => asset.type === "module" && ["draft", "in-review", "stale"].includes(asset.raw.reviewState || "draft"));
+    const overdueReviews = operationalAssets.filter((asset) => asset.type === "module" && asset.raw.reviewDueAt && Date.parse(`${asset.raw.reviewDueAt}T23:59:59`) < now && asset.raw.status !== "archived");
     const signals = new Map();
     const addSignal = (asset, reason, date = "") => {
       const current = signals.get(asset.ref) || { asset, reasons: [], date: "" };
@@ -3261,11 +3350,13 @@
     expiryAssets.forEach((asset) => addSignal(asset, "Échéance proche ou dépassée", asset.raw.expiresOn));
     staleAssets.forEach((asset) => addSignal(asset, "Révision en retard", asset.type === "configuration" ? asset.raw.lastReviewed : asset.raw.updatedAt));
     missingOwnerAssets.forEach((asset) => addSignal(asset, "Responsable manquant"));
+    reviewAssets.forEach((asset) => addSignal(asset, asset.raw.reviewState === "in-review" ? "Approbation en attente" : asset.raw.reviewState === "stale" ? "Cycle de révision à relancer" : "Brouillon non soumis", asset.raw.reviewDueAt || ""));
+    overdueReviews.forEach((asset) => addSignal(asset, "Révision planifiée en retard", asset.raw.reviewDueAt));
     const queue = [...signals.values()].sort((a, b) => Number(b.reasons.length) - Number(a.reasons.length) || String(a.date || "9999").localeCompare(String(b.date || "9999")) || a.asset.label.localeCompare(b.asset.label, state.locale));
     const queuePage = paginate(queue, 50);
     const visibleQueue = queuePage.items;
     return `<div class="page workflows-page">${pageHeader("Workflows", "Règles locales qui signalent les documents à réviser; aucune notification ne quitte cette instance.")}
-      <section class="metrics-grid workflow-metrics">${metricCard("clock", expiryAssets.length, "Échéances", `Dans ${rules.expiryDays} jours`, "violet")}${metricCard("history", staleAssets.length, "Fiches anciennes", `Plus de ${rules.staleDays} jours`, "blue")}${metricCard("users", missingOwnerAssets.length, "Sans responsable", rules.requireOwner ? "Règle active" : "Règle inactive", "mint")}</section>
+      <section class="metrics-grid workflow-metrics">${metricCard("clock", expiryAssets.length, "Échéances", `Dans ${rules.expiryDays} jours`, "violet")}${metricCard("history", staleAssets.length, "Fiches anciennes", `Plus de ${rules.staleDays} jours`, "blue")}${metricCard("users", missingOwnerAssets.length, "Sans responsable", rules.requireOwner ? "Règle active" : "Règle inactive", "mint")}${metricCard("check", reviewAssets.length + overdueReviews.length, "Révisions", "brouillons, approbations et retards", "cyan")}</section>
       <section class="panel workflow-queue"><header><div><p class="eyebrow">FILE D’ACTIONS</p><h2>Fiches à traiter</h2><p>Chaque signal est calculé à partir d’un champ visible. Ouvrez la fiche pour corriger la cause.</p></div><span class="workflow-queue-count">${queue.length}</span></header>${visibleQueue.length ? `<div class="table-scroll"><table><thead><tr><th>Fiche</th><th>Organisation</th><th>Motif</th><th>Date de référence</th><th></th></tr></thead><tbody>${visibleQueue.map(({ asset, reasons, date }) => `<tr><td><button class="table-link" type="button" data-action="open-asset" data-asset-ref="${escapeHtml(asset.ref)}"><span class="type-icon">${icon(asset.icon, 16)}</span><span><strong>${escapeHtml(asset.label)}</strong><small>${escapeHtml(asset.kind)}</small></span></button></td><td>${escapeHtml(orgName(asset.organizationId))}</td><td><div class="workflow-reasons">${reasons.map((reason) => `<span>${escapeHtml(reason)}</span>`).join("")}</div></td><td>${date ? formatDate(date) : "—"}</td><td><button class="secondary compact" type="button" data-action="open-asset" data-asset-ref="${escapeHtml(asset.ref)}">Ouvrir ${icon("chevron", 13)}</button></td></tr>`).join("")}</tbody></table></div>${paginationMarkup(queuePage)}` : emptyState("Aucune fiche ne correspond aux règles actives.")}</section>
       <form class="panel workflow-form" data-form="workflows"><div><p class="eyebrow">RÈGLES LOCALES</p><h2>Seuils de suivi</h2><p>Ces règles alimentent le dashboard et les compteurs. Elles ne déclenchent ni courriel ni appel externe.</p></div><label>Échéance à signaler<input name="expiryDays" type="number" min="1" max="365" value="${rules.expiryDays}" ${canWrite() ? "" : "disabled"}/><small>Nombre de jours avant expiration.</small></label><label>Fiche considérée ancienne<input name="staleDays" type="number" min="7" max="730" value="${rules.staleDays}" ${canWrite() ? "" : "disabled"}/><small>Nombre de jours sans révision.</small></label><label class="checkbox-label"><input name="requireOwner" type="checkbox" ${rules.requireOwner ? "checked" : ""} ${canWrite() ? "" : "disabled"}/> Signaler les fiches sans responsable</label><div class="settings-save"><span>${canWrite() ? "Calcul entièrement local" : "Consultation seulement"}</span>${writeButton(`<button class="primary" type="submit">${t("save")}</button>`)}</div></form>
     </div>`;
@@ -3274,6 +3365,8 @@
   function renderModulesManager() {
     const selectedCount = state.visibleModuleIds.size;
     const audit = moduleCatalogAudit();
+    const localDefinitions = state.workspace.customModuleDefinitions || [];
+    const localBuilder = isAdministrator() ? `<section class="panel local-module-builder"><header><div><p class="eyebrow">CONSTRUCTEUR LOCAL</p><h2>Modules créés sur cette instance</h2><p>Ajoutez un registre métier avec ses propres champs typés, sans code et sans champ secret.</p></div><button class="primary compact" type="button" data-action="new-custom-module">${icon("plus", 15)} Nouveau module</button></header>${localDefinitions.length ? `<div class="local-module-list">${localDefinitions.map((definition) => { const count = state.workspace.moduleRecords.filter((record) => record.moduleId === definition.id).length; return `<button type="button" data-action="edit-custom-module" data-id="${escapeHtml(definition.id)}"><span class="module-toggle-icon">${icon(definition.icon || "grid", 18)}</span><span><strong>${escapeHtml(definition.label)}</strong><small>${definition.fields.length} champs · ${count} fiche${count === 1 ? "" : "s"}</small></span>${icon("edit", 14)}</button>`; }).join("")}</div>` : `<div class="local-module-empty">${icon("grid", 20)}<span><strong>Aucun module local</strong><small>Les 179 modules fournis restent disponibles ci-dessous.</small></span></div>`}<div class="module-boundary-note"><strong>Secrets interdits :</strong> les mots de passe, jetons et clés API doivent rester dans Passwords puis être reliés à la fiche.</div></section>` : "";
     return `<div class="page modules-manager-page">
       ${pageHeader("Gérer les modules", "Choisissez précisément les sections affichées dans votre navigation. Chaque module possède maintenant un profil métier vérifié; les données restent conservées lorsqu’un module est masqué.")}
       <section class="module-audit-summary" aria-label="Couverture de la bibliothèque">
@@ -3282,6 +3375,7 @@
         <article><span>${icon("check", 18)}</span><div><strong>${audit.total - audit.issues.length}</strong><small>modules validés</small></div></article>
         <article class="${audit.issues.length ? "has-issues" : "is-valid"}"><span>${icon(audit.issues.length ? "alert" : "shield", 18)}</span><div><strong>${audit.issues.length}</strong><small>anomalie de schéma</small></div></article>
       </section>
+      ${localBuilder}
       <form data-form="module-preferences" class="modules-manager-form">
         <section class="panel module-manager-toolbar">
           <label class="module-search-field">${icon("search", 17)}<input type="search" data-module-search placeholder="Rechercher parmi ${moduleDefinitions.length} modules…" value="${escapeHtml(state.moduleSearch)}" /></label>
@@ -3326,7 +3420,7 @@
     </section>`;
   }
 
-  const settingsPages = new Set(["overview", "general", "appearance", "integrations", "deployment", "health", "security"]);
+  const settingsPages = new Set(["overview", "general", "appearance", "integrations", "deployment", "health", "backups", "updates", "security"]);
 
   function activeSettingsPage() {
     return settingsPages.has(state.detailId) ? state.detailId : "overview";
@@ -3340,6 +3434,8 @@
       { key: "integrations", iconName: "link", label: t("integrations"), visible: true },
       { key: "deployment", iconName: "compass", label: "Configuration initiale", visible: isAdministrator(), protected: true },
       { key: "health", iconName: "activity", label: "Santé du site", visible: isAdministrator(), protected: true },
+      { key: "backups", iconName: "download", label: "Sauvegardes", visible: isAdministrator(), protected: true },
+      { key: "updates", iconName: "refresh", label: "Mises à jour", visible: isAdministrator(), protected: true },
       { key: "security", iconName: "shield", label: t("security"), visible: isAdministrator(), protected: true },
     ];
     return `<nav class="settings-nav" aria-label="Pages des paramètres">${items.filter((item) => item.visible).map((item) => `<button class="${activePage === item.key ? "active" : ""}" type="button" data-route="settings/${item.key}" ${activePage === item.key ? 'aria-current="page"' : ""}>${icon(item.iconName, 16)}<span>${escapeHtml(item.label)}</span>${item.protected ? `<small title="Réservé au super administrateur">${icon("lock", 12)}</small>` : ""}</button>`).join("")}${isAdministrator() ? `<button class="settings-nav-accounts" type="button" data-route="accounts">${icon("users", 16)}<span>Comptes et accès</span>${icon("chevron", 12)}</button>` : ""}</nav>`;
@@ -3363,6 +3459,8 @@
     const adminCards = isAdministrator() ? [
       { route: "settings/deployment", iconName: "compass", title: "Configuration initiale", text: "Domaine, accès HTTPS, proxy inverse, identité et démarrage Windows.", badge: "Super admin" },
       { route: "settings/health", iconName: "activity", title: "Santé du site", text: "État du service, du port local, de l’autodémarrage, du stockage et du domaine.", badge: state.deploymentHealth?.summary?.warning ? `${state.deploymentHealth.summary.warning} à vérifier` : "Protégé" },
+      { route: "settings/backups", iconName: "download", title: "Sauvegardes", text: "Sauvegardes complètes chiffrées, emplacement, horaire, rétention et tests d’intégrité.", badge: state.backupStatus?.settings?.lastSuccessAt ? "Active" : "À configurer" },
+      { route: "settings/updates", iconName: "refresh", title: "Mises à jour", text: "Vérification GitHub manuelle et garde-fou de signature avant toute installation.", badge: `v${ATLAS_VERSION}` },
       { route: "settings/security", iconName: "shield", title: "Sécurité locale", text: "MFA renforcé et règles de rotation des mots de passe.", badge: "Super admin" },
       { route: "accounts", iconName: "users", title: "Comptes et accès", text: "Rôles, compagnies autorisées, coffre, MFA et sessions.", badge: `${state.users.length} compte${state.users.length === 1 ? "" : "s"}` },
     ] : [];
@@ -3397,6 +3495,34 @@
     return renderSettingsShell("deployment", "Configuration initiale", "Réglages protégés du domaine, de l’accès public et du démarrage Windows.", `${deploymentForm}${autostartForm}`);
   }
 
+  function renderBackupSettingsPage() {
+    if (!isAdministrator()) return renderProtectedSettingsDenied("Sauvegardes");
+    const status = state.backupStatus;
+    if (!status && !state.backupLoading) queueMicrotask(() => loadBackupStatus());
+    if (!status?.settings) {
+      return renderSettingsShell("backups", "Sauvegardes", "Protection complète de cette instance Atlas.", `<section class="panel settings-section"><div><p class="eyebrow">SAUVEGARDES</p><h2>${state.backupLoading ? "Chargement…" : "Gestionnaire indisponible"}</h2><p>${escapeHtml(status?.error || "Lecture de la configuration locale en cours.")}</p></div><button class="secondary" type="button" data-action="refresh-backups">${icon("refresh", 15)} Réessayer</button></section>`);
+    }
+    const settings = status.settings;
+    const weekdayOptions = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"].map((label, index) => `<option value="${index}" ${settings.weekday === index ? "selected" : ""}>${label}</option>`).join("");
+    const files = status.files || [];
+    const schedulerLabel = settings.enabled ? `Prochaine exécution ${settings.nextRunAt ? formatDateTime(settings.nextRunAt) : "à calculer"}` : "Planification désactivée";
+    const lastRun = settings.lastSuccessAt ? `${formatDateTime(settings.lastSuccessAt)} · ${formatFileSize(settings.lastBytes)} · ${settings.lastFileCount} fichiers` : "Aucune sauvegarde complète réussie";
+    const filesMarkup = files.length ? `<div class="backup-history-list">${files.map((file) => `<details class="backup-history-item"><summary><span>${icon("shield", 17)}<span><strong>${escapeHtml(file.name)}</strong><small>${formatDateTime(file.modifiedAt)} · ${formatFileSize(file.size)}</small></span></span>${icon("chevron", 14)}</summary><form data-form="backup-inspect" data-name="${escapeHtml(file.name)}"><p>Déchiffre la sauvegarde en mémoire, valide chaque empreinte SHA-256 et n’écrit aucun fichier restauré.</p><label>Phrase secrète de cette sauvegarde<input name="passphrase" type="password" minlength="12" autocomplete="new-password" required/></label>${settingsAdminMfaMarkup("Le test lit une sauvegarde contenant toutes les données de l’instance.", `inspect-${file.name.replace(/[^a-z0-9]/gi, "-")}`)}<p class="form-error" role="alert"></p><button class="secondary compact" type="submit">${icon("check", 14)} Tester l’intégrité</button></form></details>`).join("")}</div>` : emptyState("Aucune sauvegarde Atlas n’est encore présente dans cet emplacement.");
+    const scheduleForm = `<form class="settings-dedicated-form" data-form="settings-backups"><section class="panel settings-section backup-settings-section"><div><p class="eyebrow">PLANIFICATION LOCALE</p><h2>Emplacement et horaire</h2><p>Atlas crée un fichier complet AES-256-GCM. La phrase secrète planifiée est protégée par Windows pour le compte qui exécute Atlas.</p><div class="backup-current-state ${settings.enabled ? "enabled" : "disabled"}"><span>${icon(settings.enabled ? "check" : "clock", 17)}</span><div><small>${escapeHtml(schedulerLabel)}</small><strong>${escapeHtml(lastRun)}</strong></div></div></div><div class="backup-settings-controls"><label class="permission-switch"><input name="enabled" type="checkbox" ${settings.enabled ? "checked" : ""}/><span><strong>Activer les sauvegardes planifiées</strong><small>Le planificateur fonctionne pendant qu’Atlas est démarré; activez aussi l’autodémarrage Windows pour une exécution fiable.</small></span></label><label>Emplacement des sauvegardes<input name="destination" value="${escapeHtml(settings.destination)}" maxlength="500" required/><small>Chemin absolu local ou UNC. Atlas ne remplace jamais une ancienne sauvegarde.</small></label><div class="backup-schedule-grid"><label>Fréquence<select name="cadence"><option value="daily" ${settings.cadence === "daily" ? "selected" : ""}>Chaque jour</option><option value="weekly" ${settings.cadence === "weekly" ? "selected" : ""}>Chaque semaine</option></select></label><label>Jour<select name="weekday">${weekdayOptions}</select></label><label>Heure<input name="hour" type="number" min="0" max="23" value="${settings.hour}" required/></label><label>Minute<input name="minute" type="number" min="0" max="59" value="${settings.minute}" required/></label></div><label>Phrase secrète planifiée<input name="passphrase" type="password" minlength="12" autocomplete="new-password" placeholder="${settings.secretConfigured ? "Déjà protégée — laisser vide pour conserver" : "12 caractères minimum"}"/><small>Conservez-la aussi dans un emplacement distinct. Atlas ne pourra pas restaurer une sauvegarde si vous la perdez.</small></label><label class="permission-switch"><input name="retentionEnabled" type="checkbox" ${settings.retentionEnabled ? "checked" : ""}/><span><strong>Rétention automatique explicite</strong><small>Après une réussite, retirer uniquement les anciens fichiers Atlas de cet emplacement.</small></span></label><label>Nombre de sauvegardes à conserver<input name="retentionCount" type="number" min="2" max="365" value="${settings.retentionCount}" required/></label><div class="module-boundary-note"><strong>Restauration hors ligne seulement :</strong> arrêtez Atlas puis utilisez l’outil local. Une copie de sécurité préalable sera créée; les sessions ne sont jamais restaurées.</div></div></section>${settingsAdminMfaMarkup("Confirmez avant de changer l’emplacement, la phrase secrète, l’horaire ou la rétention.", "backups")}<p class="form-error" role="alert"></p><div class="settings-save"><span>${status.destinationReady ? "Destination lisible" : escapeHtml(status.destinationError || "Destination non vérifiée")}</span><button class="primary" type="submit">Enregistrer la planification</button></div></form>`;
+    const runForm = `<form class="panel backup-run-card" data-form="backup-run"><div><p class="eyebrow">SAUVEGARDE IMMÉDIATE</p><h2>Créer un point de restauration maintenant</h2><p>Utilisez la phrase protégée de la planification ou saisissez une phrase différente pour ce fichier seulement.</p></div><label>Phrase secrète facultative<input name="passphrase" type="password" minlength="12" autocomplete="new-password" placeholder="${settings.secretConfigured ? "Laisser vide pour utiliser la phrase planifiée" : "Requise si aucune phrase planifiée"}"/></label>${settingsAdminMfaMarkup("La sauvegarde complète lit le coffre, les comptes, le MFA, SQLite et les pièces jointes.", "backup-run")}<p class="form-error" role="alert"></p><button class="primary" type="submit" ${status.running ? "disabled" : ""}>${icon("download", 15)} ${status.running ? "Sauvegarde en cours…" : "Sauvegarder maintenant"}</button></form>`;
+    const history = `<section class="panel backup-history-card"><header><div><p class="eyebrow">HISTORIQUE</p><h2>Fichiers gérés par Atlas</h2><p>${files.length} sauvegarde${files.length === 1 ? "" : "s"} trouvée${files.length === 1 ? "" : "s"}. Aucun fichier tiers n’est touché par la rétention.</p></div><button class="secondary compact" type="button" data-action="refresh-backups">${icon("refresh", 14)} Actualiser</button></header>${settings.lastError ? `<div class="notice danger">${icon("alert", 16)} Dernier échec : ${escapeHtml(settings.lastError)}</div>` : ""}${filesMarkup}<div class="health-boundary-note">${icon("info", 16)} Pour restaurer : arrêtez Atlas et exécutez <code>powershell -ExecutionPolicy Bypass -File .\\scripts\\Invoke-AtlasFullBackup.ps1 -Mode Restore -InputPath &lt;fichier&gt;</code>.</div></section>`;
+    return renderSettingsShell("backups", "Sauvegardes", "Planification, emplacement, rétention et vérification des sauvegardes complètes chiffrées.", `${scheduleForm}${runForm}${history}`);
+  }
+
+  function renderUpdatesSettingsPage() {
+    if (!isAdministrator()) return renderProtectedSettingsDenied("Mises à jour");
+    if (!state.updateStatus && !state.updateLoading) queueMicrotask(() => loadUpdateStatus());
+    const status = state.updateStatus;
+    const release = status?.lastCheck;
+    const releaseMarkup = release ? `<section class="panel update-release-card"><div class="update-release-heading"><span class="module-hero-icon">${icon(release.installable ? "shield" : "alert", 21)}</span><div><p class="eyebrow">DERNIÈRE VERSION STABLE</p><h2>${escapeHtml(release.name || release.tag || "Aucune version stable")}</h2><p>${release.publishedAt ? `Publiée ${formatDateTime(release.publishedAt)}` : "Aucune publication stable détectée."}</p></div><span class="status-badge ${release.installable ? "success" : "warning"}">${release.installable ? "Signée" : "Installation bloquée"}</span></div>${release.notes ? `<pre class="release-notes-preview">${escapeHtml(release.notes)}</pre>` : ""}${release.installBlockedReason ? `<div class="notice">${icon("shield", 16)} ${escapeHtml(release.installBlockedReason)}</div>` : ""}${release.pageUrl ? `<a class="secondary compact" href="${escapeHtml(release.pageUrl)}" target="_blank" rel="noreferrer">Voir la version sur GitHub ${icon("external", 14)}</a>` : ""}</section>` : `<section class="panel update-release-card">${emptyState(state.updateLoading ? "Vérification locale en cours…" : "Aucune vérification GitHub lancée sur cette session.")}</section>`;
+    return renderSettingsShell("updates", "Mises à jour", "Contrôle manuel de la version publiée, sans téléchargement ni installation silencieuse.", `<section class="panel update-policy-card"><div><p class="eyebrow">CENTRE DE MISE À JOUR</p><h2>Atlas ${escapeHtml(status?.currentVersion || ATLAS_VERSION)}</h2><p>Atlas contacte uniquement l’API officielle de GitHub lorsque vous cliquez sur Vérifier. Une sauvegarde et une confirmation seront obligatoires avant une future installation.</p></div><dl class="security-list"><div><dt>Vérification automatique</dt><dd><span class="status-badge muted">Désactivée</span></dd></div><div><dt>Installation silencieuse</dt><dd><span class="status-badge muted">Interdite</span></dd></div><div><dt>Manifeste + signature</dt><dd>Obligatoires</dd></div><div><dt>Retour arrière</dt><dd>Requis avant activation de l’installation</dd></div></dl><button class="primary" type="button" data-action="check-updates" ${state.updateLoading ? "disabled" : ""}>${icon("refresh", 15)} ${state.updateLoading ? "Vérification…" : "Vérifier sur GitHub"}</button></section>${releaseMarkup}<div class="health-boundary-note">${icon("info", 16)} Le bouton d’installation demeure volontairement absent tant que la chaîne de publication ne fournit pas un manifeste signé vérifiable et un retour arrière testé.</div>`);
+  }
+
   function renderGeneralSettingsPage() {
     const settings = state.workspace.settings;
     const content = `<form class="settings-dedicated-form" data-form="settings-general"><section class="panel settings-section"><div><p class="eyebrow">INSTANCE</p><h2>${t("general")}</h2><p>Identité affichée uniquement dans cette installation.</p></div><div class="settings-field-stack"><label>Nom affiché de l’instance<input name="instanceName" maxlength="96" value="${escapeHtml(settings.instanceName)}" ${canWrite() ? "" : "disabled"}/><small>Exemple : Atlas – Équipe ABC. Ce nom apparaît dans la navigation.</small></label><label>Langue par défaut<select name="defaultLocale" ${canWrite() ? "" : "disabled"}><option value="fr" ${settings.defaultLocale === "fr" ? "selected" : ""}>Français</option><option value="en" ${settings.defaultLocale === "en" ? "selected" : ""}>English</option></select></label></div></section><p class="form-error" role="alert"></p><div class="settings-save"><span>${canWrite() ? "Ces réglages n’affectent pas les données des compagnies." : "Consultation seulement"}</span>${writeButton(`<button class="primary" type="submit">${t("save")}</button>`)}</div></form>`;
@@ -3409,8 +3535,19 @@
   }
 
   function renderIntegrationsSettingsPage() {
-    const content = `<section class="panel settings-section"><div><p class="eyebrow">FACULTATIF</p><h2>${t("integrations")}</h2><p>Le connecteur et le SSO via TRC RMM sont indépendants et désactivés par défaut.</p></div><div><div class="integration-setting"><div class="integration-logo">R</div><div><strong>TRC Community RMM</strong><p>Synchronisation d’inventaire et navigation entre fiches.</p></div><span class="status-badge muted">${t("notConfigured")}</span></div><div class="integration-setting"><div class="integration-logo oidc">ID</div><div><strong>SSO facultatif via TRC RMM</strong><p>Option prévue à la fin du projet; les comptes et rôles Atlas restent locaux.</p></div><span class="status-badge muted">À venir</span></div><div class="notice">${icon("alert", 17)} Atlas reste autonome. Ces options demeurent inactives jusqu’à la validation de leurs contrats de sécurité.</div></div></section>`;
-    return renderSettingsShell("integrations", t("integrations"), "État des connexions facultatives de cette instance.", content);
+    if (!isAdministrator()) return renderProtectedSettingsDenied("Intégrations");
+    if (!state.localApiStatus && !state.localApiLoading) queueMicrotask(() => loadLocalApiStatus());
+    const apiStatus = state.localApiStatus || { enabled: false, webhooksEnabled: false, tokens: [], webhooks: [] };
+    const activeTokens = (apiStatus.tokens || []).filter((token) => !token.revokedAt);
+    const tokenRows = (apiStatus.tokens || []).length ? `<div class="local-api-token-list">${apiStatus.tokens.map((token) => `<article class="${token.revokedAt ? "revoked" : ""}"><div><strong>${escapeHtml(token.label)}</strong><small>${escapeHtml((token.scopes || []).join(" · "))}</small><small>${token.organizationIds === null ? "Toutes les compagnies" : `${token.organizationIds?.length || 0} compagnie(s)`} · créé ${formatDateTime(token.createdAt)}${token.lastUsedAt ? ` · utilisé ${formatDateTime(token.lastUsedAt)}` : ""}</small></div>${token.revokedAt ? '<span class="status-badge muted">Révoqué</span>' : `<form data-form="local-api-token-revoke" data-id="${escapeHtml(token.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="danger secondary compact" type="submit">Révoquer</button><p class="form-error" role="alert"></p></form>`}</article>`).join("")}</div>` : emptyState("Aucun jeton API n’a été créé.");
+    const organizationOptions = state.workspace.organizations.map((organization) => `<label class="permission-switch compact"><input type="checkbox" name="organizationIds" value="${escapeHtml(organization.id)}"/><span><strong>${escapeHtml(organization.name)}</strong><small>${escapeHtml(organization.code || "Sans code")}</small></span></label>`).join("");
+    const oneTimeToken = state.createdApiToken ? `<div class="notice success local-api-secret"><div><strong>Copiez ce jeton maintenant.</strong><span>Il ne sera plus affiché après fermeture de ce message.</span><code>${escapeHtml(state.createdApiToken)}</code></div><div><button class="secondary compact" type="button" data-action="copy-local-api-token">${icon("copy", 14)} Copier</button><button class="secondary compact" type="button" data-action="clear-local-api-token">Masquer</button></div></div>` : "";
+    const webhookRows = (apiStatus.webhooks || []).length ? `<div class="local-api-token-list">${apiStatus.webhooks.map((webhook) => `<article><div><strong>${escapeHtml(webhook.label)}</strong><small>${escapeHtml(webhook.url)}</small><small>${escapeHtml((webhook.events || []).join(" · "))}${webhook.lastDeliveryAt ? ` · dernier essai ${formatDateTime(webhook.lastDeliveryAt)} (${webhook.lastStatus || "échec"})` : ""}</small>${webhook.lastError ? `<small class="danger-text">${escapeHtml(webhook.lastError)}</small>` : ""}</div><div class="webhook-actions"><form data-form="local-webhook-test" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="secondary compact" type="submit">Tester</button><p class="form-error" role="alert"></p></form><form data-form="local-webhook-remove" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="danger secondary compact" type="submit">Retirer</button><p class="form-error" role="alert"></p></form></div></article>`).join("")}</div>` : emptyState("Aucun webhook local configuré.");
+    const webhookSecret = state.createdWebhookSecret ? `<div class="notice success local-api-secret"><div><strong>Secret de signature affiché une seule fois.</strong><span>Le récepteur doit vérifier l’en-tête <code>x-atlas-signature</code>.</span><code>${escapeHtml(state.createdWebhookSecret)}</code></div><div><button class="secondary compact" type="button" data-action="copy-webhook-secret">${icon("copy", 14)} Copier</button><button class="secondary compact" type="button" data-action="clear-webhook-secret">Masquer</button></div></div>` : "";
+    const webhookSection = `<div class="local-webhook-section"><div><p class="eyebrow">WEBHOOKS LOCAUX</p><h3>Automatisations sur cette VM</h3><p>Les destinations sont strictement limitées à <code>localhost</code>, <code>127.0.0.1</code> ou <code>::1</code>, avec un port explicite. Atlas ne contacte ni le LAN ni Internet.</p></div>${webhookSecret}<div class="local-api-columns"><form data-form="local-webhook-create"><label>Nom du webhook<input name="label" maxlength="80" placeholder="Ex. orchestrateur local" required/></label><label>URL de boucle locale<input name="url" type="url" maxlength="500" placeholder="http://127.0.0.1:9100/atlas" required/></label><fieldset><legend>Événements</legend><label><input type="checkbox" name="events" value="workspace.updated"/> Documentation modifiée</label><label><input type="checkbox" name="events" value="backup.completed"/> Sauvegarde réussie</label><label><input type="checkbox" name="events" value="backup.failed"/> Sauvegarde échouée</label></fieldset>${settingsAdminMfaMarkup("La destination et le secret de signature sont protégés localement.", "local-webhook-create")}<p class="form-error" role="alert"></p><button class="primary" type="submit">Créer le webhook</button></form><div>${webhookRows}</div></div></div>`;
+    const localApi = `<section class="panel local-api-settings"><header><div><p class="eyebrow">API LOCALE FACULTATIVE</p><h2>Accès en lecture, limité et révocable</h2><p>Les jetons ne donnent jamais accès aux secrets du coffre. Ils sont désactivés par défaut et leur valeur n’est affichée qu’une fois.</p></div><span class="status-badge ${apiStatus.enabled || apiStatus.webhooksEnabled ? "success" : "muted"}">${apiStatus.enabled || apiStatus.webhooksEnabled ? "Partiellement active" : "Désactivée"}</span></header>${apiStatus.error ? `<div class="notice danger">${escapeHtml(apiStatus.error)}</div>` : ""}<form class="local-api-enable-form" data-form="settings-local-api"><div><label class="permission-switch"><input name="enabled" type="checkbox" ${apiStatus.enabled ? "checked" : ""}/><span><strong>Activer l’API locale</strong><small>Expose uniquement les routes <code>/api/v1</code> sur le même port qu’Atlas; aucun port supplémentaire.</small></span></label><label class="permission-switch"><input name="webhooksEnabled" type="checkbox" ${apiStatus.webhooksEnabled ? "checked" : ""}/><span><strong>Activer les webhooks locaux</strong><small>Livraison signée uniquement vers la boucle locale de cette VM.</small></span></label></div>${settingsAdminMfaMarkup("Confirmez avant d’activer ou de désactiver l’API locale ou les webhooks.", "local-api-enable")}<p class="form-error" role="alert"></p><button class="primary" type="submit">Enregistrer l’état</button></form>${oneTimeToken}<div class="local-api-columns"><form data-form="local-api-token-create"><p class="eyebrow">NOUVEAU JETON</p><h3>Portées minimales</h3><label>Nom du jeton<input name="label" maxlength="80" placeholder="Ex. inventaire local" required/></label><fieldset><legend>Portées autorisées</legend><label><input type="checkbox" name="scopes" value="read:health"/> Santé locale</label><label><input type="checkbox" name="scopes" value="read:organizations"/> Liste des compagnies</label><label><input type="checkbox" name="scopes" value="read:records"/> Métadonnées des fiches</label></fieldset><label class="permission-switch compact"><input type="checkbox" name="allOrganizations" checked/><span><strong>Toutes les compagnies</strong><small>Décochez puis choisissez une portée précise ci-dessous.</small></span></label><div class="local-api-org-scope">${organizationOptions || "Aucune compagnie disponible."}</div>${settingsAdminMfaMarkup("La création d’un jeton est une action sensible.", "local-api-token")}<p class="form-error" role="alert"></p><button class="primary" type="submit">Créer le jeton</button></form><div><p class="eyebrow">JETONS</p><h3>${activeTokens.length} actif${activeTokens.length === 1 ? "" : "s"}</h3>${tokenRows}</div></div><div class="health-boundary-note">${icon("shield", 16)} Les jetons sont stockés sous forme d’empreinte SHA-256, sont limités à la lecture et n’incluent jamais mots de passe, codes OTP, notes rapides, pièces jointes ni données MFA.</div>${webhookSection}</section>`;
+    const content = `<section class="panel settings-section"><div><p class="eyebrow">FACULTATIF</p><h2>${t("integrations")}</h2><p>Le connecteur et le SSO via TRC RMM sont indépendants et désactivés par défaut.</p></div><div><div class="integration-setting"><div class="integration-logo">R</div><div><strong>TRC Community RMM</strong><p>Synchronisation d’inventaire et navigation entre fiches.</p></div><span class="status-badge muted">${t("notConfigured")}</span></div><div class="integration-setting"><div class="integration-logo oidc">ID</div><div><strong>SSO facultatif via TRC RMM</strong><p>Option prévue à la fin du projet; les comptes et rôles Atlas restent locaux.</p></div><span class="status-badge muted">À venir</span></div><div class="notice">${icon("alert", 17)} Atlas reste autonome. Ces options demeurent inactives jusqu’à la validation de leurs contrats de sécurité.</div></div></section>${localApi}`;
+    return renderSettingsShell("integrations", t("integrations"), "Connexions facultatives et API locale de cette instance.", content);
   }
 
   function renderSecuritySettingsPage() {
@@ -3425,6 +3562,8 @@
     if (page === "deployment") return renderDeploymentSettingsPage();
     if (page === "health") return isAdministrator() ? renderSettingsShell("health", "Santé du site", "Diagnostics réservés au super administrateur Atlas.", renderDeploymentHealthSection(state.workspace.settings)) : renderProtectedSettingsDenied("Santé du site");
     if (page === "security") return renderSecuritySettingsPage();
+    if (page === "backups") return renderBackupSettingsPage();
+    if (page === "updates") return renderUpdatesSettingsPage();
     if (page === "general") return renderGeneralSettingsPage();
     if (page === "appearance") return renderAppearanceSettingsPage();
     if (page === "integrations") return renderIntegrationsSettingsPage();
@@ -4006,12 +4145,15 @@
       const profile = moduleProfile(module);
       const profileDetails = moduleProfileDetails(item, module);
       const expiry = expiryPresentation(item);
+      const reviewLabels = { draft: "Brouillon", "in-review": "En révision", approved: "Approuvée", stale: "À revoir" };
+      const reviewState = item.reviewState || "draft";
+      const reviewTone = reviewState === "approved" ? "success" : reviewState === "in-review" ? "warning" : "muted";
       const checklist = item.checklist?.length ? (() => {
         const completed = item.checklist.filter((step) => step.done).length;
         const percent = Math.round((completed / item.checklist.length) * 100);
         return `<section class="interactive-checklist"><div class="checklist-summary"><div><h3>Checklist opérationnelle</h3><p><strong>${completed}/${item.checklist.length}</strong> étapes terminées</p></div><span>${percent}%</span></div><div class="checklist-progress" aria-label="Progression ${percent}%"><i style="width:${percent}%"></i></div><ul class="asset-checklist">${item.checklist.map((step, index) => `<li class="${step.done ? "done" : ""}"><button type="button" data-action="toggle-checklist-step" data-id="${escapeHtml(item.id)}" data-step-index="${index}" aria-pressed="${step.done}" ${canWrite() && !asset.archived ? "" : "disabled"}><span>${step.done ? "✓" : ""}</span><em>${escapeHtml(step.label)}</em></button></li>`).join("")}</ul></section>`;
       })() : "";
-      return `<dl class="asset-facts-grid"><div><dt>${escapeHtml(profile.ownerLabel)}</dt><dd>${escapeHtml(item.owner || "—")}</dd></div><div><dt>Site</dt><dd>${escapeHtml(siteName(item.siteId))}</dd></div><div><dt>${escapeHtml(profile.expiryLabel)}</dt><dd>${formatDate(item.expiresOn)}</dd></div><div><dt>${escapeHtml(profile.referenceLabel)}</dt><dd>${escapeHtml(item.reference || "—")}</dd></div><div><dt>État</dt><dd><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></dd></div><div><dt>Mise à jour</dt><dd>${formatDate(item.updatedAt)}</dd></div>${profileDetails.facts}</dl><div class="asset-copy asset-document-copy">${profileDetails.sections}<h3>Résumé</h3><p>${renderMentionText(item.summary || "Aucun résumé.")}</p><h3>Notes</h3><p>${renderMentionText(item.notes || "Aucune note.")}</p>${item.tags?.length ? `<h3>Étiquettes</h3><div class="asset-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}${checklist}</div>`;
+      return `<dl class="asset-facts-grid"><div><dt>${escapeHtml(profile.ownerLabel)}</dt><dd>${escapeHtml(item.owner || "—")}</dd></div><div><dt>Site</dt><dd>${escapeHtml(siteName(item.siteId))}</dd></div><div><dt>${escapeHtml(profile.expiryLabel)}</dt><dd>${formatDate(item.expiresOn)}</dd></div><div><dt>${escapeHtml(profile.referenceLabel)}</dt><dd>${escapeHtml(item.reference || "—")}</dd></div><div><dt>État</dt><dd><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></dd></div><div><dt>Mise à jour</dt><dd>${formatDate(item.updatedAt)}</dd></div><div><dt>Révision</dt><dd><span class="status-badge ${reviewTone}">${escapeHtml(reviewLabels[reviewState] || reviewState)}</span></dd></div><div><dt>Responsable de révision</dt><dd>${escapeHtml(item.reviewOwner || "—")}</dd></div><div><dt>Révision prévue</dt><dd>${formatDate(item.reviewDueAt)}</dd></div><div><dt>Dernière approbation</dt><dd>${item.approvedAt ? `${formatDateTime(item.approvedAt)} · ${escapeHtml(item.approvedBy || "—")}` : "—"}</dd></div>${profileDetails.facts}</dl><div class="asset-copy asset-document-copy">${profileDetails.sections}<h3>Résumé</h3><p>${renderMentionText(item.summary || "Aucun résumé.")}</p><h3>Notes</h3><p>${renderMentionText(item.notes || "Aucune note.")}</p>${item.tags?.length ? `<h3>Étiquettes</h3><div class="asset-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}${checklist}</div>`;
     }
     if (asset.type === "vault") {
       const revealed = state.revealedVaultItem?.id === item.id ? state.revealedVaultItem : null;
@@ -4081,11 +4223,18 @@
     const edit = canWrite() && asset.editAction ? `<button class="secondary" type="button" data-action="${asset.editAction}" data-id="${escapeHtml(asset.id)}"${asset.moduleId ? ` data-module-id="${escapeHtml(asset.moduleId)}"` : ""}>${icon("edit", 15)} Modifier</button>` : "";
     const archive = canWrite() && asset.type !== "vault" ? `<button class="secondary ${asset.archived ? "" : "danger"}" type="button" data-action="toggle-asset-archive" data-asset-ref="${escapeHtml(asset.ref)}">${icon(asset.archived ? "refresh" : "trash", 15)} ${asset.archived ? "Restaurer" : "Archiver"}</button>` : "";
     const reveal = asset.type === "vault" ? (state.revealedVaultItem?.id === asset.id ? `<button class="secondary" type="button" data-action="lock-vault">${icon("lock", 15)} Verrouiller le coffre</button>` : `<button class="secondary" type="button" data-action="reveal-vault-item" data-id="${escapeHtml(asset.id)}" ${asset.archived ? "disabled" : ""}>${icon("key", 15)} Ouvrir</button>`) : "";
+    const reviewActions = asset.type === "module" && !asset.archived
+      ? asset.raw.reviewState === "in-review"
+        ? (isAdministrator() ? `<button class="primary" type="button" data-action="approve-record" data-id="${escapeHtml(asset.id)}">${icon("check", 15)} Approuver</button>` : "")
+        : asset.raw.reviewState === "approved"
+          ? (canWrite() ? `<button class="secondary" type="button" data-action="mark-record-reviewed" data-id="${escapeHtml(asset.id)}">${icon("refresh", 15)} Révision terminée</button>` : "")
+          : (canWrite() ? `<button class="secondary" type="button" data-action="submit-record-review" data-id="${escapeHtml(asset.id)}">${icon("arrow", 15)} Soumettre</button>` : "")
+      : "";
     const quickRelationControl = canWrite() ? quickRelationPickerMarkup(asset) : "";
     return `<div class="asset-page">
       <header class="asset-page-header">
         <div class="asset-breadcrumbs">${organizationBreadcrumbMarkup(asset.organizationId)}${icon("chevron", 13)}<button type="button" data-route="${escapeHtml(list.route)}">${escapeHtml(list.label)}</button>${icon("chevron", 13)}<span>${escapeHtml(asset.label)}</span></div>
-        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions"><span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${reveal}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
+        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions"><span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${reveal}${reviewActions}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
       </header>
       <div class="asset-page-layout">
         <div class="asset-page-main">
@@ -4108,7 +4257,8 @@
     const editorClass = kind === "module-record" && moduleId === "documents" ? "document-editor-modal" : "";
     const accessClass = kind === "user" ? "account-access-modal" : "";
     const organizationClass = kind === "organization" ? "organization-profile-modal" : kind === "quick-notes" ? "quick-notes-modal" : "";
-    overlayRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal ${kind === "priorities" ? "priority-modal-shell" : ""} ${editorClass} ${accessClass} ${organizationClass}" role="dialog" aria-modal="true" aria-labelledby="modal-title" data-modal-stop>${modal}</section></div>`;
+    const builderClass = ["custom-module", "guided-import"].includes(kind) ? "wide-admin-modal" : "";
+    overlayRoot.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal ${kind === "priorities" ? "priority-modal-shell" : ""} ${editorClass} ${accessClass} ${organizationClass} ${builderClass}" role="dialog" aria-modal="true" aria-labelledby="modal-title" data-modal-stop>${modal}</section></div>`;
     overlayRoot.querySelector('input:not([type="hidden"]), select, textarea')?.focus();
   }
 
@@ -4166,6 +4316,33 @@
       return `<form data-form="relation" data-id="${escapeHtml(existingId || "")}"><div class="modal-heading"><div><p class="eyebrow">CARTOGRAPHIE UNIVERSELLE</p><h2 id="modal-title">${item ? "Modifier la relation" : "Nouvelle relation"}</h2><p>Les deux objets restent dans l’organisation active.</p></div>${close}</div><div class="form-grid">${organizationContextField(organizationId)}<label>Source<select name="sourceRef" data-relation-source required>${assetOptions(organizationId, item?.sourceRef || preset?.ref || "")}</select></label><label>Cible<select name="targetRef" data-relation-target required>${assetOptions(organizationId, item?.targetRef || "", item?.sourceRef || preset?.ref || "")}</select></label><label class="span-2">Type de relation<select name="relationType" data-relation-type>${relationshipTypes.map((type) => `<option value="${type.id}" ${type.id === typeId ? "selected" : ""}>${escapeHtml(type.label)} ↔ ${escapeHtml(type.reverseLabel)}</option>`).join("")}</select></label><label class="span-2">Libellé personnalisé<input name="customLabel" value="${escapeHtml(typeId === "custom" ? item?.label || "" : "")}" maxlength="100" placeholder="Facultatif, utilisé pour une relation personnalisée" /></label><label class="span-2">Notes sur la relation<textarea name="notes" maxlength="1000" rows="3">${escapeHtml(item?.notes || "")}</textarea></label>${item ? `<label class="checkbox-label span-2"><input name="archived" type="checkbox" ${item.archived ? "checked" : ""}/> Archiver ce lien sans le supprimer de l’historique</label>` : ""}<div class="notice span-2">${icon("link", 16)} Le lien inverse est créé automatiquement et la cible archivée restera visible.</div></div>${modalActions()}</form>`;
     }
     if (kind === "template") { const item = existingId ? state.workspace.templates.find((entry) => entry.id === existingId) : null; return `<form data-form="template" data-id="${escapeHtml(existingId || "")}"><div class="modal-heading"><div><p class="eyebrow">STANDARDISATION</p><h2 id="modal-title">${item ? "Modifier le modèle" : "Nouveau modèle"}</h2></div>${close}</div><div class="form-grid"><label class="span-2">Nom du modèle<input name="name" value="${escapeHtml(item?.name || "")}" required maxlength="120" /></label><label class="span-2">Module<select name="moduleId" required>${moduleDefinitions.map((module) => `<option value="${module.id}" ${item?.moduleId === module.id ? "selected" : ""}>${escapeHtml(module.label)}</option>`).join("")}</select></label><label class="span-2">Étiquettes par défaut<input name="defaultTags" value="${escapeHtml((item?.defaultTags || []).join(", "))}" maxlength="300" /></label><label class="span-2">Résumé par défaut<textarea name="defaultSummary" maxlength="1000" rows="3">${escapeHtml(item?.defaultSummary || "")}</textarea></label><label class="span-2">Notes structurées par défaut<textarea name="defaultNotes" maxlength="3000" rows="6">${escapeHtml(item?.defaultNotes || "")}</textarea></label></div>${modalActions()}</form>`; }
+    if (kind === "custom-module") {
+      const item = existingId ? state.workspace.customModuleDefinitions.find((entry) => entry.id === existingId) : null;
+      const iconOptions = [["grid", "Grille"], ["server", "Serveur"], ["network", "Réseau"], ["shield", "Sécurité"], ["file", "Document"], ["users", "Utilisateurs"], ["globe", "Internet"], ["key", "Clé"], ["printer", "Impression"], ["phone", "Téléphonie"], ["wifi", "Sans-fil"], ["refresh", "Sauvegarde"]].map(([value, label]) => `<option value="${value}" ${item?.icon === value ? "selected" : ""}>${label}</option>`).join("");
+      const typeOptions = (current = "text") => [["text", "Texte court"], ["textarea", "Texte long"], ["number", "Nombre"], ["date", "Date"], ["url", "URL"], ["email", "Courriel"], ["tel", "Téléphone"], ["select", "Liste de choix"]].map(([value, label]) => `<option value="${value}" ${current === value ? "selected" : ""}>${label}</option>`).join("");
+      const rows = Array.from({ length: Math.max(8, item?.fields?.length || 0) }, (_, index) => { const field = item?.fields?.[index] || {}; return `<div class="custom-field-row"><label>Libellé<input name="fieldLabel_${index}" value="${escapeHtml(field.label || "")}" maxlength="80" placeholder="Ex. Numéro de contrat"/></label><label>Type<select name="fieldType_${index}">${typeOptions(field.type)}</select></label><label>Choix (si liste)<input name="fieldOptions_${index}" value="${escapeHtml((field.options || []).join(", "))}" maxlength="500" placeholder="Actif, Suspendu, Fermé"/></label></div>`; }).join("");
+      return `<form data-form="custom-module" data-id="${escapeHtml(existingId || "")}"><div class="modal-heading"><div><p class="eyebrow">CONSTRUCTEUR DE MODULE</p><h2 id="modal-title">${item ? "Modifier le module" : "Nouveau module local"}</h2><p>Les champs communs — organisation, titre, responsable, état, échéance, résumé, notes et checklist — sont ajoutés automatiquement.</p></div>${close}</div><div class="form-grid"><label>Nom du module<input name="label" value="${escapeHtml(item?.label || "")}" required maxlength="80" placeholder="Ex. Contrats fournisseurs"/></label><label>Icône<select name="icon">${iconOptions}</select></label><label class="span-2">Description<input name="description" value="${escapeHtml(item?.description || "")}" required maxlength="300" placeholder="Ce que ce registre documente."/></label><label class="span-2">Libellé du titre<input name="titleLabel" value="${escapeHtml(item?.titleLabel || "Nom de la fiche")}" required maxlength="80"/></label><fieldset class="span-2 custom-fields-builder"><legend>Champs métier <small>Au moins 4; laissez une ligne vide pour l’ignorer.</small></legend>${rows}</fieldset><div class="notice span-2">${icon("shield", 16)} Les noms contenant mot de passe, secret, jeton, identifiant d’API ou clé API sont refusés.</div></div>${modalActions(item ? "Enregistrer le module" : "Créer le module")}</form>`;
+    }
+    if (kind === "guided-import") {
+      const preview = state.importPreview;
+      if (!preview) return `<div class="modal-heading"><div><h2 id="modal-title">Aucun CSV préparé</h2></div>${close}</div>`;
+      const moduleId = preview.target.startsWith("module:") ? preview.target.slice(7) : "";
+      const targetModule = moduleMap.get(moduleId);
+      const fields = preview.target === "organizations"
+        ? [{ key: "name", label: "Nom de la compagnie", required: true, aliases: ["nom", "name", "compagnie", "company", "organisation", "organization"] }, { key: "code", label: "Code court", aliases: ["code", "sigle"] }, { key: "industry", label: "Secteur", aliases: ["secteur", "industry"] }, { key: "owner", label: "Responsable", aliases: ["responsable", "owner"] }, { key: "notes", label: "Notes", aliases: ["notes", "description"] }]
+        : preview.target === "configurations"
+          ? [{ key: "name", label: "Nom", required: true, aliases: ["nom", "name", "hostname", "hote"] }, { key: "type", label: "Type", aliases: ["type", "categorie", "category"] }, { key: "os", label: "Système / OS", aliases: ["os", "systeme", "operating system"] }, { key: "ip", label: "Adresse IP", aliases: ["ip", "adresse ip", "ip address"] }, { key: "owner", label: "Responsable", aliases: ["responsable", "owner"] }, { key: "location", label: "Emplacement", aliases: ["emplacement", "location"] }, { key: "summary", label: "Résumé", aliases: ["resume", "summary", "description"] }, { key: "notes", label: "Notes", aliases: ["notes"] }]
+          : [{ key: "title", label: targetModule?.titleLabel || "Titre", required: true, aliases: ["titre", "title", "nom", "name"] }, { key: "owner", label: "Responsable", aliases: ["responsable", "owner"] }, { key: "status", label: "État", aliases: ["etat", "status"] }, { key: "reference", label: "Référence / URL", aliases: ["reference", "url"] }, { key: "expiresOn", label: "Échéance", aliases: ["echeance", "expiration", "expires"] }, { key: "tags", label: "Étiquettes", aliases: ["etiquettes", "tags"] }, { key: "summary", label: "Résumé", aliases: ["resume", "summary", "description"] }, { key: "notes", label: "Notes", aliases: ["notes"] }, ...(moduleProfile(targetModule).fields || []).map((field) => ({ key: `detail_${field.key}`, label: field.label, aliases: [field.label, field.key] }))];
+      const headerOptions = (field) => {
+        const normalized = preview.headers.map(normalizeSearch);
+        const match = normalized.findIndex((header) => field.aliases.some((alias) => header === normalizeSearch(alias)));
+        return `<option value="">Ignorer</option>${preview.headers.map((header, index) => `<option value="${index}" ${index === match ? "selected" : ""}>${escapeHtml(header)}</option>`).join("")}`;
+      };
+      const mapping = fields.map((field) => `<label>${escapeHtml(field.label)}${field.required ? " *" : ""}<select name="map_${field.key}" ${field.required ? "required" : ""}>${headerOptions(field)}</select></label>`).join("");
+      const organizationField = preview.target === "organizations" ? "" : `<label class="span-2">Organisation de destination<select name="organizationId" required><option value="">Choisir une organisation</option>${state.workspace.organizations.map((organization) => `<option value="${escapeHtml(organization.id)}" ${organization.id === activeOrganizationId() ? "selected" : ""}>${escapeHtml(organizationPathLabel(organization.id))}</option>`).join("")}</select><small>Les lignes sont ajoutées uniquement à cette organisation; aucune portée globale implicite.</small></label>`;
+      const sampleRows = preview.rows.slice(0, 5);
+      return `<form data-form="guided-import"><div class="modal-heading"><div><p class="eyebrow">APERÇU CSV</p><h2 id="modal-title">${escapeHtml(preview.fileName)}</h2><p>${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"} vers ${escapeHtml(preview.target === "organizations" ? "Organisations" : preview.target === "configurations" ? "Configurations" : targetModule?.label || "Module")}. Aucun enregistrement n’est encore écrit.</p></div>${close}</div><div class="guided-import-layout"><section><h3>1. Associer les colonnes</h3><div class="form-grid">${organizationField}${preview.target === "configurations" ? `<label class="span-2">Site par défaut<select name="siteId"><option value="">Aucun site</option>${siteOptions("", activeOrganizationId())}</select></label>` : ""}${mapping}</div></section><section><h3>2. Vérifier l’aperçu</h3><div class="table-scroll"><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${sampleRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="notice">${icon("history", 16)} L’import complet sera enregistré dans une seule révision. La page Versions permettra un retour arrière.</div></section></div><p class="form-error" role="alert"></p>${modalActions(`Importer ${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"}`)}</form>`;
+    }
     if (kind === "user") {
       const item = existingId ? state.users.find((user) => user.id === existingId) : null;
       const role = item?.role || "editor";
@@ -4291,6 +4468,7 @@
       const document = await api("/api/workspace", { method: "PUT", body: JSON.stringify({ revision: state.revision, data: state.workspace }) });
       state.workspace = document.data;
       state.revision = document.revision;
+      normalizeWorkspace();
       await loadWorkspaceHistory();
       if (state.page === "asset" && state.detailId) await loadAssetHistory(state.detailId);
       state.saving = false;
@@ -4412,6 +4590,10 @@
     if (["sites", "configurations", "procedures", "module"].includes(nextPage) && state.searchScope !== "global" && state.workspace.organizations.some((organization) => organization.id === state.searchScope)) state.filter = state.searchScope;
     if (nextPage === "relations" && state.searchScope !== "global") state.relationOrganization = state.searchScope;
     if (nextPage !== "organization") state.organizationSearch = "";
+    if (!(nextPage === "settings" && nextDetail === "integrations")) {
+      state.createdApiToken = "";
+      state.createdWebhookSecret = "";
+    }
     if (!(nextPage === "asset" && nextDetail === state.relationQuickAddRef)) resetQuickRelationPicker();
     if (state.revealedVaultItem && !(nextPage === "asset" && nextDetail === `vault:${state.revealedVaultItem.id}`)) {
       state.revealedVaultItem = null;
@@ -4674,6 +4856,30 @@
       }, restoring ? "Fiche restaurée" : "Fiche archivée", asset.label, asset.type);
       return;
     }
+    if (["submit-record-review", "approve-record", "mark-record-reviewed"].includes(action)) {
+      const record = state.workspace.moduleRecords.find((item) => item.id === actionTarget.dataset.id);
+      if (!record || record.status === "archived") return;
+      if (action === "approve-record" && !isAdministrator()) return toast("Seul un administrateur peut approuver une fiche.", "error");
+      const today = new Date();
+      const nextDue = Number(record.reviewIntervalDays) > 0 ? new Date(today.getTime() + Number(record.reviewIntervalDays) * 86400000).toISOString().slice(0, 10) : record.reviewDueAt || "";
+      await commit((workspace) => {
+        const item = workspace.moduleRecords.find((candidate) => candidate.id === record.id);
+        if (!item) return;
+        if (action === "submit-record-review") {
+          item.reviewState = "in-review";
+          item.approvedAt = "";
+          item.approvedBy = "";
+        } else {
+          item.reviewState = "approved";
+          item.lastReviewedAt = today.toISOString();
+          item.reviewDueAt = nextDue;
+          item.approvedAt = today.toISOString();
+          item.approvedBy = state.user.displayName;
+        }
+        item.updatedAt = today.toISOString().slice(0, 10);
+      }, action === "submit-record-review" ? "Fiche soumise en révision" : action === "approve-record" ? "Fiche approuvée" : "Révision de la fiche terminée", record.title, "review");
+      return;
+    }
     if (action === "add-related-item") {
       const sourceRef = actionTarget.dataset.assetRef;
       if (!sourceRef || !assetByRef(sourceRef)) return;
@@ -4732,6 +4938,8 @@
     if (action === "edit-relation") showModal("relation", actionTarget.dataset.id);
     if (action === "new-template") showModal("template");
     if (action === "edit-template") showModal("template", actionTarget.dataset.id);
+    if (action === "new-custom-module") showModal("custom-module");
+    if (action === "edit-custom-module") showModal("custom-module", actionTarget.dataset.id);
     if (action === "new-user") showModal("user");
     if (action === "edit-user") showModal("user", actionTarget.dataset.id);
     if (action === "reset-user-password") showModal("user-password-reset", actionTarget.dataset.id);
@@ -4815,6 +5023,36 @@
       const command = 'powershell -ExecutionPolicy Bypass -File .\\scripts\\Invoke-AtlasFullBackup.ps1 -Mode Create';
       try { await navigator.clipboard.writeText(command); toast("Commande de sauvegarde complète copiée."); }
       catch { toast("Copie impossible dans ce navigateur.", "error"); }
+    }
+    if (action === "refresh-backups") {
+      state.backupStatus = null;
+      await loadBackupStatus();
+    }
+    if (action === "check-updates") {
+      state.updateLoading = true;
+      render();
+      try {
+        state.updateStatus = await api("/api/settings/updates/check", { method: "POST", body: "{}" });
+        await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadAudit()]);
+        toast(state.updateStatus.lastCheck?.available ? `Version ${state.updateStatus.lastCheck.tag || "stable"} vérifiée sur GitHub.` : "Aucune version stable publiée sur GitHub.");
+      } catch (error) { toast(error.message, "error"); }
+      finally { state.updateLoading = false; render(); }
+    }
+    if (action === "copy-local-api-token" && state.createdApiToken) {
+      try { await navigator.clipboard.writeText(state.createdApiToken); toast("Jeton API copié."); }
+      catch { toast("Copie impossible dans ce navigateur.", "error"); }
+    }
+    if (action === "clear-local-api-token") {
+      state.createdApiToken = "";
+      render();
+    }
+    if (action === "copy-webhook-secret" && state.createdWebhookSecret) {
+      try { await navigator.clipboard.writeText(state.createdWebhookSecret); toast("Secret de webhook copié."); }
+      catch { toast("Copie impossible dans ce navigateur.", "error"); }
+    }
+    if (action === "clear-webhook-secret") {
+      state.createdWebhookSecret = "";
+      render();
     }
     if (action === "export-printing") {
       const csvCell = (value) => {
@@ -4958,6 +5196,11 @@
     if (theme) { state.theme = theme.dataset.setTheme; localStorage.setItem(storageKeys.theme, state.theme); render(); }
     if (event.target.matches('input[name="visibleModules"]')) updateSelectedModuleCount();
     if (event.target.matches("[data-import-workspace]")) importWorkspaceFile(event.target.files?.[0]);
+    if (event.target.matches("[data-guided-import-file]")) {
+      try { await prepareGuidedImport(event.target.files?.[0]); }
+      catch (error) { toast(error.message || "Le CSV est invalide.", "error"); }
+      finally { event.target.value = ""; }
+    }
   });
 
   document.addEventListener("click", (event) => {
@@ -5115,6 +5358,45 @@
     } catch (error) {
       toast(error.message || "Le fichier d’import est invalide.", "error");
     }
+  }
+
+  function parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let value = "";
+    let quoted = false;
+    const source = String(text || "").replace(/^\uFEFF/, "");
+    const firstLine = source.split(/\r?\n/, 1)[0] || "";
+    const delimiter = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ";" : ",";
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      if (quoted) {
+        if (character === '"' && source[index + 1] === '"') { value += '"'; index += 1; }
+        else if (character === '"') quoted = false;
+        else value += character;
+      } else if (character === '"') quoted = true;
+      else if (character === delimiter) { row.push(value.trim()); value = ""; }
+      else if (character === "\n") { row.push(value.trim().replace(/\r$/, "")); rows.push(row); row = []; value = ""; }
+      else value += character;
+    }
+    if (quoted) throw new Error("Le CSV contient une valeur entre guillemets non terminée.");
+    if (value || row.length) { row.push(value.trim().replace(/\r$/, "")); rows.push(row); }
+    const width = Math.max(0, ...rows.map((entry) => entry.length));
+    return rows.filter((entry) => entry.some((cell) => cell)).map((entry) => [...entry, ...Array(Math.max(0, width - entry.length)).fill("")]);
+  }
+
+  async function prepareGuidedImport(file) {
+    if (!file) return;
+    if (!isAdministrator()) throw new Error("Seul un administrateur peut importer un CSV.");
+    if (file.size <= 0 || file.size > 5 * 1024 * 1024) throw new Error("Le CSV doit contenir entre 1 octet et 5 Mo.");
+    const rows = parseCsv(await file.text());
+    if (rows.length < 2) throw new Error("Le CSV doit contenir une ligne d’en-têtes et au moins une ligne de données.");
+    if (rows.length > 1001) throw new Error("Le CSV dépasse la limite de 1 000 lignes de données.");
+    const headers = rows[0].map((header, index) => header || `Colonne ${index + 1}`);
+    if (new Set(headers.map(normalizeSearch)).size !== headers.length) throw new Error("Chaque colonne du CSV doit avoir un en-tête unique.");
+    const target = document.querySelector("[data-guided-import-target]")?.value || "organizations";
+    state.importPreview = { fileName: file.name, target, headers, rows: rows.slice(1) };
+    showModal("guided-import");
   }
 
   document.addEventListener("keydown", (event) => {
@@ -5349,6 +5631,110 @@
         const item = { id: existing?.id || uniqueId("tpl", data.name, state.workspace.templates), name: data.name.trim(), moduleId: data.moduleId, defaultTags: data.defaultTags.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 20), defaultSummary: data.defaultSummary.trim(), defaultNotes: data.defaultNotes.trim() };
         await commit((workspace) => { const index = workspace.templates.findIndex((entry) => entry.id === item.id); if (index >= 0) workspace.templates[index] = item; else workspace.templates.push(item); }, existing ? "Modèle mis à jour" : "Modèle créé", item.name, "template"); return;
       }
+      if (form.dataset.form === "custom-module") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut créer un module local.");
+        const existing = form.dataset.id ? state.workspace.customModuleDefinitions.find((entry) => entry.id === form.dataset.id) : null;
+        const label = String(data.label || "").trim();
+        if (!label) throw new Error("Ajoutez un nom au module.");
+        const fields = [];
+        const fieldKeys = new Set();
+        for (let index = 0; index < 20; index += 1) {
+          const fieldLabel = String(formData.get(`fieldLabel_${index}`) || "").trim();
+          if (!fieldLabel) continue;
+          if (/(mot.?de.?passe|password|secret|jeton|token|api.?key|clé.?api|credential)/i.test(fieldLabel)) throw new Error(`Le champ « ${fieldLabel} » doit être conservé dans Passwords.`);
+          const type = String(formData.get(`fieldType_${index}`) || "text");
+          const allowedTypes = new Set(["text", "textarea", "number", "date", "url", "email", "tel", "select"]);
+          if (!allowedTypes.has(type)) throw new Error(`Le type du champ « ${fieldLabel} » est invalide.`);
+          let key = existing?.fields?.[index]?.key || slug(fieldLabel).replaceAll("-", "").slice(0, 36);
+          if (!/^[a-z]/i.test(key)) key = `field${key}`;
+          if (key.length < 2) key = `field${index + 1}`;
+          let uniqueKey = key;
+          let suffix = 2;
+          while (fieldKeys.has(uniqueKey)) uniqueKey = `${key.slice(0, 34)}${suffix++}`;
+          fieldKeys.add(uniqueKey);
+          const options = String(formData.get(`fieldOptions_${index}`) || "").split(/[,;\n]+/).map((value) => value.trim()).filter(Boolean).slice(0, 30);
+          if (type === "select" && !options.length) throw new Error(`Ajoutez au moins un choix au champ « ${fieldLabel} ».`);
+          fields.push({ key: uniqueKey, label: fieldLabel, type, ...(type === "select" ? { options } : {}), ...(type === "textarea" ? { rows: 4, span: 2 } : {}) });
+        }
+        if (fields.length < 4) throw new Error("Ajoutez au moins quatre champs métier pour créer un module utile.");
+        const item = {
+          id: existing?.id || uniqueId("local", label, state.workspace.customModuleDefinitions),
+          label,
+          description: String(data.description || "").trim(),
+          titleLabel: String(data.titleLabel || "Nom de la fiche").trim(),
+          icon: String(data.icon || "grid"),
+          fields,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await commit((workspace) => {
+          const index = workspace.customModuleDefinitions.findIndex((definition) => definition.id === item.id);
+          if (index >= 0) workspace.customModuleDefinitions[index] = item;
+          else workspace.customModuleDefinitions.push(item);
+        }, existing ? "Module personnalisé mis à jour" : "Module personnalisé créé", item.label, "module-definition");
+        state.visibleModuleIds.add(item.id);
+        const selected = [...state.visibleModuleIds].filter((id) => moduleMap.has(id));
+        const preferences = await api("/api/me/preferences", { method: "PUT", body: JSON.stringify({ visibleModules: selected }) });
+        state.user = preferences.user;
+        localStorage.setItem(modulePreferenceKey(), JSON.stringify(selected));
+        render();
+        toast(`Module « ${item.label} » prêt dans la navigation de l’organisation active.`);
+        return;
+      }
+      if (form.dataset.form === "guided-import") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut appliquer cet import.");
+        const preview = state.importPreview;
+        if (!preview?.rows?.length) throw new Error("L’aperçu CSV a expiré.");
+        const mapped = (key, row) => {
+          const selected = formData.get(`map_${key}`);
+          if (selected === null || selected === "") return "";
+          const index = Number(selected);
+          return Number.isInteger(index) && index >= 0 ? String(row[index] || "").trim() : "";
+        };
+        const imported = [];
+        if (preview.target === "organizations") {
+          const identifiers = [...state.workspace.organizations];
+          for (const row of preview.rows) {
+            const name = mapped("name", row);
+            if (!name) throw new Error("Chaque ligne doit contenir un nom de compagnie.");
+            const item = { id: uniqueId("org", name, identifiers), name: name.slice(0, 120), code: (mapped("code", row) || name.split(/\s+/).map((part) => part[0]).join("")).replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase() || "ORG", industry: mapped("industry", row).slice(0, 80), owner: mapped("owner", row).slice(0, 96), notes: mapped("notes", row).slice(0, 2000), quickNotes: "", parentOrganizationId: "", status: "active", details: {} };
+            identifiers.push(item); imported.push(item);
+          }
+          await commit((workspace) => workspace.organizations.push(...imported), "Import CSV terminé", `${imported.length} organisations`, "import");
+        } else if (preview.target === "configurations") {
+          const organizationId = String(data.organizationId || "");
+          if (!state.workspace.organizations.some((organization) => organization.id === organizationId)) throw new Error("Choisissez l’organisation de destination.");
+          const identifiers = [...state.workspace.configurations];
+          const siteId = state.workspace.sites.some((site) => site.id === data.siteId && site.organizationId === organizationId) ? data.siteId : "";
+          for (const row of preview.rows) {
+            const name = mapped("name", row);
+            if (!name) throw new Error("Chaque ligne doit contenir un nom de configuration.");
+            const item = { id: uniqueId("cfg", name, identifiers), organizationId, siteId, name: name.slice(0, 120), type: (mapped("type", row) || "Autre").slice(0, 80), os: mapped("os", row).slice(0, 160), ip: mapped("ip", row).slice(0, 80), owner: mapped("owner", row).slice(0, 96), location: mapped("location", row).slice(0, 160), warranty: "", criticality: "normal", status: "draft", lastReviewed: "", rmmId: "", summary: mapped("summary", row).slice(0, 1200), notes: mapped("notes", row).slice(0, 6000), procedureIds: [], relationIds: [], details: {} };
+            identifiers.push(item); imported.push(item);
+          }
+          await commit((workspace) => workspace.configurations.push(...imported), "Import CSV terminé", `${imported.length} configurations · ${orgName(organizationId)}`, "import");
+        } else {
+          const moduleId = preview.target.startsWith("module:") ? preview.target.slice(7) : "";
+          const module = moduleMap.get(moduleId);
+          const organizationId = String(data.organizationId || "");
+          if (!module || module.id === "passwords") throw new Error("Le module de destination n’est plus disponible.");
+          if (!state.workspace.organizations.some((organization) => organization.id === organizationId)) throw new Error("Choisissez l’organisation de destination.");
+          const identifiers = [...state.workspace.moduleRecords];
+          for (const row of preview.rows) {
+            const title = mapped("title", row);
+            if (!title) throw new Error("Chaque ligne doit contenir un titre.");
+            const rawStatus = normalizeSearch(mapped("status", row));
+            const details = {};
+            for (const field of moduleProfile(module).fields || []) details[field.key] = mapped(`detail_${field.key}`, row).slice(0, field.type === "textarea" ? 8000 : 1000);
+            const item = { id: uniqueId("rec", title, identifiers), moduleId, organizationId, siteId: "", title: title.slice(0, 160), owner: mapped("owner", row).slice(0, 96), status: rawStatus === "archive" || rawStatus === "archived" ? "archived" : rawStatus === "review" || rawStatus === "a reviser" ? "review" : "active", expiresOn: mapped("expiresOn", row).slice(0, 10), reference: mapped("reference", row).slice(0, 500), tags: mapped("tags", row).split(/[,;]+/).map((tag) => tag.trim()).filter(Boolean).slice(0, 20), summary: mapped("summary", row).slice(0, 1000), notes: mapped("notes", row).slice(0, 4000), updatedAt: new Date().toISOString().slice(0, 10), reviewState: "draft", reviewOwner: mapped("owner", row).slice(0, 96), reviewDueAt: "", reviewIntervalDays: 0, details, checklist: [] };
+            identifiers.push(item); imported.push(item);
+          }
+          await commit((workspace) => workspace.moduleRecords.push(...imported), "Import CSV terminé", `${imported.length} fiches ${module.label} · ${orgName(organizationId)}`, "import");
+        }
+        state.importPreview = null;
+        toast(`${imported.length} ligne${imported.length === 1 ? "" : "s"} importée${imported.length === 1 ? "" : "s"} dans une révision restaurable.`);
+        return;
+      }
       if (form.dataset.form === "workflows") {
         const expiryDays = Number(data.expiryDays); const staleDays = Number(data.staleDays);
         if (!Number.isInteger(expiryDays) || expiryDays < 1 || expiryDays > 365 || !Number.isInteger(staleDays) || staleDays < 7 || staleDays > 730) throw new Error("Les seuils de workflow sont invalides.");
@@ -5457,6 +5843,13 @@
           title: data.title.trim(), owner: data.owner.trim(), status: data.status, expiresOn: data.expiresOn || "", reference: moduleId === PRINTING_MODULE_ID ? String(details.hostAddress || "").trim() : data.reference.trim(),
           tags: data.tags.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 20), summary: data.summary.trim(), notes: data.notes.trim(), updatedAt: new Date().toISOString().slice(0, 10),
           details,
+          reviewState: ["draft", "in-review", "approved", "stale"].includes(data.reviewState) ? data.reviewState : existing?.reviewState || "draft",
+          reviewOwner: String(data.reviewOwner || "").trim(),
+          reviewDueAt: String(data.reviewDueAt || ""),
+          reviewIntervalDays: Math.min(Math.max(Number(data.reviewIntervalDays) || 0, 0), 730),
+          lastReviewedAt: existing?.lastReviewedAt || "",
+          approvedAt: data.reviewState === "approved" ? (existing?.approvedAt || new Date().toISOString()) : "",
+          approvedBy: data.reviewState === "approved" ? (existing?.approvedBy || state.user.displayName) : "",
           checklist: typeof data.checklistSteps === "string" ? data.checklistSteps.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, 100).map((line) => ({ done: /^\[x\]/i.test(line), label: line.replace(/^\[[ x]\]\s*/i, "").slice(0, 300) })) : (existing?.checklist || []),
         };
         await commit((workspace) => {
@@ -5506,6 +5899,113 @@
         await commit((workspace) => { workspace.settings.instanceName = nextGeneral.instanceName; workspace.settings.defaultLocale = nextGeneral.defaultLocale; }, "Paramètres mis à jour", "Instance Atlas", "settings");
         render();
         toast("Paramètres généraux enregistrés.");
+        return;
+      }
+      if (form.dataset.form === "settings-backups") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut configurer les sauvegardes.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const payload = {
+          enabled: data.enabled === "on",
+          destination: String(data.destination || "").trim(),
+          cadence: data.cadence === "weekly" ? "weekly" : "daily",
+          weekday: Number(data.weekday),
+          hour: Number(data.hour),
+          minute: Number(data.minute),
+          retentionEnabled: data.retentionEnabled === "on",
+          retentionCount: Number(data.retentionCount),
+          passphrase: String(data.passphrase || ""),
+          adminMfaCode: data.adminMfaCode || "",
+        };
+        if (payload.passphrase && payload.passphrase.length < 12) throw new Error("La phrase secrète doit contenir au moins 12 caractères.");
+        state.backupStatus = await api("/api/settings/backups", { method: "PUT", body: JSON.stringify(payload) });
+        await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadAudit()]);
+        render();
+        toast(payload.enabled ? "Planification de sauvegarde enregistrée." : "Configuration enregistrée; la planification est désactivée.");
+        return;
+      }
+      if (form.dataset.form === "settings-local-api") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut configurer l’API locale.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        state.localApiStatus = await api("/api/settings/local-api", { method: "PUT", body: JSON.stringify({ enabled: data.enabled === "on", webhooksEnabled: data.webhooksEnabled === "on", adminMfaCode: data.adminMfaCode || "" }) });
+        state.createdApiToken = "";
+        state.createdWebhookSecret = "";
+        await loadAudit();
+        render();
+        toast(state.localApiStatus.enabled ? "API locale activée." : "API locale désactivée.");
+        return;
+      }
+      if (form.dataset.form === "local-webhook-create") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut créer un webhook.");
+        const events = formData.getAll("events").map(String);
+        if (!events.length) throw new Error("Choisissez au moins un événement.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const result = await api("/api/settings/local-api/webhooks", { method: "POST", body: JSON.stringify({ label: String(data.label || "").trim(), url: String(data.url || "").trim(), events, adminMfaCode: data.adminMfaCode || "" }) });
+        state.createdWebhookSecret = result.secret;
+        await Promise.all([loadLocalApiStatus({ renderAfter: false }), loadAudit()]);
+        render();
+        toast("Webhook local créé. Copiez son secret de signature maintenant.");
+        return;
+      }
+      if (form.dataset.form === "local-webhook-test") {
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        state.localApiStatus = await api(`/api/settings/local-api/webhooks/${encodeURIComponent(form.dataset.id)}/test`, { method: "POST", body: JSON.stringify({ adminMfaCode: data.adminMfaCode || "" }) });
+        await loadAudit(); render(); toast("Webhook local livré avec succès."); return;
+      }
+      if (form.dataset.form === "local-webhook-remove") {
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        state.localApiStatus = await api(`/api/settings/local-api/webhooks/${encodeURIComponent(form.dataset.id)}`, { method: "DELETE", body: JSON.stringify({ adminMfaCode: data.adminMfaCode || "" }) });
+        state.createdWebhookSecret = "";
+        await loadAudit(); render(); toast("Webhook local retiré."); return;
+      }
+      if (form.dataset.form === "local-api-token-create") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut créer un jeton.");
+        const scopes = formData.getAll("scopes").map(String);
+        const organizationIds = formData.getAll("organizationIds").map(String);
+        if (!scopes.length) throw new Error("Choisissez au moins une portée.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const result = await api("/api/settings/local-api/tokens", { method: "POST", body: JSON.stringify({ label: String(data.label || "").trim(), scopes, allOrganizations: data.allOrganizations === "on", organizationIds, adminMfaCode: data.adminMfaCode || "" }) });
+        state.createdApiToken = result.token;
+        await Promise.all([loadLocalApiStatus({ renderAfter: false }), loadAudit()]);
+        render();
+        toast("Jeton créé. Copiez-le maintenant; il ne sera plus affiché.");
+        return;
+      }
+      if (form.dataset.form === "local-api-token-revoke") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut révoquer un jeton.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        state.localApiStatus = await api(`/api/settings/local-api/tokens/${encodeURIComponent(form.dataset.id)}`, { method: "DELETE", body: JSON.stringify({ adminMfaCode: data.adminMfaCode || "" }) });
+        state.createdApiToken = "";
+        await loadAudit();
+        render();
+        toast("Jeton API révoqué.");
+        return;
+      }
+      if (form.dataset.form === "backup-run") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut créer une sauvegarde complète.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const payload = await api("/api/settings/backups/run", { method: "POST", body: JSON.stringify({ passphrase: data.passphrase || "", adminMfaCode: data.adminMfaCode || "" }) });
+        state.backupStatus = payload.status;
+        await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadAudit()]);
+        render();
+        toast(`Sauvegarde ${payload.result.name} créée et chiffrée.`);
+        return;
+      }
+      if (form.dataset.form === "backup-inspect") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut tester une sauvegarde complète.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const result = await api("/api/settings/backups/inspect", { method: "POST", body: JSON.stringify({ name: form.dataset.name, passphrase: data.passphrase || "", adminMfaCode: data.adminMfaCode || "" }) });
+        await loadAudit();
+        form.reset();
+        toast(`Intégrité confirmée : ${result.fileCount} fichiers vérifiés, aucune restauration effectuée.`);
         return;
       }
       if (form.dataset.form === "settings-deployment") {
@@ -5587,6 +6087,9 @@
     });
     render();
     if (state.page === "settings" && isAdministrator() && !state.deploymentHealth && !state.deploymentHealthLoading) void loadDeploymentHealth();
+    if (state.page === "settings" && state.detailId === "backups" && isAdministrator() && !state.backupStatus && !state.backupLoading) void loadBackupStatus();
+    if (state.page === "settings" && state.detailId === "updates" && isAdministrator() && !state.updateStatus && !state.updateLoading) void loadUpdateStatus();
+    if (state.page === "settings" && state.detailId === "integrations" && isAdministrator() && !state.localApiStatus && !state.localApiLoading) void loadLocalApiStatus();
     if (state.page === "asset" && state.detailId?.startsWith("vault:") && vaultSessionUnlocked() && state.revealedVaultItem?.id !== state.detailId.slice(6)) {
       void revealVaultItem(state.detailId.slice(6), { promptOnLocked: false });
     }

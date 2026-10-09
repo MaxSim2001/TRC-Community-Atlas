@@ -35,14 +35,16 @@ function totp(secret) {
 test("local setup, explicit public origin, mandatory MFA, workspace revision and account management", async (context) => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), "trc-atlas-test-"));
   const sessionClock = { now: Date.now() };
-  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.13.2", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
+  const probePublicSite = async (domain) => ({ checkedAt: new Date().toISOString(), domain, address: "203.0.113.20", atlas: { ok: true, version: "0.14.0", storage: "sqlite" }, certificate: { subject: domain, issuer: "Atlas QA CA", validTo: "2027-10-08T00:00:00.000Z", daysRemaining: 365, subjectAltName: `DNS:${domain}` } });
   let autostartState = { supported: true, installed: false, enabled: false, taskName: "TRC Community Atlas", state: "Absent", trigger: "none", runAs: "", hidden: null, lastRunAt: null, lastTaskResult: null, message: "Le démarrage automatique Atlas n’est pas configuré." };
   const autostartManager = async ({ mode }) => {
     if (mode === "enable") autostartState = { ...autostartState, installed: true, enabled: true, state: "Ready", trigger: "startup", runAs: "SYSTEM", hidden: true, message: "Atlas est planifié en arrière-plan avec Windows." };
     if (mode === "disable") autostartState = { ...autostartState, enabled: false, state: "Disabled", message: "La tâche Atlas existe, mais elle est désactivée." };
     return structuredClone(autostartState);
   };
-  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager });
+  const webhookDeliveries = [];
+  const webhookSender = async (delivery) => { webhookDeliveries.push(delivery); return { status: 202 }; };
+  let server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager, webhookSender });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   let address = server.address();
   let base = `http://127.0.0.1:${address.port}`;
@@ -72,7 +74,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   let result = await request("/api/status");
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.13.2");
+  assert.equal(result.payload.version, "0.14.0");
   assert.equal(result.payload.storage, "uninitialized");
   assert.match(result.response.headers.get("content-security-policy"), /default-src 'self'/);
 
@@ -111,7 +113,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 200);
 
   await new Promise((resolve) => server.close(resolve));
-  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager });
+  server = createAtlasServer({ host: "127.0.0.1", port: 9092, dataRoot, now: () => sessionClock.now, allowedOrigins: ["https://atlas.therisingcloud.com"], probePublicSite, autostartManager, webhookSender });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   address = server.address();
   base = `http://127.0.0.1:${address.port}`;
@@ -136,10 +138,74 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   const workspace = result.payload.data;
   workspace.settings.instanceName = "Atlas test";
   workspace.organizations[0].quickNotes = "## Avant intervention\n- Aviser le responsable du site";
+  workspace.customModuleDefinitions.push({
+    id: "local-qa-contracts",
+    label: "Contrats QA",
+    description: "Module local de validation",
+    icon: "file",
+    titleLabel: "Nom du contrat",
+    fields: [
+      { key: "supplier", label: "Fournisseur", type: "text", options: [] },
+      { key: "reference", label: "Référence", type: "text", options: [] },
+      { key: "renewal", label: "Renouvellement", type: "date", options: [] },
+      { key: "statusDetail", label: "Détail du statut", type: "textarea", options: [] },
+    ],
+  });
   result = await request("/api/workspace", { method: "PUT", csrf, body: { revision: 1, data: workspace } });
   assert.equal(result.response.status, 200);
   assert.equal(result.payload.revision, 2);
   assert.equal(result.payload.data.organizations[0].quickNotes, "## Avant intervention\n- Aviser le responsable du site");
+  assert.equal(result.payload.data.customModuleDefinitions[0].id, "local-qa-contracts");
+
+  result = await request("/api/settings/local-api");
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.enabled, false);
+  result = await request("/api/settings/local-api", { method: "PUT", csrf, body: { enabled: true, webhooksEnabled: true, adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.enabled, true);
+  assert.equal(result.payload.webhooksEnabled, true);
+  result = await request("/api/settings/local-api/tokens", { method: "POST", csrf, body: { label: "QA local", scopes: ["read:health", "read:organizations", "read:records"], allOrganizations: true, adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 201);
+  assert.match(result.payload.token, /^atlas_/);
+  const localApiToken = result.payload.token;
+  const localApiTokenId = result.payload.item.id;
+  assert.equal("hash" in result.payload.item, false);
+
+  result = await request("/api/v1/health");
+  assert.equal(result.response.status, 401);
+  result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.version, "0.14.0");
+  result = await request("/api/v1/organizations", { headers: { authorization: `Bearer ${localApiToken}` } });
+  assert.equal(result.response.status, 200);
+  assert.ok(result.payload.items.length >= 1);
+  assert.equal("quickNotes" in result.payload.items[0], false);
+  result = await request("/api/v1/records?limit=5", { headers: { authorization: `Bearer ${localApiToken}` } });
+  assert.equal(result.response.status, 200);
+  assert.ok(result.payload.items.length <= 5);
+  assert.equal(result.payload.items.some((item) => "password" in item || "encrypted" in item), false);
+
+  result = await request(`/api/settings/local-api/tokens/${localApiTokenId}`, { method: "DELETE", csrf, body: { adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.ok(result.payload.tokens.find((token) => token.id === localApiTokenId).revokedAt);
+  result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
+  assert.equal(result.response.status, 403);
+
+  result = await request("/api/settings/local-api/webhooks", { method: "POST", csrf, body: { label: "LAN interdit", url: "http://192.168.50.6:9199/atlas-events", events: ["workspace.updated"], adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 400);
+  result = await request("/api/settings/local-api/webhooks", { method: "POST", csrf, body: { label: "Orchestrateur QA", url: "http://127.0.0.1:9199/atlas-events", events: ["workspace.updated", "backup.completed"], adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 201);
+  assert.match(result.payload.secret, /^whsec_/);
+  assert.equal("encryptedSecret" in result.payload.item, false);
+  const webhookId = result.payload.item.id;
+  result = await request(`/api/settings/local-api/webhooks/${webhookId}/test`, { method: "POST", csrf, body: { adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.equal(webhookDeliveries.length, 1);
+  assert.equal(webhookDeliveries[0].event, "workspace.updated");
+  assert.match(webhookDeliveries[0].signature, /^sha256=[a-f0-9]{64}$/);
+  result = await request(`/api/settings/local-api/webhooks/${webhookId}`, { method: "DELETE", csrf, body: { adminMfaCode: totp(adminSecret) } });
+  assert.equal(result.response.status, 200);
+  assert.equal(result.payload.webhooks.length, 0);
 
   result = await request("/api/workspace", { method: "PUT", csrf, body: { revision: 1, data: workspace } });
   assert.equal(result.response.status, 409);

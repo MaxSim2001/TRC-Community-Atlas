@@ -12,7 +12,8 @@ test("module creation is scoped to the active organization and uses business pro
   assert.match(app, /function\s+creationOrganizationId\s*\(/);
   assert.match(app, /function\s+organizationContextField\s*\(/);
   assert.match(app, /type="hidden" name="organizationId"/);
-  assert.doesNotMatch(app, /<select name="organizationId"/);
+  assert.match(app, /data-form="guided-import"/);
+  assert.match(app, /Organisation de destination<select name="organizationId"/);
   assert.doesNotMatch(app, /function\s+organizationOptions\s*\(/);
   assert.match(app, /if \(action === "new-module-record"\) \{[\s\S]*?if \(!creationOrganizationId\("ajouter une fiche"\)\) return;/);
   assert.match(app, /if \(action === "new-vault-item"\) \{ if \(!creationOrganizationId\("ajouter un mot de passe"\)\) return;/);

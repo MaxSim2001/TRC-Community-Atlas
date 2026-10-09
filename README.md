@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Version actuelle : **0.13.2**.
+Version actuelle : **0.14.0**.
 
 [![Tests Atlas](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -107,6 +107,10 @@ toute tâche Atlas remplacée, puis valide l’état de l’API locale après d�
 - panneau « Santé des mots de passe » dans chaque espace de compagnie et vue consolidée dans le tableau de bord global, avec six niveaux factuels, ventilation par compagnie et explication transparente du calcul local;
 - page « Mon compte » avec changement autonome du mot de passe, remplacement MFA, régénération des codes de récupération et révocation session par session;
 - sauvegarde complète chiffrée AES-256-GCM incluant comptes, MFA, coffre, clé, SQLite et pièces jointes, avec restauration confirmée et copie de sécurité préalable; les sessions sont volontairement exclues;
+- gestionnaire de sauvegardes dans Paramètres : emplacement local ou UNC, phrase secrète planifiée protégée par Windows DPAPI, horaire quotidien ou hebdomadaire, rétention explicite, historique et test d’intégrité sans restauration;
+- contrôles de santé étendus pour SQLite, l’espace disque, la taille des données, l’âge de la dernière sauvegarde et l’état des mises à jour;
+- constructeur de modules locaux, cycle de révision documentaire et import CSV guidé avec aperçu, mappage et révision de retour arrière;
+- API locale facultative, désactivée par défaut, avec jetons hachés, portées de lecture minimales, restriction par compagnie et révocation MFA; webhooks HMAC limités à la boucle locale de cette VM; aucun secret du coffre n’est exposé;
 - outil de récupération hors bande local pour réinitialiser un administrateur, avec mot de passe temporaire, nouvel enrôlement MFA, sauvegarde datée et trace d’audit;
 - portée des comptes imposée côté serveur au workspace, au coffre, aux pièces jointes et aux historiques; le coffre est refusé par défaut aux nouveaux comptes tant qu’un administrateur ne l’autorise pas;
 - archivage et restauration directs des fiches sans rompre leurs relations;
@@ -161,7 +165,7 @@ En récupération hors bande, exécuter d’abord `atlas-break-glass.mjs` avec `
 - La page Gérer les modules affiche la couverture, le profil et le nombre de champs de chaque type; une matrice QA valide tous les schémas et leur persistance SQLite.
 - Aucun lien ni aucune dépendance à TRC Account.
 - TRC RMM demeure autonome; son connecteur et son SSO seront des options configurables et désactivées par défaut.
-- Aucun service Internet ni télémétrie. La future vérification de version GitHub sera le seul appel sortant prévu, manuel par défaut et configurable.
+- Aucun service Internet ni télémétrie. La vérification de version GitHub est manuelle et n’autorise aucune installation tant qu’un manifeste signé et un retour arrière testé ne sont pas disponibles.
 - Un seul port Atlas, `9092` par défaut, configurable graphiquement ou avec
   `-Port`; la base SQLite locale n’ouvre aucun port supplémentaire.
 

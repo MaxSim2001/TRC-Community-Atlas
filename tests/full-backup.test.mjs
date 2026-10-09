@@ -17,6 +17,9 @@ test("full backups encrypt accounts, vault, SQLite and attachments while excludi
   await writeFile(path.join(dataRoot, "vault.json"), '{"items":[]}', "utf8");
   await writeFile(path.join(dataRoot, "vault.key"), "synthetic-key", "utf8");
   await writeFile(path.join(dataRoot, "attachments.json"), '{"items":[]}', "utf8");
+  await writeFile(path.join(dataRoot, "backup-settings.json"), '{"enabled":true,"cadence":"daily"}', "utf8");
+  await writeFile(path.join(dataRoot, "backup-secret.clixml"), "synthetic-dpapi-payload", "utf8");
+  await writeFile(path.join(dataRoot, "local-api.json"), '{"enabled":true,"tokens":[{"hash":"synthetic-hash"}]}', "utf8");
   await writeFile(path.join(dataRoot, "attachments", "att-test.bin"), "attachment", "utf8");
   await writeFile(path.join(dataRoot, "sessions.json"), '{"sessions":[{"tokenHash":"secret-session"}]}', "utf8");
   const database = new DatabaseSync(path.join(dataRoot, "atlas.sqlite"));
@@ -31,6 +34,9 @@ test("full backups encrypt accounts, vault, SQLite and attachments while excludi
   const payload = await readFullBackup({ inputPath: outputPath, passphrase });
   assert.ok(payload.files.some((file) => file.path === "atlas.sqlite"));
   assert.ok(payload.files.some((file) => file.path === "attachments/att-test.bin"));
+  assert.ok(payload.files.some((file) => file.path === "backup-settings.json"));
+  assert.ok(payload.files.some((file) => file.path === "backup-secret.clixml"));
+  assert.ok(payload.files.some((file) => file.path === "local-api.json"));
   assert.equal(payload.files.some((file) => file.path === "sessions.json"), false);
 
   await writeFile(path.join(dataRoot, "auth.json"), '{"users":[]}', "utf8");

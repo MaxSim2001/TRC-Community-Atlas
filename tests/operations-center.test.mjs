@@ -1,0 +1,72 @@
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  createManagedBackup,
+  enforceBackupRetention,
+  inspectManagedBackup,
+  listManagedBackups,
+  nextBackupRun,
+  validateBackupDestination,
+} from "../lib/atlas-operations.mjs";
+
+test("managed backups are encrypted, inspectable, scheduled and retained without touching unrelated files", async (context) => {
+  const root = await mkdtemp(path.join(tmpdir(), "atlas-operations-"));
+  const dataRoot = path.join(root, "data");
+  const destination = path.join(root, "managed-backups");
+  const passphrase = "synthetic-managed-backup-passphrase";
+  context.after(() => rm(root, { recursive: true, force: true }));
+
+  await mkdir(dataRoot, { recursive: true });
+  await writeFile(path.join(dataRoot, "auth.json"), '{"users":[{"username":"qa-admin"}]}', "utf8");
+  await writeFile(path.join(dataRoot, "vault.json"), '{"items":[]}', "utf8");
+  await writeFile(path.join(dataRoot, "vault.key"), "synthetic-key", "utf8");
+  await writeFile(path.join(dataRoot, "attachments.json"), '{"items":[]}', "utf8");
+  const database = new DatabaseSync(path.join(dataRoot, "atlas.sqlite"));
+  database.exec("CREATE TABLE workspace_state (singleton INTEGER PRIMARY KEY, revision INTEGER); INSERT INTO workspace_state VALUES (1, 1);");
+  database.close();
+
+  assert.equal(validateBackupDestination(destination), path.normalize(destination));
+  assert.throws(() => validateBackupDestination(path.parse(destination).root), /racine/i);
+  assert.equal(nextBackupRun({ enabled: false }), "");
+  assert.equal(nextBackupRun({ enabled: true, cadence: "daily", hour: 2, minute: 30 }, Date.parse("2026-10-08T03:00:00-04:00")), "2026-10-09T06:30:00.000Z");
+
+  for (let index = 0; index < 3; index += 1) {
+    await createManagedBackup({ projectRoot: root, dataRoot, destination, passphrase, now: Date.parse(`2026-10-0${7 + index}T12:00:0${index}Z`) });
+  }
+  await writeFile(path.join(destination, "do-not-touch.txt"), "unrelated", "utf8");
+  const before = await listManagedBackups(destination);
+  assert.equal(before.length, 3);
+  assert.ok(before.every((item) => item.name.startsWith("TRC_Community_Atlas_Full_Backup_")));
+
+  const inspected = await inspectManagedBackup({ destination, name: before[0].name, passphrase });
+  assert.equal(inspected.valid, true);
+  assert.equal(inspected.sessionsExcluded, true);
+  assert.ok(inspected.fileCount >= 2);
+  await assert.rejects(inspectManagedBackup({ destination, name: before[0].name, passphrase: "wrong-passphrase-123" }));
+
+  const removed = await enforceBackupRetention(destination, 2);
+  assert.equal(removed.length, 1);
+  assert.equal((await listManagedBackups(destination)).length, 2);
+  assert.equal(await readFile(path.join(destination, "do-not-touch.txt"), "utf8"), "unrelated");
+});
+
+test("operations UI exposes backup, safe update and scoped local API controls", async () => {
+  const [app, styles, releaseNotes] = await Promise.all([
+    readFile(new URL("../public/assets/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/assets/styles.css", import.meta.url), "utf8"),
+    readFile(new URL("../docs/RELEASE_NOTES.md", import.meta.url), "utf8"),
+  ]);
+  assert.match(app, /data-form="settings-backups"/);
+  assert.match(app, /data-form="backup-inspect"/);
+  assert.match(app, /manifeste signé/);
+  assert.match(app, /data-form="local-api-token-create"/);
+  assert.match(app, /read:organizations/);
+  assert.match(app, /WEBHOOKS LOCAUX/);
+  assert.match(app, /127\.0\.0\.1/);
+  assert.match(styles, /\.local-api-settings/);
+  assert.match(releaseNotes, /0\.14\.0/);
+});

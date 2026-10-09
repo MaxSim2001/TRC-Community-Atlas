@@ -4,11 +4,22 @@ import { execFile } from "node:child_process";
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { readFileSync } from "node:fs";
-import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { createConnection, isIP } from "node:net";
 import path from "node:path";
 import { domainToASCII, fileURLToPath } from "node:url";
 import { AtlasStore } from "./lib/atlas-store.mjs";
+import {
+  checkLatestGithubRelease,
+  createManagedBackup,
+  enforceBackupRetention,
+  inspectManagedBackup,
+  listManagedBackups,
+  nextBackupRun,
+  normalizeBackupSettings,
+  protectBackupSecret,
+  validateBackupDestination,
+} from "./lib/atlas-operations.mjs";
 
 const modulePath = fileURLToPath(import.meta.url);
 const projectRoot = path.dirname(modulePath);
@@ -21,6 +32,7 @@ const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_LIMIT = 8;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
+const ATLAS_VERSION = "0.14.0";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -528,6 +540,7 @@ function seedWorkspace() {
     relationshipEvents: [
       { id: "rev-rel-dc01-nas", relationId: "rel-dc01-nas", at: createdAt, actor: "Système", action: "Relation ajoutée", sourceRef: "configuration:cfg-nsa-dc01", targetRef: "configuration:cfg-nsa-nas01", relationType: "backed-up-to", label: "Sauvegardé vers" },
     ],
+    customModuleDefinitions: [],
     activities: [
       { id: "act-1", at: createdAt, actor: "Système", action: "Instance initialisée", target: "TRC Community Atlas", kind: "system" },
       { id: "act-2", at: "2026-09-30T14:20:00.000Z", actor: "Sophie Tremblay", action: "Procédure publiée", target: "Incident applicatif prioritaire", kind: "procedure" },
@@ -598,6 +611,24 @@ function validateWorkspace(value, options = {}) {
     if (!Array.isArray(value[key]) || value[key].length > limit) return false;
     if (value[key].some((item) => !item || typeof item !== "object" || !isSafeId(item.id))) return false;
   }
+  if (value.customModuleDefinitions !== undefined) {
+    if (!Array.isArray(value.customModuleDefinitions) || value.customModuleDefinitions.length > 50) return false;
+    const moduleIds = new Set();
+    const allowedFieldTypes = new Set(["text", "textarea", "number", "date", "url", "email", "tel", "select"]);
+    for (const module of value.customModuleDefinitions) {
+      if (!module || !/^local-[a-z0-9][a-z0-9-]{0,55}$/i.test(module.id) || moduleIds.has(module.id)) return false;
+      moduleIds.add(module.id);
+      if (typeof module.label !== "string" || !module.label.trim() || module.label.length > 80 || typeof module.description !== "string" || module.description.length > 300) return false;
+      if (!Array.isArray(module.fields) || module.fields.length < 4 || module.fields.length > 20) return false;
+      const fieldKeys = new Set();
+      for (const field of module.fields) {
+        if (!field || !/^[a-z][a-z0-9]{1,39}$/i.test(field.key) || fieldKeys.has(field.key) || typeof field.label !== "string" || !field.label.trim() || field.label.length > 80 || !allowedFieldTypes.has(field.type)) return false;
+        if (/(password|secret|token|api.?key|credential|mot.?de.?passe)/i.test(`${field.key} ${field.label}`)) return false;
+        fieldKeys.add(field.key);
+        if (field.type === "select" && (!Array.isArray(field.options) || !field.options.length || field.options.length > 30 || field.options.some((option) => typeof option !== "string" || !option.trim() || option.length > 80))) return false;
+      }
+    }
+  }
   if (!validateOrganizationHierarchy(value.organizations, options)) return false;
   if (!value.settings || typeof value.settings !== "object") return false;
   const encodedLength = Buffer.byteLength(JSON.stringify(value), "utf8");
@@ -648,6 +679,8 @@ export function createAtlasServer(options = {}) {
   const dataRoot = options.dataRoot || defaultDataRoot;
   const sessionNow = typeof options.now === "function" ? options.now : Date.now;
   const manageAutostart = typeof options.autostartManager === "function" ? options.autostartManager : runAutostartManager;
+  const releaseChecker = typeof options.releaseChecker === "function" ? options.releaseChecker : checkLatestGithubRelease;
+  const backupSecretProtector = typeof options.backupSecretProtector === "function" ? options.backupSecretProtector : protectBackupSecret;
   const authPath = path.join(dataRoot, "auth.json");
   const sessionsPath = path.join(dataRoot, "sessions.json");
   const workspacePath = path.join(dataRoot, "workspace.json");
@@ -656,6 +689,10 @@ export function createAtlasServer(options = {}) {
   const vaultKeyPath = path.join(dataRoot, "vault.key");
   const attachmentsPath = path.join(dataRoot, "attachments.json");
   const attachmentFilesRoot = path.join(dataRoot, "attachments");
+  const backupSettingsPath = path.join(dataRoot, "backup-settings.json");
+  const backupSecretPath = path.join(dataRoot, "backup-secret.clixml");
+  const localApiSettingsPath = path.join(dataRoot, "local-api.json");
+  const backupBaseRoot = path.dirname(dataRoot);
   const sessions = new Map();
   const pendingMfa = new Map();
   const pendingPasswordChanges = new Map();
@@ -664,6 +701,9 @@ export function createAtlasServer(options = {}) {
   let storePromise = null;
   let vaultSecurityMetadataPromise = null;
   let deploymentOriginsLoaded = false;
+  let backupRunning = false;
+  let backupTimer = null;
+  let lastReleaseCheck = null;
 
   try {
     const persisted = JSON.parse(readFileSync(sessionsPath, "utf8"));
@@ -851,6 +891,209 @@ export function createAtlasServer(options = {}) {
 
   async function readWorkspace() {
     return (await getStore()).readDocument();
+  }
+
+  async function readBackupSettings() {
+    return normalizeBackupSettings(await readJson(backupSettingsPath, null), backupBaseRoot);
+  }
+
+  function normalizedLocalApiSettings(value = {}) {
+    const source = value && typeof value === "object" ? value : {};
+    const webhookEvents = new Set(["workspace.updated", "backup.completed", "backup.failed"]);
+    return {
+      schemaVersion: 1,
+      enabled: source.enabled === true,
+      webhooksEnabled: source.webhooksEnabled === true,
+      tokens: Array.isArray(source.tokens) ? source.tokens.filter((token) => token && isSafeId(token.id) && /^[a-f0-9]{64}$/.test(token.hash || "")).slice(0, 100).map((token) => ({
+        id: token.id,
+        label: cleanText(token.label, 80) || "Intégration locale",
+        hash: token.hash,
+        scopes: [...new Set((Array.isArray(token.scopes) ? token.scopes : []).filter((scope) => ["read:organizations", "read:records", "read:health"].includes(scope)))],
+        organizationIds: token.organizationIds === null ? null : [...new Set((Array.isArray(token.organizationIds) ? token.organizationIds : []).filter(isSafeId))],
+        createdAt: String(token.createdAt || ""),
+        lastUsedAt: String(token.lastUsedAt || ""),
+        revokedAt: String(token.revokedAt || ""),
+      })) : [],
+      webhooks: Array.isArray(source.webhooks) ? source.webhooks.filter((item) => item && isSafeId(item.id) && item.encryptedSecret?.algorithm === "aes-256-gcm").slice(0, 25).map((item) => ({
+        id: item.id,
+        label: cleanText(item.label, 80) || "Webhook local",
+        url: String(item.url || ""),
+        events: [...new Set((Array.isArray(item.events) ? item.events : []).filter((event) => webhookEvents.has(event)))],
+        encryptedSecret: item.encryptedSecret,
+        enabled: item.enabled !== false,
+        createdAt: String(item.createdAt || ""),
+        lastDeliveryAt: String(item.lastDeliveryAt || ""),
+        lastStatus: Number(item.lastStatus) || 0,
+        lastError: String(item.lastError || "").slice(0, 300),
+      })) : [],
+      updatedAt: String(source.updatedAt || ""),
+    };
+  }
+
+  async function readLocalApiSettings() {
+    return normalizedLocalApiSettings(await readJson(localApiSettingsPath, null));
+  }
+
+  async function saveLocalApiSettings(settings) {
+    const normalized = normalizedLocalApiSettings({ ...settings, updatedAt: nowIso() });
+    await enqueueWrite(() => writeJsonAtomic(localApiSettingsPath, normalized));
+    return normalized;
+  }
+
+  function publicLocalApiSettings(settings) {
+    return {
+      enabled: settings.enabled,
+      webhooksEnabled: settings.webhooksEnabled,
+      updatedAt: settings.updatedAt,
+      tokens: settings.tokens.map(({ hash, ...token }) => token),
+      webhooks: settings.webhooks.map(({ encryptedSecret, ...webhook }) => webhook),
+    };
+  }
+
+  function validateLocalWebhookUrl(value) {
+    let parsed;
+    try { parsed = new URL(String(value || "")); }
+    catch { throw Object.assign(new Error("Saisissez une URL HTTP locale valide."), { statusCode: 400, code: "invalid_webhook_url" }); }
+    const hostName = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    const localHost = hostName === "localhost" || hostName === "127.0.0.1" || hostName === "::1";
+    const targetPort = Number(parsed.port);
+    if (parsed.protocol !== "http:" || !localHost || !Number.isInteger(targetPort) || targetPort < 1024 || targetPort > 65535 || parsed.username || parsed.password || parsed.hash || parsed.href.length > 500) {
+      throw Object.assign(new Error("Les webhooks Atlas sont limités à une URL HTTP de boucle locale avec un port explicite."), { statusCode: 400, code: "invalid_webhook_url" });
+    }
+    return parsed.href;
+  }
+
+  async function sendLocalWebhook(webhook, eventName, payload) {
+    const key = await getVaultKey();
+    const secret = decryptPayload(webhook.encryptedSecret, key).secret;
+    const body = Buffer.from(JSON.stringify({ id: `event-${randomBytes(8).toString("hex")}`, event: eventName, at: nowIso(), payload }), "utf8");
+    const signature = `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+    if (typeof options.webhookSender === "function") return options.webhookSender({ url: webhook.url, event: eventName, body, signature });
+    const target = new URL(validateLocalWebhookUrl(webhook.url));
+    return new Promise((resolve, reject) => {
+      const request = http.request({ hostname: target.hostname.replace(/^\[|\]$/g, ""), port: Number(target.port), path: `${target.pathname}${target.search}`, method: "POST", headers: { "content-type": "application/json", "content-length": body.length, "x-atlas-event": eventName, "x-atlas-signature": signature }, timeout: 3000 }, (response) => {
+        let received = 0;
+        response.on("data", (chunk) => { received += chunk.length; if (received > 64 * 1024) request.destroy(new Error("Réponse webhook trop volumineuse.")); });
+        response.on("end", () => {
+          if (response.statusCode >= 200 && response.statusCode < 300) resolve({ status: response.statusCode });
+          else reject(Object.assign(new Error(`Le webhook local a répondu ${response.statusCode}.`), { status: response.statusCode }));
+        });
+      });
+      request.on("timeout", () => request.destroy(new Error("Délai du webhook local dépassé.")));
+      request.on("error", reject);
+      request.end(body);
+    });
+  }
+
+  async function dispatchLocalWebhooks(eventName, payload) {
+    const settings = await readLocalApiSettings();
+    if (!settings.webhooksEnabled) return;
+    const targets = settings.webhooks.filter((item) => item.enabled && item.events.includes(eventName));
+    if (!targets.length) return;
+    for (const webhook of targets) {
+      try {
+        const result = await sendLocalWebhook(webhook, eventName, payload);
+        webhook.lastDeliveryAt = nowIso();
+        webhook.lastStatus = Number(result?.status) || 200;
+        webhook.lastError = "";
+      } catch (error) {
+        webhook.lastDeliveryAt = nowIso();
+        webhook.lastStatus = Number(error?.status) || 0;
+        webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300);
+      }
+    }
+    await saveLocalApiSettings(settings);
+  }
+
+  async function requireLocalApiToken(request, response, scope) {
+    const settings = await readLocalApiSettings();
+    if (!settings.enabled) { errorResponse(response, 403, "local_api_disabled", "L’API locale Atlas est désactivée."); return null; }
+    const header = String(request.headers.authorization || "");
+    const raw = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    if (!raw || raw.length > 256) { errorResponse(response, 401, "api_token_required", "Un jeton API local est requis."); return null; }
+    const incoming = Buffer.from(createHash("sha256").update(raw).digest("hex"), "hex");
+    const token = settings.tokens.find((candidate) => {
+      const stored = Buffer.from(candidate.hash, "hex");
+      return !candidate.revokedAt && stored.length === incoming.length && timingSafeEqual(stored, incoming);
+    });
+    if (!token || !token.scopes.includes(scope)) { errorResponse(response, 403, "api_scope_required", "Ce jeton ne possède pas la portée requise."); return null; }
+    token.lastUsedAt = nowIso();
+    await saveLocalApiSettings(settings);
+    return token;
+  }
+
+  async function saveBackupSettings(settings) {
+    const normalized = normalizeBackupSettings(settings, backupBaseRoot);
+    normalized.updatedAt = nowIso();
+    await enqueueWrite(() => writeJsonAtomic(backupSettingsPath, normalized));
+    return normalized;
+  }
+
+  async function backupManagerStatus({ includeFiles = true } = {}) {
+    const settings = await readBackupSettings();
+    let files = [];
+    let destinationReady = false;
+    let destinationError = "";
+    try {
+      files = includeFiles ? await listManagedBackups(settings.destination) : [];
+      destinationReady = true;
+    } catch (error) {
+      destinationError = String(error?.message || "Destination inaccessible").slice(0, 500);
+    }
+    return {
+      settings,
+      running: backupRunning,
+      destinationReady,
+      destinationError,
+      files,
+      restorePolicy: "offline-only",
+    };
+  }
+
+  async function executeManagedBackup({ passphrase = "", actor = "Planificateur Atlas", scheduled = false } = {}) {
+    if (backupRunning) throw Object.assign(new Error("Une sauvegarde complète est déjà en cours."), { statusCode: 409, code: "backup_in_progress" });
+    backupRunning = true;
+    let settings = await readBackupSettings();
+    try {
+      const result = await createManagedBackup({ projectRoot, dataRoot, destination: settings.destination, passphrase, secretPath: passphrase ? "" : backupSecretPath });
+      let removed = [];
+      if (settings.retentionEnabled) removed = await enforceBackupRetention(settings.destination, settings.retentionCount);
+      settings = await saveBackupSettings({
+        ...settings,
+        lastRunAt: result.completedAt,
+        lastSuccessAt: result.completedAt,
+        lastFile: result.name,
+        lastBytes: result.size,
+        lastFileCount: result.fileCount,
+        lastError: "",
+        nextRunAt: settings.enabled ? nextBackupRun(settings, Date.parse(result.completedAt) + 1000) : "",
+      });
+      await recordAudit(null, scheduled ? "backup-scheduled-completed" : "backup-manual-completed", { details: { actor, file: result.name, size: result.size, fileCount: result.fileCount, removedByRetention: removed.length } });
+      void dispatchLocalWebhooks("backup.completed", { scheduled, file: result.name, size: result.size, fileCount: result.fileCount }).catch(() => {});
+      return { ...result, removedByRetention: removed, settings };
+    } catch (error) {
+      const failedAt = nowIso();
+      await saveBackupSettings({ ...settings, lastRunAt: failedAt, lastError: String(error?.message || "Échec de sauvegarde").slice(0, 500), nextRunAt: settings.enabled ? nextBackupRun(settings, Date.parse(failedAt) + 1000) : "" });
+      await recordAudit(null, scheduled ? "backup-scheduled-failed" : "backup-manual-failed", { details: { actor, message: String(error?.message || "Échec").slice(0, 300) } });
+      void dispatchLocalWebhooks("backup.failed", { scheduled, message: String(error?.message || "Échec").slice(0, 300) }).catch(() => {});
+      throw error;
+    } finally {
+      backupRunning = false;
+    }
+  }
+
+  async function runScheduledBackupIfDue() {
+    if (backupRunning) return;
+    const settings = await readBackupSettings();
+    if (!settings.enabled || !settings.secretConfigured) return;
+    let dueAt = Date.parse(settings.nextRunAt || "");
+    if (!Number.isFinite(dueAt)) {
+      settings.nextRunAt = nextBackupRun(settings, Date.now());
+      await saveBackupSettings(settings);
+      return;
+    }
+    if (dueAt > Date.now()) return;
+    await executeManagedBackup({ scheduled: true });
   }
 
   function refreshSavedDeploymentOrigins(settings) {
@@ -1139,6 +1382,7 @@ export function createAtlasServer(options = {}) {
   async function deploymentHealth(request) {
     const document = await readWorkspace();
     const settings = normalizedDeploymentSettings(document?.data?.settings || {});
+    const backupSettings = await readBackupSettings();
     const auth = await readJson(authPath, null);
     const httpsObserved = requestUsesHttps(request);
     const forwardedHost = cleanText(String(request.headers["x-forwarded-host"] || "").split(",", 1)[0], 253) || "";
@@ -1152,6 +1396,21 @@ export function createAtlasServer(options = {}) {
       if (error?.code !== "ENOENT") throw error;
     }
     const publicUrl = settings.primaryDomain ? `https://${settings.primaryDomain}` : "";
+    const fileSize = async (filePath) => {
+      try { return (await stat(filePath)).size; }
+      catch (error) { if (error?.code === "ENOENT") return 0; throw error; }
+    };
+    const [databaseBytes, vaultBytes, attachmentIndexBytes, disk] = await Promise.all([
+      fileSize(path.join(dataRoot, "atlas.sqlite")),
+      fileSize(vaultPath),
+      fileSize(attachmentsPath),
+      statfs(dataRoot).catch(() => null),
+    ]);
+    const sqlite = (await getStore()).integrityCheck();
+    const freeBytes = disk ? Number(disk.bavail) * Number(disk.bsize) : null;
+    const totalBytes = disk ? Number(disk.blocks) * Number(disk.bsize) : null;
+    const freePercent = Number.isFinite(freeBytes) && Number.isFinite(totalBytes) && totalBytes > 0 ? Math.round((freeBytes / totalBytes) * 100) : null;
+    const backupAgeDays = backupSettings.lastSuccessAt ? Math.floor((Date.now() - Date.parse(backupSettings.lastSuccessAt)) / 86400000) : null;
     let autostart;
     try {
       autostart = await manageAutostart({ mode: "status", host, port, dataRoot, allowedOrigins: [...new Set([...allowedOrigins, ...savedDeploymentOrigins])] });
@@ -1162,10 +1421,12 @@ export function createAtlasServer(options = {}) {
     const listenerOpen = server.listening && listenerAddress && typeof listenerAddress === "object";
     const listenerLabel = listenerOpen ? `${listenerAddress.address}:${listenerAddress.port}` : `${host}:${port}`;
     const checks = [
-      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${"0.13.2"} répond sur ${host}:${port}.` },
+      { id: "application", status: "ok", label: "Service Atlas", message: `Atlas ${ATLAS_VERSION} répond sur ${host}:${port}; disponibilité du processus : ${Math.floor(process.uptime() / 3600)} h ${Math.floor((process.uptime() % 3600) / 60)} min.` },
       { id: "port", status: listenerOpen ? "ok" : "error", label: "Port Atlas local", message: listenerOpen ? `Le listener Atlas est actif sur cet ordinateur (${listenerLabel}).` : `Aucun listener Atlas actif n’est confirmé sur ${listenerLabel}.` },
       { id: "autostart", status: autostart.enabled ? "ok" : autostart.state === "Error" ? "warning" : "neutral", label: "Démarrage automatique", message: autostart.message || (autostart.enabled ? "Atlas démarrera en arrière-plan avec Windows." : "Le démarrage automatique est désactivé.") },
-      { id: "storage", status: document ? "ok" : "error", label: "Stockage documentaire", message: document ? "SQLite est initialisé et le workspace est lisible." : "Le stockage Atlas n’est pas initialisé." },
+      { id: "storage", status: document && sqlite.ok ? "ok" : "error", label: "Stockage documentaire", message: document && sqlite.ok ? `SQLite répond « ok »; base ${(databaseBytes / 1048576).toFixed(1)} Mo.` : `Le contrôle SQLite signale : ${sqlite.message}.` },
+      { id: "disk", status: freePercent === null ? "neutral" : freePercent < 10 ? "error" : freePercent < 20 ? "warning" : "ok", label: "Espace disque", message: freePercent === null ? "L’espace libre n’a pas pu être mesuré." : `${freePercent} % libre (${(freeBytes / 1073741824).toFixed(1)} Go sur ${(totalBytes / 1073741824).toFixed(1)} Go); index coffre ${(vaultBytes / 1048576).toFixed(1)} Mo, index pièces jointes ${(attachmentIndexBytes / 1048576).toFixed(1)} Mo.` },
+      { id: "backups", status: backupSettings.lastError ? "error" : backupSettings.lastSuccessAt ? (backupAgeDays > 7 ? "warning" : "ok") : "warning", label: "Sauvegarde complète", message: backupSettings.lastError ? `Dernier échec : ${backupSettings.lastError}` : backupSettings.lastSuccessAt ? `Dernière réussite ${backupAgeDays === 0 ? "aujourd’hui" : `il y a ${backupAgeDays} jour${backupAgeDays === 1 ? "" : "s"}`}; prochain passage ${backupSettings.enabled && backupSettings.nextRunAt ? new Date(backupSettings.nextRunAt).toLocaleString("fr-CA") : "non planifié"}.` : "Aucune sauvegarde complète réussie n’est enregistrée. Configurez la page Sauvegardes." },
       { id: "authentication", status: auth?.users?.length ? "ok" : "error", label: "Authentification locale", message: auth?.users?.length ? `${auth.users.length} compte local configuré${auth.users.length === 1 ? "" : "s"}.` : "Aucun administrateur local n’est configuré." },
       { id: "vault", status: vaultKeyReady ? "ok" : "neutral", label: "Coffre chiffré", message: vaultKeyReady ? "La clé locale du coffre est présente." : "La clé du coffre sera créée localement au premier secret; aucune action n’est requise maintenant." },
       { id: "identity", status: settings.instanceCode !== "ATLAS" || document?.data?.settings?.deployment ? "ok" : "warning", label: "Identité de l’instance", message: `Code actuel : ${settings.instanceCode}.` },
@@ -1173,7 +1434,7 @@ export function createAtlasServer(options = {}) {
       { id: "https", status: httpsObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "HTTPS observé", message: httpsObserved ? "Cette requête est arrivée à Atlas avec le protocole HTTPS déclaré." : settings.accessMode === "local" ? "Accès local HTTP attendu; le navigateur public devra passer par HTTPS." : "Atlas ne voit pas X-Forwarded-Proto: https sur cette requête." },
       { id: "reverse-proxy", status: proxyObserved ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Proxy inverse", message: proxyObserved ? `En-têtes de proxy observés${observedHost ? ` pour ${observedHost}` : ""}.` : settings.accessMode === "local" ? "Aucun proxy requis en mode local." : `Aucun en-tête de proxy n’est visible; vérifiez ${settings.reverseProxy.toUpperCase()}.` },
       { id: "origin", status: settings.primaryDomain && savedDeploymentOrigins.has(`https://${settings.primaryDomain}`) ? "ok" : settings.accessMode === "local" ? "neutral" : "warning", label: "Origine autorisée", message: settings.primaryDomain ? "Les requêtes d’écriture HTTPS de ce domaine sont autorisées par Atlas." : "Aucune origine publique enregistrée." },
-      { id: "updates", status: "neutral", label: "Mises à jour", message: "La vérification GitHub signée sera ajoutée au lot d’installation Windows; aucun appel externe automatique n’est effectué." },
+      { id: "updates", status: lastReleaseCheck?.installable ? "ok" : "neutral", label: "Mises à jour", message: lastReleaseCheck ? (lastReleaseCheck.installable ? `La version ${lastReleaseCheck.tag} fournit un manifeste signé vérifiable.` : `Dernière vérification : ${lastReleaseCheck.tag || "aucune version stable"}. Aucune installation n’est autorisée sans manifeste signé.`) : "La vérification GitHub est manuelle; aucun appel externe automatique n’est effectué." },
     ];
     return {
       checkedAt: nowIso(),
@@ -1182,6 +1443,9 @@ export function createAtlasServer(options = {}) {
       publicUrl,
       observed: { protocol: httpsObserved ? "https" : "http", host: observedHost, reverseProxyHeaders: proxyObserved },
       autostart,
+      storage: { databaseBytes, vaultBytes, attachmentIndexBytes, freeBytes, totalBytes, freePercent, sqlite },
+      backups: { ...backupSettings, backupAgeDays },
+      updates: lastReleaseCheck,
       summary: {
         ok: checks.filter((check) => check.status === "ok").length,
         warning: checks.filter((check) => check.status === "warning" || check.status === "error").length,
@@ -1227,7 +1491,42 @@ export function createAtlasServer(options = {}) {
       if (request.method === "GET" && url.pathname === "/api/status") {
         const auth = await readJson(authPath, null);
         const storage = (await getStore()).readDocument() ? "sqlite" : "uninitialized";
-        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: "0.13.2", initialized: Boolean(auth?.users?.length), storage });
+        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: ATLAS_VERSION, initialized: Boolean(auth?.users?.length), storage });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/health") {
+        const token = await requireLocalApiToken(request, response, "read:health");
+        if (!token) return;
+        const store = await getStore();
+        const document = store.readDocument();
+        return jsonResponse(response, 200, { product: "TRC Community Atlas", version: ATLAS_VERSION, ok: Boolean(document) && store.integrityCheck().ok, storage: document ? "sqlite" : "uninitialized", uptimeSeconds: Math.floor(process.uptime()), checkedAt: nowIso() });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/organizations") {
+        const token = await requireLocalApiToken(request, response, "read:organizations");
+        if (!token) return;
+        const document = await readWorkspace();
+        const allowed = token.organizationIds === null ? null : new Set(token.organizationIds);
+        const organizations = (document?.data?.organizations || []).filter((organization) => allowed === null || allowed.has(organization.id)).map(({ notes, quickNotes, ...organization }) => organization);
+        return jsonResponse(response, 200, { items: organizations, count: organizations.length });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/v1/records") {
+        const token = await requireLocalApiToken(request, response, "read:records");
+        if (!token) return;
+        const document = await readWorkspace();
+        const allowed = token.organizationIds === null ? null : new Set(token.organizationIds);
+        const requestedOrganization = cleanText(url.searchParams.get("organizationId") || "", 64) || "";
+        if (requestedOrganization && allowed !== null && !allowed.has(requestedOrganization)) return errorResponse(response, 403, "organization_scope_required", "Ce jeton n’a pas accès à cette organisation.");
+        const belongs = (item) => (!requestedOrganization || item.organizationId === requestedOrganization) && (allowed === null || allowed.has(item.organizationId));
+        const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
+        const items = [
+          ...(document?.data?.sites || []).filter(belongs).map((item) => ({ type: "site", id: item.id, organizationId: item.organizationId, title: item.name, status: item.status })),
+          ...(document?.data?.configurations || []).filter(belongs).map((item) => ({ type: "configuration", id: item.id, organizationId: item.organizationId, title: item.name, status: item.status, updatedAt: item.lastReviewed || "" })),
+          ...(document?.data?.procedures || []).filter(belongs).map((item) => ({ type: "procedure", id: item.id, organizationId: item.organizationId, title: item.title, status: item.status, updatedAt: item.updatedAt || "" })),
+          ...(document?.data?.moduleRecords || []).filter(belongs).map((item) => ({ type: "module", moduleId: item.moduleId, id: item.id, organizationId: item.organizationId, title: item.title, status: item.status, updatedAt: item.updatedAt || "" })),
+        ].slice(0, limit);
+        return jsonResponse(response, 200, { items, count: items.length, limit });
       }
 
       if (request.method === "POST" && url.pathname === "/api/setup") {
@@ -2100,6 +2399,215 @@ export function createAtlasServer(options = {}) {
         return jsonResponse(response, 200, filterWorkspaceForUser(nextDocument, context.user));
       }
 
+      if (request.method === "GET" && url.pathname === "/api/settings/backups") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        return jsonResponse(response, 200, await backupManagerStatus());
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/backups") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const current = await readBackupSettings();
+        const destination = validateBackupDestination(body.destination || current.destination);
+        const next = normalizeBackupSettings({
+          ...current,
+          enabled: body.enabled === true,
+          destination,
+          cadence: body.cadence,
+          hour: body.hour,
+          minute: body.minute,
+          weekday: body.weekday,
+          retentionEnabled: body.retentionEnabled === true,
+          retentionCount: body.retentionCount,
+        }, backupBaseRoot);
+        const passphrase = typeof body.passphrase === "string" ? body.passphrase : "";
+        if (passphrase) {
+          await backupSecretProtector({ projectRoot, secretPath: backupSecretPath, passphrase });
+          next.secretConfigured = true;
+        }
+        if (next.enabled && !next.secretConfigured) return errorResponse(response, 400, "backup_secret_required", "Ajoutez une phrase secrète d’au moins 12 caractères avant d’activer la planification.");
+        next.nextRunAt = next.enabled ? nextBackupRun(next, Date.now()) : "";
+        const saved = await saveBackupSettings(next);
+        await recordAudit(context.user, "backup-settings-updated", { details: { enabled: saved.enabled, destination: saved.destination, cadence: saved.cadence, hour: saved.hour, minute: saved.minute, weekday: saved.weekday, retentionEnabled: saved.retentionEnabled, retentionCount: saved.retentionCount, secretChanged: Boolean(passphrase) } });
+        return jsonResponse(response, 200, await backupManagerStatus());
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/backups/run") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const settings = await readBackupSettings();
+        const passphrase = typeof body.passphrase === "string" ? body.passphrase : "";
+        if (!passphrase && !settings.secretConfigured) return errorResponse(response, 400, "backup_secret_required", "Entrez la phrase secrète de sauvegarde ou configurez la planification chiffrée.");
+        if (passphrase && passphrase.length < 12) return errorResponse(response, 400, "backup_secret_too_short", "La phrase secrète doit contenir au moins 12 caractères.");
+        const result = await executeManagedBackup({ passphrase, actor: context.user.displayName });
+        return jsonResponse(response, 200, { result, status: await backupManagerStatus() });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/backups/inspect") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        if (typeof body.passphrase !== "string" || body.passphrase.length < 12) return errorResponse(response, 400, "backup_secret_required", "Entrez la phrase secrète de cette sauvegarde.");
+        const settings = await readBackupSettings();
+        const result = await inspectManagedBackup({ destination: settings.destination, name: String(body.name || ""), passphrase: body.passphrase });
+        await recordAudit(context.user, "backup-integrity-tested", { details: { file: result.name, valid: true, fileCount: result.fileCount } });
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/settings/updates") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        return jsonResponse(response, 200, { currentVersion: ATLAS_VERSION, automaticChecks: false, automaticInstall: false, lastCheck: lastReleaseCheck });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/updates/check") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        lastReleaseCheck = await releaseChecker();
+        await recordAudit(context.user, "github-release-checked", { details: { repository: lastReleaseCheck.repository || "MaxSim2001/TRC-Community-Atlas", tag: lastReleaseCheck.tag || "", installable: lastReleaseCheck.installable === true } });
+        return jsonResponse(response, 200, { currentVersion: ATLAS_VERSION, automaticChecks: false, automaticInstall: false, lastCheck: lastReleaseCheck });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/settings/local-api") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        return jsonResponse(response, 200, publicLocalApiSettings(await readLocalApiSettings()));
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/local-api") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const current = await readLocalApiSettings();
+        const saved = await saveLocalApiSettings({ ...current, enabled: body.enabled === true, webhooksEnabled: body.webhooksEnabled === true });
+        await recordAudit(context.user, "local-api-settings-updated", { details: { enabled: saved.enabled, webhooksEnabled: saved.webhooksEnabled } });
+        return jsonResponse(response, 200, publicLocalApiSettings(saved));
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/local-api/tokens") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const label = cleanText(body.label, 80, true);
+        const scopes = [...new Set((Array.isArray(body.scopes) ? body.scopes : []).filter((scope) => ["read:organizations", "read:records", "read:health"].includes(scope)))];
+        if (!label || !scopes.length) return errorResponse(response, 400, "invalid_api_token", "Ajoutez un nom et au moins une portée au jeton.");
+        const document = await readWorkspace();
+        const organizationIds = body.allOrganizations === true ? null : [...new Set((Array.isArray(body.organizationIds) ? body.organizationIds : []).filter(isSafeId))];
+        if (organizationIds !== null && (!organizationIds.length || organizationIds.some((id) => !document.data.organizations.some((organization) => organization.id === id)))) return errorResponse(response, 400, "invalid_api_organizations", "Choisissez au moins une organisation valide ou toutes les organisations.");
+        const settings = await readLocalApiSettings();
+        const rawToken = `atlas_${randomBytes(32).toString("base64url")}`;
+        const token = { id: `token-${randomBytes(8).toString("hex")}`, label, hash: createHash("sha256").update(rawToken).digest("hex"), scopes, organizationIds, createdAt: nowIso(), lastUsedAt: "", revokedAt: "" };
+        settings.tokens.push(token);
+        const saved = await saveLocalApiSettings(settings);
+        await recordAudit(context.user, "local-api-token-created", { details: { tokenId: token.id, label, scopes, organizationIds } });
+        return jsonResponse(response, 201, { token: rawToken, item: publicLocalApiSettings(saved).tokens.find((item) => item.id === token.id) });
+      }
+
+      const localApiTokenMatch = url.pathname.match(/^\/api\/settings\/local-api\/tokens\/([a-z0-9-]+)$/i);
+      if (request.method === "DELETE" && localApiTokenMatch) {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const settings = await readLocalApiSettings();
+        const token = settings.tokens.find((item) => item.id === localApiTokenMatch[1]);
+        if (!token) return errorResponse(response, 404, "api_token_not_found", "Jeton API introuvable.");
+        token.revokedAt = token.revokedAt || nowIso();
+        const saved = await saveLocalApiSettings(settings);
+        await recordAudit(context.user, "local-api-token-revoked", { details: { tokenId: token.id, label: token.label } });
+        return jsonResponse(response, 200, publicLocalApiSettings(saved));
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/local-api/webhooks") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const label = cleanText(body.label, 80, true);
+        const webhookUrl = validateLocalWebhookUrl(body.url);
+        const events = [...new Set((Array.isArray(body.events) ? body.events : []).filter((event) => ["workspace.updated", "backup.completed", "backup.failed"].includes(event)))];
+        if (!label || !events.length) return errorResponse(response, 400, "invalid_webhook", "Ajoutez un nom et au moins un événement au webhook.");
+        const settings = await readLocalApiSettings();
+        const secret = `whsec_${randomBytes(32).toString("base64url")}`;
+        const item = { id: `webhook-${randomBytes(8).toString("hex")}`, label, url: webhookUrl, events, encryptedSecret: encryptPayload({ secret }, await getVaultKey()), enabled: true, createdAt: nowIso(), lastDeliveryAt: "", lastStatus: 0, lastError: "" };
+        settings.webhooks.push(item);
+        const saved = await saveLocalApiSettings(settings);
+        await recordAudit(context.user, "local-webhook-created", { details: { webhookId: item.id, label, url: webhookUrl, events } });
+        return jsonResponse(response, 201, { secret, item: publicLocalApiSettings(saved).webhooks.find((webhook) => webhook.id === item.id) });
+      }
+
+      const localWebhookMatch = url.pathname.match(/^\/api\/settings\/local-api\/webhooks\/([a-z0-9-]+)$/i);
+      if (request.method === "DELETE" && localWebhookMatch) {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const settings = await readLocalApiSettings();
+        const index = settings.webhooks.findIndex((item) => item.id === localWebhookMatch[1]);
+        if (index < 0) return errorResponse(response, 404, "webhook_not_found", "Webhook local introuvable.");
+        const [removed] = settings.webhooks.splice(index, 1);
+        const saved = await saveLocalApiSettings(settings);
+        await recordAudit(context.user, "local-webhook-removed", { details: { webhookId: removed.id, label: removed.label } });
+        return jsonResponse(response, 200, publicLocalApiSettings(saved));
+      }
+
+      const localWebhookTestMatch = url.pathname.match(/^\/api\/settings\/local-api\/webhooks\/([a-z0-9-]+)\/test$/i);
+      if (request.method === "POST" && localWebhookTestMatch) {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const settings = await readLocalApiSettings();
+        const webhook = settings.webhooks.find((item) => item.id === localWebhookTestMatch[1]);
+        if (!webhook) return errorResponse(response, 404, "webhook_not_found", "Webhook local introuvable.");
+        try {
+          const delivered = await sendLocalWebhook(webhook, "workspace.updated", { test: true, actor: context.user.displayName });
+          webhook.lastDeliveryAt = nowIso(); webhook.lastStatus = Number(delivered?.status) || 200; webhook.lastError = "";
+        } catch (error) {
+          webhook.lastDeliveryAt = nowIso(); webhook.lastStatus = Number(error?.status) || 0; webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300);
+          await saveLocalApiSettings(settings);
+          await recordAudit(context.user, "local-webhook-tested", { details: { webhookId: webhook.id, success: false, message: webhook.lastError } });
+          return errorResponse(response, 502, "webhook_delivery_failed", webhook.lastError);
+        }
+        const saved = await saveLocalApiSettings(settings);
+        await recordAudit(context.user, "local-webhook-tested", { details: { webhookId: webhook.id, success: true, status: webhook.lastStatus } });
+        return jsonResponse(response, 200, publicLocalApiSettings(saved));
+      }
+
       if (request.method === "GET" && url.pathname === "/api/settings/deployment/health") {
         const session = requireSession(request, response);
         if (!session) return;
@@ -2190,11 +2698,15 @@ export function createAtlasServer(options = {}) {
           if (JSON.stringify(normalizedDeploymentSettings(current.data.settings)) !== JSON.stringify(normalizedDeploymentSettings(body.data.settings))) {
             throw Object.assign(new Error("Modifiez le domaine et le proxy depuis la section Configuration initiale des paramètres."), { statusCode: 403 });
           }
+          if (context.user.role !== "administrator" && JSON.stringify(current.data.customModuleDefinitions || []) !== JSON.stringify(body.data.customModuleDefinitions || [])) {
+            throw Object.assign(new Error("Seul un administrateur peut modifier les définitions de modules personnalisés."), { statusCode: 403 });
+          }
           const nextData = mergeRestrictedWorkspace(current.data, body.data, context.user);
           if (!validateWorkspace(nextData)) throw Object.assign(new Error("La hiérarchie des organisations est invalide ou dépasse trois niveaux."), { statusCode: 400, code: "invalid_organization_hierarchy" });
           nextDocument = store.commitDocument(body.revision, nextData, context.user.displayName);
           await mirrorStore(store, nextDocument);
         });
+        void dispatchLocalWebhooks("workspace.updated", { revision: nextDocument.revision, actor: context.user.displayName }).catch(() => {});
         return jsonResponse(response, 200, filterWorkspaceForUser(nextDocument, context.user));
       }
 
@@ -2249,12 +2761,18 @@ export function createAtlasServer(options = {}) {
 
   server.on("close", () => {
     sessions.clear();
+    if (backupTimer) clearInterval(backupTimer);
     if (storePromise) void storePromise.then((store) => store.close()).catch(() => {});
   });
   server.on("listening", () => {
     void ensureVaultSecurityMetadata().catch(() => {
       console.error("[atlas] La migration locale des notes de sécurité du coffre n’a pas pu être exécutée.");
     });
+    backupTimer = setInterval(() => {
+      void runScheduledBackupIfDue().catch((error) => console.error("[atlas] La sauvegarde planifiée a échoué :", error.message));
+    }, 60_000);
+    backupTimer.unref?.();
+    void runScheduledBackupIfDue().catch((error) => console.error("[atlas] La vérification du planificateur de sauvegarde a échoué :", error.message));
   });
   return server;
 }

@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/p
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT_FILES = new Set(["auth.json", "vault.json", "vault.key", "attachments.json", "workspace.json", "workspace-history.json", "atlas.sqlite"]);
+const ROOT_FILES = new Set(["auth.json", "vault.json", "vault.key", "attachments.json", "workspace.json", "workspace-history.json", "backup-settings.json", "backup-secret.clixml", "local-api.json", "atlas.sqlite"]);
 
 function stamp() {
   return new Date().toISOString().replace(/T/, "_").replace(/:/g, "-").replace(/\..+/, "");

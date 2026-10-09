@@ -1,6 +1,6 @@
 # Guide opérateur — TRC Community Atlas
 
-Version du guide : 0.13.2
+Version du guide : 0.14.0
 
 ## Port et configuration de l’instance
 
@@ -83,6 +83,19 @@ SQLite et les pièces jointes. Les sessions sont volontairement exclues.
 La phrase secrète est saisie dans une invite protégée. Elle ne doit pas être
 placée dans la commande, un journal ou un fichier non protégé.
 
+Le super administrateur peut aussi utiliser **Paramètres > Sauvegardes**. Cette
+page permet de choisir un dossier absolu local ou UNC, une exécution quotidienne
+ou hebdomadaire et une rétention facultative. La phrase secrète planifiée est
+chiffrée avec DPAPI pour le compte Windows qui exécute Atlas. Elle n’est ni
+retournée par l’API ni affichée après enregistrement. Le planificateur fonctionne
+seulement lorsque le service Atlas est actif; activer le démarrage automatique
+Windows est donc recommandé.
+
+La rétention est désactivée par défaut. Lorsqu’elle est activée, Atlas ne retire
+que les anciens fichiers portant exactement son préfixe de sauvegarde gérée et
+ne touche à aucun autre fichier dans le dossier. Chaque fichier existant peut
+être déchiffré et contrôlé en mémoire depuis la page, sans écrire de restauration.
+
 Valider périodiquement une sauvegarde sans la restaurer :
 
 ```powershell
@@ -110,6 +123,29 @@ Avant chaque mise à jour :
 - mettre à jour les URL versionnées des actifs publics;
 - exécuter les tests sur les fichiers déployés;
 - vérifier la version locale et publique après redémarrage.
+
+La page **Paramètres > Mises à jour** effectue uniquement une vérification
+manuelle auprès de l’API officielle GitHub. Le mécanisme refuse toute
+installation lorsque la Release ne contient pas un manifeste et une signature
+attendus. Aucun téléchargement ni redémarrage silencieux n’est exécuté dans la
+version 0.14.0.
+
+## API locale facultative
+
+Dans **Paramètres > Intégrations**, le super administrateur peut activer une API
+de lecture et créer des jetons limités aux portées `read:health`,
+`read:organizations` et `read:records`. Les jetons utilisent le port Atlas
+existant, peuvent être limités à certaines compagnies et sont affichés une seule
+fois. Atlas n’enregistre que leur empreinte SHA-256. Le coffre, les mots de
+passe, les OTP, les notes rapides, les pièces jointes et le MFA ne sont jamais
+retournés par ces routes. La création, l’activation et la révocation sont
+protégées par la politique MFA renforcée et journalisées.
+
+La même page peut émettre des webhooks signés pour les modifications du
+workspace et les résultats de sauvegarde. Par sécurité, une destination doit
+être une URL HTTP explicite sur `localhost`, `127.0.0.1` ou `::1`; Atlas refuse
+les adresses du LAN et Internet. Le secret HMAC est affiché une seule fois et
+chiffré localement dans le registre Atlas.
 
 ## Cache navigateur et PWA
 

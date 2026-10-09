@@ -1,5 +1,24 @@
 # Notes de version — TRC Community Atlas
 
+## 0.14.0 — Centre d’exploitation et documentation avancée
+
+- gestion des sauvegardes complètes depuis les Paramètres : chemin local ou UNC,
+  planification quotidienne ou hebdomadaire, secret protégé par DPAPI, rétention
+  explicite, historique et inspection d’intégrité sans restauration;
+- Santé du site enrichie avec l’intégrité SQLite, l’espace libre, les volumes de
+  données, l’âge des sauvegardes et l’état des vérifications de version;
+- vérification manuelle des Releases GitHub, sans téléchargement ni installation
+  tant qu’un manifeste signé et un retour arrière testé ne sont pas présents;
+- constructeur de modules locaux avec schéma validé côté serveur;
+- cycle de révision documentaire avec brouillon, validation, approbation,
+  responsable et échéance;
+- import CSV guidé avec aperçu, mappage, portée de compagnie et retour arrière
+  par révision;
+- API locale de lecture facultative, désactivée par défaut, limitée par portée et
+  compagnie, avec jetons affichés une fois, hachés sur disque et révocables par MFA;
+- webhooks facultatifs signés par HMAC, limités à la boucle locale de la VM et
+  couvrant les modifications documentaires et les résultats de sauvegarde.
+
 ## 0.13.2 — Autodémarrage et contrôle local du port
 
 - activation ou désactivation du démarrage automatique depuis
