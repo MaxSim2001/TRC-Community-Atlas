@@ -755,6 +755,8 @@ tbody tr:hover { background: color-mix(in srgb, var(--panel-raised) 55%, transpa
 .settings-nav button:hover { color: var(--text); background: var(--panel-raised); border-color: var(--line-soft); }
 .settings-nav button.active { color: var(--action); background: var(--accent-soft); border-color: color-mix(in srgb, var(--action) 28%, transparent); font-weight: 720; }
 .settings-nav button span { min-width: 0; flex: 1; }
+.settings-nav button .settings-nav-alert { min-width: 22px; min-height: 20px; display: grid; place-items: center; flex: none; padding: 2px 6px; color: #7a4a00; background: color-mix(in srgb, var(--warning) 30%, transparent); border: 1px solid color-mix(in srgb, var(--warning) 52%, transparent); border-radius: 999px; font-size: 9px; font-weight: 850; line-height: 1; }
+[data-trc-theme="dark"] .settings-nav button .settings-nav-alert { color: #ffe1aa; background: color-mix(in srgb, var(--warning) 16%, transparent); }
 .settings-nav button small { width: 22px; height: 22px; display: grid; place-items: center; flex: none; color: var(--text-muted); border-radius: 6px; background: color-mix(in srgb, var(--panel-raised) 82%, transparent); }
 .settings-nav .settings-nav-accounts { margin-left: 0; color: var(--text); border-color: var(--line-soft); background: var(--panel-raised); }
 .settings-content { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 24px; }

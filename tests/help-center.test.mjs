@@ -43,10 +43,10 @@ test("Atlas exposes a local searchable bilingual help center from the header", (
   assert.match(styles, /\.help-article-grid/);
   assert.match(styles, /@media \(max-width: 680px\)[\s\S]*\.help-menu-popover/);
 
-  const helpIndex = index.indexOf("/assets/help-content.js?v=0.15.2-help-1");
-  const appIndex = index.indexOf("/assets/app.js?v=0.15.2-help-1");
+  const helpIndex = index.indexOf("/assets/help-content.js?v=0.15.2-settings-alert-1");
+  const appIndex = index.indexOf("/assets/app.js?v=0.15.2-settings-alert-1");
   assert.ok(helpIndex >= 0 && appIndex > helpIndex);
-  assert.match(worker, /\/assets\/help-content\.js\?v=0\.15\.2-help-1/);
+  assert.match(worker, /\/assets\/help-content\.js\?v=0\.15\.2-settings-alert-1/);
   assert.match(source("server.mjs"), /\["\/assets\/help-content\.js", \["assets\/help-content\.js", "text\/javascript; charset=utf-8"\]\]/);
 
   const imageSources = catalog.articles.flatMap((article) => article.sections.map((section) => section.image?.src).filter(Boolean));

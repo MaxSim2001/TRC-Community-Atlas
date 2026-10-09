@@ -69,6 +69,12 @@ test("the UI exposes dedicated protected setup and health pages", async () => {
   assert.match(app, /settings-overview-section/);
   assert.match(app, /settings-overview-grid admin/);
   assert.match(app, /settings-overview-grid preferences/);
+  assert.match(app, /function settingsNavigationAlertCounts\(\)/);
+  assert.match(app, /destinationByCheck/);
+  assert.match(app, /backups: "backups"/);
+  assert.match(app, /updates: "updates"/);
+  assert.match(app, /settingsNavigationAlertMarkup\(item\.alertCount, item\.label\)/);
+  assert.match(css, /\.settings-nav button \.settings-nav-alert/);
   assert.match(css, /\.settings-layout \{ display: block; \}/);
   assert.match(css, /\.settings-content \{ display: grid; grid-template-columns: minmax\(0, 1fr\); align-items: start;/);
   assert.match(css, /\.settings-admin-note \{ grid-column: 1 \/ -1;/);

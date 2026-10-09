@@ -3443,19 +3443,58 @@
     return settingsPages.has(state.detailId) ? state.detailId : "overview";
   }
 
+  function settingsNavigationAlertCounts() {
+    const checks = Array.isArray(state.deploymentHealth?.checks) ? state.deploymentHealth.checks : [];
+    const alerts = checks.filter((check) => check?.status === "warning" || check?.status === "error");
+    const counts = {
+      deployment: 0,
+      health: Math.max(alerts.length, Number(state.deploymentHealth?.summary?.warning) || 0),
+      backups: 0,
+      updates: 0,
+      security: 0,
+      accounts: 0,
+    };
+    const destinationByCheck = {
+      port: "deployment",
+      autostart: "deployment",
+      identity: "deployment",
+      domain: "deployment",
+      https: "deployment",
+      "reverse-proxy": "deployment",
+      "trusted-proxy": "deployment",
+      origin: "deployment",
+      backups: "backups",
+      updates: "updates",
+      authentication: "accounts",
+    };
+    for (const check of alerts) {
+      const destination = destinationByCheck[check.id];
+      if (destination) counts[destination] += 1;
+    }
+    return counts;
+  }
+
+  function settingsNavigationAlertMarkup(count, label) {
+    const normalized = Math.max(0, Number(count) || 0);
+    if (!normalized) return "";
+    const message = `${normalized} point${normalized === 1 ? "" : "s"} à vérifier dans ${label}`;
+    return `<b class="settings-nav-alert" title="${escapeHtml(message)}" aria-label="${escapeHtml(message)}">${normalized > 99 ? "99+" : normalized}</b>`;
+  }
+
   function settingsNavigationMarkup(activePage) {
+    const alertCounts = settingsNavigationAlertCounts();
     const items = [
       { key: "overview", iconName: "grid", label: "Vue des paramètres", visible: true },
       { key: "general", iconName: "settings", label: t("general"), visible: true },
       { key: "appearance", iconName: "sun", label: t("appearance"), visible: true },
       { key: "integrations", iconName: "link", label: t("integrations"), visible: true },
-      { key: "deployment", iconName: "compass", label: "Configuration initiale", visible: isAdministrator(), protected: true },
-      { key: "health", iconName: "activity", label: "Santé du site", visible: isAdministrator(), protected: true },
-      { key: "backups", iconName: "download", label: "Sauvegardes", visible: isAdministrator(), protected: true },
-      { key: "updates", iconName: "refresh", label: "Mises à jour", visible: isAdministrator(), protected: true },
-      { key: "security", iconName: "shield", label: t("security"), visible: isAdministrator(), protected: true },
+      { key: "deployment", iconName: "compass", label: "Configuration initiale", visible: isAdministrator(), protected: true, alertCount: alertCounts.deployment },
+      { key: "health", iconName: "activity", label: "Santé du site", visible: isAdministrator(), protected: true, alertCount: alertCounts.health },
+      { key: "backups", iconName: "download", label: "Sauvegardes", visible: isAdministrator(), protected: true, alertCount: alertCounts.backups },
+      { key: "updates", iconName: "refresh", label: "Mises à jour", visible: isAdministrator(), protected: true, alertCount: alertCounts.updates },
+      { key: "security", iconName: "shield", label: t("security"), visible: isAdministrator(), protected: true, alertCount: alertCounts.security },
     ];
-    return `<nav class="settings-nav" aria-label="Pages des paramètres">${items.filter((item) => item.visible).map((item) => `<button class="${activePage === item.key ? "active" : ""}" type="button" data-route="settings/${item.key}" ${activePage === item.key ? 'aria-current="page"' : ""}>${icon(item.iconName, 16)}<span>${escapeHtml(item.label)}</span>${item.protected ? `<small title="Réservé au super administrateur">${icon("lock", 12)}</small>` : ""}</button>`).join("")}${isAdministrator() ? `<button class="settings-nav-accounts" type="button" data-route="accounts">${icon("users", 16)}<span>Comptes et accès</span>${icon("chevron", 12)}</button>` : ""}</nav>`;
+    return `<nav class="settings-nav" aria-label="Pages des paramètres">${items.filter((item) => item.visible).map((item) => `<button class="${activePage === item.key ? "active" : ""}" type="button" data-route="settings/${item.key}" ${activePage === item.key ? 'aria-current="page"' : ""}>${icon(item.iconName, 16)}<span>${escapeHtml(item.label)}</span>${settingsNavigationAlertMarkup(item.alertCount, item.label)}${item.protected ? `<small title="Réservé au super administrateur">${icon("lock", 12)}</small>` : ""}</button>`).join("")}${isAdministrator() ? `<button class="settings-nav-accounts" type="button" data-route="accounts">${icon("users", 16)}<span>Comptes et accès</span>${settingsNavigationAlertMarkup(alertCounts.accounts, "Comptes et accès")}${icon("chevron", 12)}</button>` : ""}</nav>`;
   }
 
   function renderSettingsShell(activePage, title, description, content) {
