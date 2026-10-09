@@ -35,7 +35,7 @@ télémétrie. Atlas demeure autonome et ne dépend pas de TRC Account.
 | Exécution | Service Windows ou tâche planifiée SYSTEM cachée, sans fenêtre PowerShell |
 | Dépôt | `MaxSim2001/TRC-Community-Atlas` |
 | Titulaire | TheRisingCloud |
-| Licence | PolyForm Noncommercial 1.0.0, source disponible, sans usage commercial accordé |
+| Licence | TRC Community Atlas Source-Available License 1.0; usage professionnel et MSP gratuit, revente interdite |
 | Contributions | Cession de droits signée avant toute fusion externe |
 | Signature publique | Azure Artifact Signing; autosigné seulement pour les essais locaux |
 | Versions | Versionnement sémantique `MAJEURE.MINEURE.CORRECTIF` |
@@ -46,8 +46,9 @@ télémétrie. Atlas demeure autonome et ne dépend pas de TRC Account.
 | Retour arrière | Ancienne version et instantané local conservés jusqu'à validation |
 | Autres plateformes | Hors portée initiale |
 
-La disponibilité du code sous une licence non commerciale doit être présentée
-comme « source disponible » et non « open source ». La configuration du service
+La disponibilité du code sous cette licence personnalisée doit être présentée
+comme « source disponible » et non « open source ». Son texte doit être validé
+par un juriste avant publication. La configuration du service
 de signature public nécessite encore la vérification externe de l'identité
 TheRisingCloud et l'approbation de ses éventuels frais.
 

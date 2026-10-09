@@ -11,7 +11,8 @@ créé. Le RMM reste un produit autonome et prioritaire selon son propre cahier.
 ## 1. Identité et objectif
 
 - Nom : **TRC Community Atlas** ; nom court possible dans l'interface : **TRC Atlas**.
-- Produit communautaire, gratuit, open source et entièrement self-hosted.
+- Produit communautaire, gratuit, source disponible et entièrement self-hosted;
+  il ne doit pas être qualifié d'open source au sens OSI.
 - Documentation et inventaire IT organisés par organisations, sites et actifs.
 - Inspiration fonctionnelle : usages de documentation d'IT Glue, sans reprise de
   son code, de sa marque, de ses contenus ou de son identité visuelle.
@@ -20,8 +21,11 @@ créé. Le RMM reste un produit autonome et prioritaire selon son propre cahier.
 Complémentarité : le RMM supervise et administre ; Atlas documente et relie les
 informations. Ni le RMM ni Atlas n'exige l'installation ou l'usage de l'autre.
 
-La licence open source exacte d'Atlas reste à choisir. La piste AGPLv3 discutée
-pour le RMM n'est pas appliquée automatiquement à Atlas ni à TRC Remote Consumer.
+La licence retenue est la TRC Community Atlas Source-Available License 1.0. Elle
+autorise gratuitement les usages personnels, professionnels, internes et MSP,
+tout en interdisant la revente, les forks commercialisés et les offres SaaS dont
+Atlas est le produit principal sans autorisation écrite. Cette licence
+personnalisée doit être validée juridiquement avant publication.
 
 ## 2. Deux produits autonomes
 
@@ -206,7 +210,7 @@ de chaque produit ; compatibilité des versions et désactivation du connecteur.
 
 ## 10. Points ouverts et limites
 
-Nom technique du dépôt, licence exacte, OS/stack/DB, ports/domaines, périmètre du
+Nom technique du dépôt, OS/stack/DB, ports/domaines, périmètre du
 coffre et modules complémentaires, provider SSO, gestion du logout global,
 fréquence de synchronisation, conflits avancés et multi-instance : à décider.
 Ce document ne promet ni compatibilité totale avec l'API propriétaire d'IT Glue,

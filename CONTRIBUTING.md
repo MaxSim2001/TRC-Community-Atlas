@@ -1,8 +1,7 @@
 # Contribuer à TRC Community Atlas
 
 Merci de vouloir améliorer Atlas. Les signalements, propositions et correctifs
-non commerciaux sont bienvenus, mais le projet demeure sous la propriété de
-TheRisingCloud.
+sont bienvenus, mais le projet demeure sous la propriété de TheRisingCloud.
 
 ## Propriété des contributions
 
@@ -14,7 +13,7 @@ aux entités.
 La cession permet à TheRisingCloud de demeurer le titulaire unique du projet,
 de protéger Atlas et d'accorder séparément des licences commerciales. Le
 contributeur reçoit une licence de retour lui permettant d'utiliser sa
-contribution selon la licence publique non commerciale d'Atlas.
+contribution selon la licence publique source disponible d'Atlas en vigueur.
 
 La politique et les modèles retenus sont décrits dans
 [`docs/CONTRIBUTOR_OWNERSHIP.md`](docs/CONTRIBUTOR_OWNERSHIP.md). Aucune

@@ -1,21 +1,189 @@
-TRC Community Atlas — avis de licence
+TRC COMMUNITY ATLAS SOURCE-AVAILABLE LICENSE 1.0
 
-TRC Community Atlas est offert selon la licence PolyForm Noncommercial 1.0.0.
-Les conditions officielles et intégrales sont incorporées par référence et
-disponibles à l'adresse suivante :
-
-https://polyformproject.org/licenses/noncommercial/1.0.0
+Effective Date: October 9, 2026
 
 Required Notice: Copyright 2026 TheRisingCloud. All rights reserved.
 
-Cette licence autorise les usages, modifications et redistributions permis à
-des fins non commerciales. Elle n'accorde aucun droit d'exploitation
-commerciale. Toute licence commerciale distincte nécessite l'autorisation
-écrite préalable de TheRisingCloud.
+This is a custom source-available license. It is not an Open Source Initiative
+approved open-source license.
 
-La disponibilité du code source ne fait pas de ce projet un logiciel « open
-source » au sens de l'Open Source Initiative, puisque l'usage commercial est
-restreint.
+1. Acceptance
 
-Les composants tiers conservent leurs propres licences, indiquées dans les avis
-qui les accompagnent.
+By exercising any permission granted by this license, you accept all of its
+terms. If you do not accept these terms, you may not use, copy, modify, host, or
+distribute the Software.
+
+2. Definitions
+
+"Software" means TRC Community Atlas, including its source code, executable
+forms, documentation, and any portion or modified version of them, but excluding
+third-party components that are identified as being under separate licenses.
+
+"Licensor" means TheRisingCloud.
+
+"You" means the individual or legal entity exercising rights under this
+license, including its employees and contractors acting on its behalf.
+
+"Client" means a customer for whom You provide information-technology or other
+professional services.
+
+"MSP Services" means managed IT or professional services provided to Clients,
+including documentation, administration, installation, configuration, data
+migration, training, support, maintenance, backup, and infrastructure operation.
+
+"Prohibited Atlas Offering" means a product or service offered for payment or
+other consideration where any of the following is true:
+
+(a) the Software, a copy of it, or rights to it are sold, licensed, sublicensed,
+    rented, leased, or separately priced;
+(b) the primary purpose or value of the offering is to give third parties access
+    to the Software or to a substantial set of its features;
+(c) the offering is marketed as an Atlas hosting service, Atlas-as-a-Service,
+    white-label Atlas, a replacement for Atlas, or a modified, renamed, or
+    rebranded version of Atlas; or
+(d) payment is requested for distributing a copy of the Software as a software
+    product, rather than for permitted MSP Services.
+
+3. Copyright License
+
+Subject to this license, the Licensor grants You a worldwide, non-exclusive,
+royalty-free, non-transferable license to:
+
+(a) use, run, reproduce, install, and host the Software for personal,
+    professional, internal business, and commercial operational purposes;
+(b) modify the Software for Your own needs or for the needs of Your Clients;
+(c) make backup and archival copies;
+(d) distribute verbatim or modified copies without charging for the Software,
+    provided that Section 5 is followed; and
+(e) provide the MSP Services permitted by Section 4.
+
+These permissions continue only while You comply with this license.
+
+4. Express Permission for Companies and MSPs
+
+Individuals, companies, and MSPs may use the Software free of charge in paid or
+unpaid professional activities. An MSP may use one or more instances of the
+Software to document, administer, and manage any number of Clients with any
+number of technicians.
+
+An MSP may install or host the Software on its own infrastructure or on a
+Client's infrastructure, modify it for internal or Client needs, and allow the
+Client's authorized personnel to access that Client's instance.
+
+You may charge for time, expertise, infrastructure, installation,
+configuration, data migration, training, support, maintenance, backups, and
+other MSP Services. Such fees do not violate this license when:
+
+(a) the Software is not separately sold, licensed, rented, or priced;
+(b) access to Atlas is incidental to a broader MSP or professional-services
+    relationship;
+(c) the offering is not marketed as a standalone paid Atlas product or hosted
+    Atlas service; and
+(d) each recipient receives the Software only under this license.
+
+For clarity, using Atlas while delivering paid IT services is permitted. Selling
+Atlas itself, selling access to Atlas as the main product, or charging for copies
+of Atlas is not permitted without the Licensor's prior written authorization.
+
+5. Conditions on Copies and Modifications
+
+Every permitted copy or distribution of the Software must:
+
+(a) include this license and the Required Notice above;
+(b) preserve all copyright, attribution, license, and trademark notices;
+(c) clearly identify material modifications and state that they are not an
+    official release of the Licensor; and
+(d) remain available under this same license, without additional terms that
+    reduce the rights granted to recipients by this license.
+
+If You distribute an executable form of a modified version, You must make its
+corresponding source code available to the same recipients, at no charge, under
+this license.
+
+Charging for permitted MSP Services does not make an otherwise permitted Client
+installation a paid distribution of the Software. Charging for the Software,
+its license, its copy, or access to it as the main offering does.
+
+6. Commercialization Restrictions
+
+Without the Licensor's prior written authorization, You may not:
+
+(a) offer, operate, distribute, or otherwise provide a Prohibited Atlas
+    Offering;
+(b) commercialize a modified, forked, renamed, or rebranded version of the
+    Software;
+(c) sell or distribute copies of the Software for payment or other
+    consideration as a software product;
+(d) sublicense the Software under different terms; or
+(e) remove or obscure the Required Notice or claim ownership of the Software or
+    the Licensor's intellectual property.
+
+7. Ownership and Trademarks
+
+The Software is licensed, not sold. The Licensor retains all right, title, and
+interest in the original Software and its intellectual property. This license
+does not transfer ownership to You.
+
+No trademark rights are granted. You may use the names "TRC Community Atlas",
+"TRC", and "TheRisingCloud" only as reasonably necessary to identify the
+Software and reproduce required notices. You may not imply sponsorship,
+endorsement, or official status for a modified version.
+
+8. Third-Party Components
+
+Third-party components remain governed by their own licenses. To the extent a
+third-party license grants additional rights for that component, those rights
+are not restricted by this license.
+
+9. No Support or Maintenance Obligation
+
+The Licensor and contributors have no obligation to provide support,
+maintenance, updates, security fixes, bug fixes, compatibility, availability,
+or new features. They may modify, suspend, or discontinue the project at any
+time.
+
+10. Disclaimer of Warranty
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OR CONDITION OF ANY KIND, EXPRESS,
+IMPLIED, OR STATUTORY, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, SECURITY, RELIABILITY, ACCURACY,
+AVAILABILITY, OR THAT THE SOFTWARE WILL BE ERROR-FREE.
+
+YOU ARE SOLELY RESPONSIBLE FOR YOUR INFRASTRUCTURE, CONFIGURATION, ACCESS
+CONTROLS, SECURITY, COMPLIANCE, DATA, AND BACKUPS.
+
+11. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE LICENSOR AND CONTRIBUTORS
+WILL NOT BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+CONSEQUENTIAL, OR OTHER DAMAGES, OR FOR ANY LOSS OF DATA, PROFITS, REVENUE,
+BUSINESS, GOODWILL, SECURITY, OR AVAILABILITY, ARISING FROM OR RELATED TO THE
+SOFTWARE OR THIS LICENSE, UNDER ANY LEGAL THEORY, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES.
+
+12. Termination
+
+Any use in violation of this license is unlicensed and automatically terminates
+the permissions granted to You. If the Licensor gives You notice of a first
+violation and You stop the violation within 30 days, Your permissions are
+reinstated retroactively. A subsequent violation after reinstatement terminates
+Your permissions permanently unless the Licensor agrees otherwise in writing.
+
+Upon termination, You must stop using and distributing the Software, except to
+the extent applicable law requires otherwise. Sections 7 through 14 survive
+termination.
+
+13. Separate Written Authorization
+
+The Licensor may grant separate commercial permissions or licenses in writing.
+Such an agreement applies only to its parties and does not change this public
+license for anyone else.
+
+14. General
+
+If any provision of this license is unenforceable, it will be limited to the
+minimum extent necessary, and the remaining provisions will continue in effect.
+No waiver is effective unless made in writing by the Licensor. This license
+grants no rights by implication, estoppel, or otherwise beyond those stated
+expressly.

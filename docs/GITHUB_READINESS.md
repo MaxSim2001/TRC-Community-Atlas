@@ -19,8 +19,9 @@ implémentées; les éléments encore ouverts y restent identifiés.
 
 - dépôt officiel actuel : `MaxSim2001/TRC-Community-Atlas`;
 - titulaire : TheRisingCloud;
-- licence : PolyForm Noncommercial 1.0.0, source disponible et usage commercial
-  interdit sans licence écrite distincte;
+- licence : TRC Community Atlas Source-Available License 1.0; utilisation
+  personnelle, professionnelle et MSP gratuite, revente et commercialisation
+  d'Atlas interdites sans autorisation écrite;
 - contributions externes : cession de droits signée avant fusion;
 - plateformes initiales : Windows 10 et Windows 11 x64;
 - signature de manifeste : Ed25519 avec clé privée chiffrée et ACL locale
@@ -63,4 +64,9 @@ des Releases stables. Une version n’est présentée comme installable qu’apr
 validation Ed25519 du manifeste et du SHA-256 du paquet. Atlas 0.15.0 est la
 version d’amorçage : son installation initiale est manuelle; le bouton intégré
 sert aux versions stables ultérieures.
+
+La licence est personnalisée et doit être validée par un juriste avant
+publication. Atlas doit être présenté comme un logiciel « source disponible »,
+jamais comme un logiciel open source approuvé par l'OSI. Le détail des usages MSP
+permis et des offres interdites est consigné dans [`LICENSING.md`](LICENSING.md).
 

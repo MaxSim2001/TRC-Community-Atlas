@@ -78,7 +78,8 @@ test("the official GitHub repository documents the signed Windows release and gu
   assert.match(serialized, /Ed25519/);
   assert.match(serialized, /SHA-256/);
   assert.match(serialized, /TRC-Atlas-Portable-X\.Y\.Z-win-x64\.zip/);
-  assert.match(serialized, /PolyForm Noncommercial 1\.0\.0/);
+  assert.match(serialized, /TRC Community Atlas Source-Available License 1\.0/);
+  assert.match(serialized, /MSP/);
   assert.match(serialized, /un seul port configurable|one configurable port/);
 });
 

@@ -127,9 +127,23 @@ Le stockage documentaire principal est `data/atlas.sqlite` avec journal WAL, tra
 ## Licence et propriété
 
 TRC Community Atlas est un logiciel **source disponible**, et non un logiciel
-open source au sens OSI. Il est offert pour les usages non commerciaux selon la
-[PolyForm Noncommercial License 1.0.0](LICENSE.txt). Toute exploitation
-commerciale nécessite une autorisation écrite distincte de TheRisingCloud.
+open source au sens OSI. La
+[TRC Community Atlas Source-Available License 1.0](LICENSE.txt) autorise
+gratuitement l'utilisation personnelle, professionnelle et interne en entreprise.
+
+**Les MSP peuvent utiliser Atlas gratuitement pour documenter et gérer un nombre
+illimité de clients avec un nombre illimité de techniciens.** Ils peuvent
+installer ou héberger Atlas, l'adapter aux besoins internes ou d'un client et
+facturer l'installation, la configuration, la migration, la formation, le
+soutien, la maintenance et leurs autres prestations informatiques. Atlas ne peut
+toutefois pas être revendu comme logiciel, commercialisé sous un autre nom, ni
+proposé comme produit SaaS payant principal sans autorisation écrite préalable
+de TheRisingCloud. Les exemples et la frontière détaillée se trouvent dans le
+[guide de licence](docs/LICENSING.md).
+
+Cette licence est personnalisée et doit faire l'objet d'une validation juridique
+avant sa publication ou avant que TheRisingCloud s'y fie dans un contexte
+commercial ou contentieux.
 
 TheRisingCloud demeure titulaire du projet. Une contribution externe ne peut
 être fusionnée qu'après signature d'une entente de cession conforme à
