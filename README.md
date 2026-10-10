@@ -145,8 +145,8 @@ The screenshots show the French interface. Atlas can be switched to English
 from the header.
 
 See the [complete product showcase](docs/SHOWCASE.md) for captions, feature
-highlights, and direct links to the installation, security, and operations
-guides.
+highlights, organization dashboards, the encrypted password vault, and direct
+links to the installation, security, and operations guides.
 
 ## Install from source
 

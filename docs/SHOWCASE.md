@@ -10,12 +10,29 @@ Atlas also includes English and can be switched from the header.
 
 ## Organization workspace
 
+![Atlas Clinique Boréal organization workspace](screenshots/organization-home-clinique-boreal.png)
+
+This complete organization dashboard shows scoped navigation, organization
+search, Quick Notes, direct asset counts, password health, service context, and
+documentation follow-up in one screen.
+
+### Detailed fictional organization profile
+
 ![Atlas organization home with fictional demonstration data](screenshots/organization-home-demo.png)
 
 An organization home keeps service context, sites, documented configurations,
 records, passwords, Quick Notes, search, and module shortcuts in one scoped
 workspace. Child organizations remain isolated and never merge vault entries
 or permissions with their parent.
+
+## Encrypted password vault
+
+![Atlas encrypted password vault with fictional entries](screenshots/password-vault-demo.png)
+
+The vault view keeps every entry inside its organization, shows password-health
+metadata without exposing plaintext, and reuses the MFA authorization for the
+current eight-hour Atlas session. Secrets remain encrypted and masked until an
+authorized user explicitly opens one.
 
 ## Backup management
 

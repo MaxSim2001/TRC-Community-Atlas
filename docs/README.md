@@ -44,7 +44,13 @@ interface; Atlas can be switched to English under **Settings > General**.
 
 ### Organization workspace
 
+![Atlas Clinique Boréal organization workspace](screenshots/organization-home-clinique-boreal.png)
+
 ![Atlas organization home with fictional demonstration data](screenshots/organization-home-demo.png)
+
+### Encrypted password vault
+
+![Atlas encrypted password vault with fictional entries](screenshots/password-vault-demo.png)
 
 ### Official GitHub Release
 
