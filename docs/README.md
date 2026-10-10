@@ -12,6 +12,8 @@ Start with the guides below rather than the historical QA records.
 
 ## Using Atlas
 
+- [Product showcase](SHOWCASE.md) — real screenshots using fictional data and
+  a compact tour of the main Atlas capabilities.
 - [User guide](USER_GUIDE.md) — organizations, modules, records, documents,
   relationships, search, archive, and mobile use.
 - [Security and access](SECURITY_AND_ACCESS.md) — accounts, roles, MFA,
@@ -39,6 +41,10 @@ Start with the guides below rather than the historical QA records.
 
 The screenshots below are real Atlas and GitHub screens. Some show the French
 interface; Atlas can be switched to English under **Settings > General**.
+
+### Organization workspace
+
+![Atlas organization home with fictional demonstration data](screenshots/organization-home-demo.png)
 
 ### Official GitHub Release
 

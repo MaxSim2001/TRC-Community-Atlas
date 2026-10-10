@@ -119,3 +119,17 @@ test("repository guides cover users, security, operations, releases and GitHub r
     assert.match(content, /0\.12\.6|GitHub|Atlas/);
   }
 });
+
+test("the GitHub showcase uses real Atlas screenshots with fictional demo data", () => {
+  const readme = source("README.md");
+  const showcase = source("docs/SHOWCASE.md");
+  const organizationScreenshot = path.join(root, "docs", "screenshots", "organization-home-demo.png");
+
+  assert.match(readme, /complete product showcase/);
+  assert.match(readme, /organization-home-demo\.png/);
+  assert.match(showcase, /fictional demonstration data/);
+  assert.match(showcase, /settings-backups\.png/);
+  assert.match(showcase, /settings-updates\.png/);
+  assert.match(showcase, /github-release-0\.15\.2\.png/);
+  assert.ok(fs.statSync(organizationScreenshot).size > 20_000);
+});

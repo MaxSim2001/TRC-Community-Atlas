@@ -23,7 +23,7 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
 - [What Atlas includes](#what-atlas-includes)
 - [Windows installation](#windows-installation)
 - [First sign-in](#first-sign-in)
-- [Screenshots](#screenshots)
+- [Project showcase](#project-showcase)
 - [Install from source](#install-from-source)
 - [Network and reverse proxy](#network-and-reverse-proxy)
 - [Backups and updates](#backups-and-updates)
@@ -111,7 +111,14 @@ After installation:
 
 Do not store the backup passphrase only inside Atlas.
 
-## Screenshots
+## Project showcase
+
+### Organization workspace
+
+![Atlas organization home with fictional demonstration data](docs/screenshots/organization-home-demo.png)
+
+The organization home brings service context, sites, configurations, records,
+passwords, and organization search into one isolated workspace.
 
 ### Official signed Release
 
@@ -136,6 +143,10 @@ an administrator action, cryptographic verification, MFA, and a rollback point.
 
 The screenshots show the French interface. Atlas can be switched to English
 from the header.
+
+See the [complete product showcase](docs/SHOWCASE.md) for captions, feature
+highlights, and direct links to the installation, security, and operations
+guides.
 
 ## Install from source
 
@@ -231,6 +242,7 @@ backups, TLS, or normal infrastructure security.
 Start with the [documentation index](docs/README.md).
 
 - [Windows installation](docs/INSTALLATION_WINDOWS.md)
+- [Product showcase](docs/SHOWCASE.md)
 - [User guide](docs/USER_GUIDE.md)
 - [Security and access](docs/SECURITY_AND_ACCESS.md)
 - [Operations guide](docs/OPERATIONS_GUIDE.md)
