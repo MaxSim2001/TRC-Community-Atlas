@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   createManagedBackup,
+  drillManagedBackup,
   enforceBackupRetention,
   inspectManagedBackup,
   launchReleaseUpdater,
@@ -204,6 +205,10 @@ test("managed backups are encrypted, inspectable, scheduled and retained without
   assert.equal(inspected.valid, true);
   assert.equal(inspected.sessionsExcluded, true);
   assert.ok(inspected.fileCount >= 2);
+  const drill = await drillManagedBackup({ destination, name: before[0].name, passphrase });
+  assert.equal(drill.restorable, true);
+  assert.equal(drill.sqliteIntegrity, "ok");
+  assert.equal(drill.workspaceRows, 1);
   await assert.rejects(inspectManagedBackup({ destination, name: before[0].name, passphrase: "wrong-passphrase-123" }));
 
   const removed = await enforceBackupRetention(destination, 2);

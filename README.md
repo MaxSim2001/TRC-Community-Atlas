@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Current version: **0.15.6**
+Current version: **0.16.0**
 
 [![Atlas tests](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -42,11 +42,19 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
 - mandatory TOTP MFA, one-time recovery codes, durable eight-hour sessions, and
   throttled authentication;
 - an AES-256-GCM local password vault with OTP support;
-- SQLite storage with transactions, revisions, activity history, and audit
+- SQLite storage with transactions, a paginated metadata index, targeted
+  per-record writes, revision-conflict detection, activity history, and audit
   records;
 - bidirectional relationships between records;
 - a full-page Markdown document editor;
-- encrypted full backups and scheduled backup management;
+- a documentation-quality dashboard with explicit ownership, age, duplicate,
+  relationship, and schema checks;
+- guided CSV import with skip, fill-missing-fields, or explicit duplicate
+  creation strategies;
+- previewed, reversible module consolidation and versioned local-module
+  schemas;
+- encrypted full backups, scheduled backup management, and isolated restore
+  drills;
 - signed GitHub updates with Ed25519, SHA-256 verification, MFA confirmation,
   snapshots, and automatic rollback;
 - a bilingual English/French interface and mobile PWA support;
@@ -245,12 +253,14 @@ Start with the [documentation index](docs/README.md).
 - [Product showcase](docs/SHOWCASE.md)
 - [User guide](docs/USER_GUIDE.md)
 - [Security and access](docs/SECURITY_AND_ACCESS.md)
+- [Vulnerability reporting](SECURITY.md)
 - [Operations guide](docs/OPERATIONS_GUIDE.md)
 - [Licensing and free MSP use](docs/LICENSING.md)
 - [Release notes](docs/RELEASE_NOTES.md)
 - [Code signing](docs/CODE_SIGNING.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [GitHub distribution readiness](docs/GITHUB_READINESS.md)
+- [Migration and backup compatibility](docs/MIGRATION_COMPATIBILITY.md)
 
 ## License
 

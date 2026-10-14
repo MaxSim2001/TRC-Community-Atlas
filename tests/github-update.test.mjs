@@ -1,12 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createAtlasServer } from "../server.mjs";
 
 const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+test("Windows updater proves scheduled-task ownership before stopping a listener", async () => {
+  const source = await readFile(new URL("../scripts/Invoke-AtlasReleaseUpdate.ps1", import.meta.url), "utf8");
+  assert.match(source, /Get-ScheduledTask -TaskName \$TaskName/);
+  assert.match(source, /\$taskArguments\.IndexOf\(\$DataRoot/);
+  assert.match(source, /\$taskArguments\s+-match\s+\('\-\-port\\s\+/);
+  assert.match(source, /\$ownedListenerId/);
+  assert.match(source, /\$verifiedTaskChild/);
+  assert.doesNotMatch(source, /Stop-Process\s+-Name\s+node/i);
+});
 
 function decodeBase32(value) {
   let bits = 0;
@@ -46,9 +56,9 @@ test("GitHub update preparation and installation require admin, CSRF, MFA and ex
       updateAvailable: true,
       sameVersion: false,
       repository: "MaxSim2001/TRC-Community-Atlas",
-      currentVersion: "0.15.6",
-      tag: "v0.15.7",
-      name: "Atlas 0.15.7 QA",
+      currentVersion: "0.16.0",
+      tag: "v0.16.1",
+      name: "Atlas 0.16.1 QA",
       checkedAt: "2026-10-09T12:00:00.000Z",
       artifactSetPresent: true,
       signatureVerified: false,
@@ -60,22 +70,22 @@ test("GitHub update preparation and installation require admin, CSRF, MFA and ex
   };
   const releasePreparer = async ({ release, currentVersion, publicKeyPath, updateRoot: requestedUpdateRoot }) => {
     preparations += 1;
-    assert.equal(release.tag, "v0.15.7");
-    assert.equal(currentVersion, "0.15.6");
+    assert.equal(release.tag, "v0.16.1");
+    assert.equal(currentVersion, "0.16.0");
     assert.match(publicKeyPath, /atlas-release-public-key\.pem$/);
     assert.equal(requestedUpdateRoot, updateRoot);
     return {
       schemaVersion: 1,
       repository: "MaxSim2001/TRC-Community-Atlas",
       currentVersion,
-      targetVersion: "0.15.7",
-      tag: "v0.15.7",
+      targetVersion: "0.16.1",
+      tag: "v0.16.1",
       preparedAt: "2026-10-09T12:01:00.000Z",
-      preparedRoot: path.join(updateRoot, "prepared-v0.15.7"),
-      manifestPath: path.join(updateRoot, "prepared-v0.15.7", "atlas-release-manifest.json"),
-      signaturePath: path.join(updateRoot, "prepared-v0.15.7", "atlas-release-manifest.sig"),
-      packagePath: path.join(updateRoot, "prepared-v0.15.7", "TRC-Atlas-Portable-0.15.7-win-x64.zip"),
-      manifest: { assetName: "TRC-Atlas-Portable-0.15.7-win-x64.zip", assetSize: 1234, sha256: "a".repeat(64), releaseNotesUrl: release.pageUrl || "" },
+      preparedRoot: path.join(updateRoot, "prepared-v0.16.1"),
+      manifestPath: path.join(updateRoot, "prepared-v0.16.1", "atlas-release-manifest.json"),
+      signaturePath: path.join(updateRoot, "prepared-v0.16.1", "atlas-release-manifest.sig"),
+      packagePath: path.join(updateRoot, "prepared-v0.16.1", "TRC-Atlas-Portable-0.16.1-win-x64.zip"),
+      manifest: { assetName: "TRC-Atlas-Portable-0.16.1-win-x64.zip", assetSize: 1234, sha256: "a".repeat(64), releaseNotesUrl: release.pageUrl || "" },
       signatureVerified: true,
       packageVerified: true,
       rollbackReady: true,
@@ -132,7 +142,7 @@ test("GitHub update preparation and installation require admin, CSRF, MFA and ex
 
   result = await request("/api/settings/updates");
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.currentVersion, "0.15.6");
+  assert.equal(result.payload.currentVersion, "0.16.0");
   assert.equal(result.payload.automaticChecks, false);
   assert.equal(result.payload.automaticInstall, false);
   assert.equal(result.payload.lastCheck, null);
@@ -155,13 +165,13 @@ test("GitHub update preparation and installation require admin, CSRF, MFA and ex
   result = await request("/api/settings/updates/prepare", { method: "POST", csrf, body: {} });
   assert.equal(result.response.status, 200);
   assert.equal(preparations, 1);
-  assert.equal(result.payload.prepared.targetVersion, "0.15.7");
+  assert.equal(result.payload.prepared.targetVersion, "0.16.1");
   assert.equal(result.payload.prepared.signatureVerified, true);
   assert.equal(result.payload.prepared.packageVerified, true);
   assert.equal(result.payload.prepared.rollbackReady, true);
   assert.equal(result.payload.prepared.packagePath, undefined);
 
-  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.15.7", adminMfaCode: "000000" } });
+  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.16.1", adminMfaCode: "000000" } });
   assert.equal(result.response.status, 401);
   assert.equal(launches.length, 0);
 
@@ -169,11 +179,11 @@ test("GitHub update preparation and installation require admin, CSRF, MFA and ex
   assert.equal(result.response.status, 400);
   assert.equal(launches.length, 0);
 
-  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.15.7", adminMfaCode: totp(secret) } });
+  result = await request("/api/settings/updates/apply", { method: "POST", csrf, body: { confirmation: "INSTALLER 0.16.1", adminMfaCode: totp(secret) } });
   assert.equal(result.response.status, 202);
-  assert.equal(result.payload.targetVersion, "0.15.7");
+  assert.equal(result.payload.targetVersion, "0.16.1");
   assert.equal(launches.length, 1);
-  assert.equal(launches[0].expectedVersion, "0.15.7");
+  assert.equal(launches[0].expectedVersion, "0.16.1");
   assert.equal(launches[0].updateRoot, updateRoot);
   await new Promise((resolve) => setTimeout(resolve, 850));
   assert.equal(shutdowns, 1);

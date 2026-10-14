@@ -14,6 +14,7 @@ import {
   compareStableVersions,
   createManagedBackup,
   enforceBackupRetention,
+  drillManagedBackup,
   inspectManagedBackup,
   launchReleaseUpdater,
   listManagedBackups,
@@ -23,6 +24,17 @@ import {
   protectBackupSecret,
   validateBackupDestination,
 } from "./lib/atlas-operations.mjs";
+
+const MODULE_MERGE_TARGETS = new Map([
+  ["custom-documents", "documents"], ["custom-backup", "service-backup"], ["custom-email", "service-email"],
+  ["custom-antivirus", "service-antivirus"], ["custom-printer", "service-printing"], ["custom-imprimante", "service-printing"],
+  ["custom-ssl", "ssl-tracker"], ["custom-license", "service-licensing"], ["custom-virtualisation", "service-virtualization"],
+  ["custom-wifi", "service-wireless"], ["custom-site-internet", "custom-website"], ["custom-ups-uninterruptible-power-supply", "custom-ups"],
+  ["custom-ordinateur", "custom-workstation"], ["custom-ordinateurs", "custom-workstation"], ["custom-serveurs", "custom-server"],
+  ["custom-servers-generic", "custom-server"], ["custom-switch-reseau", "custom-switch"], ["custom-tv-signage", "custom-digital-signage"],
+  ["custom-time-punch-clocks", "custom-punch-clock"], ["custom-ordinateur-virtuel", "custom-vm"], ["custom-serveur-virtuel", "custom-vm"],
+  ["custom-portable", "custom-laptop"],
+]);
 
 const modulePath = fileURLToPath(import.meta.url);
 const projectRoot = path.dirname(modulePath);
@@ -43,7 +55,7 @@ const MFA_IP_LIMIT = 30;
 const MFA_CHALLENGE_LIMIT = 5;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.15.6";
+const ATLAS_VERSION = "0.16.0";
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -677,6 +689,8 @@ function validateWorkspace(value, options = {}) {
       moduleIds.add(module.id);
       if (typeof module.label !== "string" || !module.label.trim() || module.label.length > 80 || typeof module.description !== "string" || module.description.length > 300) return false;
       if (!Array.isArray(module.fields) || module.fields.length < 4 || module.fields.length > 20) return false;
+      if (module.schemaVersion !== undefined && (!Number.isInteger(module.schemaVersion) || module.schemaVersion < 1 || module.schemaVersion > 10000)) return false;
+      if (module.schemaHistory !== undefined && (!Array.isArray(module.schemaHistory) || module.schemaHistory.length > 20 || module.schemaHistory.some((entry) => !Number.isInteger(entry?.version) || entry.version < 1 || !Array.isArray(entry.fields) || entry.fields.length > 20))) return false;
       const fieldKeys = new Set();
       for (const field of module.fields) {
         if (!field || !/^[a-z][a-z0-9]{1,39}$/i.test(field.key) || fieldKeys.has(field.key) || typeof field.label !== "string" || !field.label.trim() || field.label.length > 80 || !allowedFieldTypes.has(field.type)) return false;
@@ -995,6 +1009,16 @@ export function createAtlasServer(options = {}) {
     data.relationshipEvents = (data.relationshipEvents || []).filter((item) => belongs(item) || relationIds.has(item.relationId));
     data.activities = (data.activities || []).filter(belongs);
     return { revision: document.revision, data };
+  }
+
+  async function workspacePayload(document, user) {
+    const filtered = filterWorkspaceForUser(document, user);
+    if (!filtered) return filtered;
+    const allowed = organizationAccess(user);
+    return {
+      ...filtered,
+      entityVersions: (await getStore()).entityVersions({ organizationIds: allowed === null ? null : [...allowed] }),
+    };
   }
 
   function mergeRestrictedWorkspace(currentData, incomingData, user) {
@@ -1779,19 +1803,21 @@ export function createAtlasServer(options = {}) {
       if (request.method === "GET" && url.pathname === "/api/v1/records") {
         const token = await requireLocalApiToken(request, response, "read:records");
         if (!token) return;
-        const document = await readWorkspace();
         const allowed = token.organizationIds === null ? null : new Set(token.organizationIds);
         const requestedOrganization = cleanText(url.searchParams.get("organizationId") || "", 64) || "";
         if (requestedOrganization && allowed !== null && !allowed.has(requestedOrganization)) return errorResponse(response, 403, "organization_scope_required", "Ce jeton n’a pas accès à cette organisation.");
-        const belongs = (item) => (!requestedOrganization || item.organizationId === requestedOrganization) && (allowed === null || allowed.has(item.organizationId));
         const limit = Math.min(Math.max(Number(url.searchParams.get("limit")) || 200, 1), 500);
-        const items = [
-          ...(document?.data?.sites || []).filter(belongs).map((item) => ({ type: "site", id: item.id, organizationId: item.organizationId, title: item.name, status: item.status })),
-          ...(document?.data?.configurations || []).filter(belongs).map((item) => ({ type: "configuration", id: item.id, organizationId: item.organizationId, title: item.name, status: item.status, updatedAt: item.lastReviewed || "" })),
-          ...(document?.data?.procedures || []).filter(belongs).map((item) => ({ type: "procedure", id: item.id, organizationId: item.organizationId, title: item.title, status: item.status, updatedAt: item.updatedAt || "" })),
-          ...(document?.data?.moduleRecords || []).filter(belongs).map((item) => ({ type: "module", moduleId: item.moduleId, id: item.id, organizationId: item.organizationId, title: item.title, status: item.status, updatedAt: item.updatedAt || "" })),
-        ].slice(0, limit);
-        return jsonResponse(response, 200, { items, count: items.length, limit });
+        const result = (await getStore()).searchAssets({
+          query: cleanText(url.searchParams.get("q") || "", 200) || "",
+          organizationIds: allowed === null ? null : [...allowed],
+          organizationId: requestedOrganization,
+          types: String(url.searchParams.get("types") || "site,configuration,procedure,module").split(",").map((value) => value.trim()),
+          moduleId: cleanText(url.searchParams.get("moduleId") || "", 80) || "",
+          status: cleanText(url.searchParams.get("status") || "", 40) || "",
+          limit,
+          offset: Math.max(Number(url.searchParams.get("offset")) || 0, 0),
+        });
+        return jsonResponse(response, 200, { ...result, count: result.items.length });
       }
 
       if (request.method === "POST" && url.pathname === "/api/setup") {
@@ -2480,7 +2506,41 @@ export function createAtlasServer(options = {}) {
         if (!userContext) return;
         const document = await readWorkspace();
         if (!document) return errorResponse(response, 500, "workspace_missing", "Les données de l’instance sont absentes.");
-        return jsonResponse(response, 200, filterWorkspaceForUser(document, userContext.user));
+        return jsonResponse(response, 200, await workspacePayload(document, userContext.user));
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/search") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireUser(session, response);
+        if (!context) return;
+        const organizationId = cleanText(url.searchParams.get("organizationId") || "", 64) || "";
+        if (organizationId && !requireOrganizationAccess(context.user, organizationId, response)) return;
+        const allowed = organizationAccess(context.user);
+        const result = (await getStore()).searchAssets({
+          query: cleanText(url.searchParams.get("q") || "", 200) || "",
+          organizationIds: allowed === null ? null : [...allowed],
+          organizationId,
+          types: String(url.searchParams.get("types") || "").split(",").map((value) => value.trim()).filter(Boolean),
+          moduleId: cleanText(url.searchParams.get("moduleId") || "", 80) || "",
+          status: cleanText(url.searchParams.get("status") || "", 40) || "",
+          offset: Number(url.searchParams.get("offset")) || 0,
+          limit: Number(url.searchParams.get("limit")) || 50,
+        });
+        return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/quality") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireUser(session, response);
+        if (!context) return;
+        const organizationId = cleanText(url.searchParams.get("organizationId") || "", 64) || "";
+        if (organizationId && !requireOrganizationAccess(context.user, organizationId, response)) return;
+        const allowed = organizationAccess(context.user);
+        const rules = (await readWorkspace())?.data?.settings?.workflows || {};
+        const report = (await getStore()).qualityReport({ organizationIds: allowed === null ? null : [...allowed], organizationId, staleDays: Number(rules.staleDays) || 180 });
+        return jsonResponse(response, 200, report);
       }
 
       if (request.method === "GET" && url.pathname === "/api/workspace/history") {
@@ -2501,7 +2561,7 @@ export function createAtlasServer(options = {}) {
           if (!validateWorkspace(restored.data)) throw Object.assign(new Error("Révision invalide."), { statusCode: 400 });
           await mirrorStore(store, restored);
         });
-        return jsonResponse(response, 200, restored);
+        return jsonResponse(response, 200, await workspacePayload(restored, context.user));
       }
 
       if (request.method === "GET" && url.pathname === "/api/export") {
@@ -2529,7 +2589,7 @@ export function createAtlasServer(options = {}) {
           imported = store.commitDocument(current.revision, structuredClone(incoming), context.user.displayName, "workspace-imported");
           await mirrorStore(store, imported);
         });
-        return jsonResponse(response, 200, imported);
+        return jsonResponse(response, 200, await workspacePayload(imported, context.user));
       }
 
       const organizationDeleteMatch = url.pathname.match(/^\/api\/organizations\/([a-z0-9-]+)$/i);
@@ -2646,7 +2706,7 @@ export function createAtlasServer(options = {}) {
         await Promise.all(removedAttachmentIds.map((id) => unlink(path.join(attachmentFilesRoot, `${id}.bin`)).catch((error) => {
           if (error?.code !== "ENOENT") console.error(`[atlas] Pièce jointe orpheline après suppression de l’organisation : ${id}`, error);
         })));
-        return jsonResponse(response, 200, { deleted: true, organization: deletedOrganization, removed, detachedChildOrganizations, workspace: nextDocument });
+        return jsonResponse(response, 200, { deleted: true, organization: deletedOrganization, removed, detachedChildOrganizations, workspace: await workspacePayload(nextDocument, context.user) });
       }
 
       if (request.method === "PUT" && url.pathname === "/api/settings/security") {
@@ -2668,7 +2728,7 @@ export function createAtlasServer(options = {}) {
           await mirrorStore(store, nextDocument);
         });
         await recordAudit(context.user, "security-policy-updated", { details: nextSecurity });
-        return jsonResponse(response, 200, filterWorkspaceForUser(nextDocument, context.user));
+        return jsonResponse(response, 200, await workspacePayload(nextDocument, context.user));
       }
 
       if (request.method === "GET" && url.pathname === "/api/settings/backups") {
@@ -2738,6 +2798,28 @@ export function createAtlasServer(options = {}) {
         const result = await inspectManagedBackup({ destination: settings.destination, name: String(body.name || ""), passphrase: body.passphrase });
         await recordAudit(context.user, "backup-integrity-tested", { details: { file: result.name, valid: true, fileCount: result.fileCount } });
         return jsonResponse(response, 200, result);
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/backups/drill") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        if (typeof body.passphrase !== "string" || body.passphrase.length < 12) return errorResponse(response, 400, "backup_secret_required", "Entrez la phrase secrète de cette sauvegarde.");
+        const settings = await readBackupSettings();
+        let result;
+        try {
+          result = await drillManagedBackup({ destination: settings.destination, name: String(body.name || ""), passphrase: body.passphrase });
+          await saveBackupSettings({ ...settings, lastDrillAt: result.testedAt, lastDrillFile: result.name, lastDrillStatus: "success", lastDrillMessage: `SQLite ${result.sqliteIntegrity}; ${result.fileCount} fichiers validés.` });
+          await recordAudit(context.user, "backup-restore-drill-completed", { details: { file: result.name, fileCount: result.fileCount, attachmentFiles: result.attachmentFiles, sqliteIntegrity: result.sqliteIntegrity } });
+        } catch (error) {
+          await saveBackupSettings({ ...settings, lastDrillAt: nowIso(), lastDrillFile: String(body.name || ""), lastDrillStatus: "failed", lastDrillMessage: String(error?.message || "Échec du test").slice(0, 500) });
+          await recordAudit(context.user, "backup-restore-drill-failed", { details: { file: String(body.name || ""), message: String(error?.message || "Échec").slice(0, 300) } });
+          throw error;
+        }
+        return jsonResponse(response, 200, { result, status: await backupManagerStatus() });
       }
 
       if (request.method === "GET" && url.pathname === "/api/settings/updates") {
@@ -3017,7 +3099,103 @@ export function createAtlasServer(options = {}) {
         });
         refreshSavedDeploymentOrigins(nextDocument.data.settings);
         await recordAudit(context.user, "deployment-settings-updated", { details: { instanceCode: nextDeployment.instanceCode, primaryDomain: nextDeployment.primaryDomain, domainAliases: nextDeployment.domainAliases, accessMode: nextDeployment.accessMode, reverseProxy: nextDeployment.reverseProxy } });
-        return jsonResponse(response, 200, filterWorkspaceForUser(nextDocument, context.user));
+        return jsonResponse(response, 200, await workspacePayload(nextDocument, context.user));
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/workspace/changeset") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireWriter(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        const operations = Array.isArray(body.operations) ? body.operations : [];
+        const allowedCollections = new Set(["sites", "configurations", "procedures", "relations", "moduleRecords"]);
+        if (!operations.length || operations.length > 1000 || operations.some((operation) => !allowedCollections.has(operation?.collection))) {
+          return errorResponse(response, 400, "invalid_changeset", "Le lot de modifications ciblées est invalide.");
+        }
+        let nextDocument;
+        await enqueueWrite(async () => {
+          const store = await getStore();
+          const current = store.readDocument();
+          for (const operation of operations) {
+            const collection = current.data[operation.collection] || [];
+            const previous = collection.find((item) => item.id === operation.id);
+            const next = operation.delete === true ? null : operation.value;
+            const previousOrganization = String(previous?.organizationId || "");
+            const nextOrganization = String(next?.organizationId || "");
+            if (previousOrganization && !canWriteOrganization(context.user, previousOrganization)) throw Object.assign(new Error("Une fiche en lecture seule ne peut pas être modifiée."), { statusCode: 403 });
+            if (nextOrganization && !canWriteOrganization(context.user, nextOrganization)) throw Object.assign(new Error("La compagnie de destination est en lecture seule."), { statusCode: 403 });
+            if (context.user.role !== "administrator" && previousOrganization && nextOrganization && previousOrganization !== nextOrganization) throw Object.assign(new Error("Seul un administrateur peut déplacer une fiche entre deux compagnies."), { statusCode: 403 });
+          }
+          const activity = body.activity && typeof body.activity === "object" ? {
+            id: isSafeId(body.activity.id) ? body.activity.id : `act-${Date.now()}-${randomBytes(3).toString("hex")}`,
+            at: nowIso(),
+            actor: context.user.displayName,
+            action: cleanText(body.activity.action || body.action || "Fiche mise à jour", 120) || "Fiche mise à jour",
+            target: cleanText(body.activity.target || "", 200) || "Documentation Atlas",
+            kind: cleanText(body.activity.kind || "asset", 80) || "asset",
+            organizationId: cleanText(body.activity.organizationId || "", 64) || "",
+          } : null;
+          nextDocument = store.applyChangeset(operations, context.user.displayName, cleanText(body.action || "workspace-changeset", 120) || "workspace-changeset", (data) => validateWorkspace(data), activity);
+          await mirrorStore(store, nextDocument);
+        });
+        void dispatchLocalWebhooks("workspace.updated", { revision: nextDocument.revision, actor: context.user.displayName }).catch(() => {});
+        return jsonResponse(response, 200, await workspacePayload(nextDocument, context.user));
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/modules/merge/preview") {
+        const session = requireSession(request, response);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const sourceId = cleanText(url.searchParams.get("sourceId") || "", 80) || "";
+        const targetId = cleanText(url.searchParams.get("targetId") || "", 80) || "";
+        if (MODULE_MERGE_TARGETS.get(sourceId) !== targetId) return errorResponse(response, 400, "invalid_module_merge", "Cette fusion ne fait pas partie des consolidations vérifiées.");
+        const workspace = (await readWorkspace())?.data || {};
+        const records = (workspace.moduleRecords || []).filter((record) => record.moduleId === sourceId);
+        const templates = (workspace.templates || []).filter((template) => template.moduleId === sourceId);
+        const organizations = [...new Set(records.map((record) => record.organizationId))];
+        return jsonResponse(response, 200, { sourceId, targetId, recordCount: records.length, templateCount: templates.length, organizations, retired: (workspace.settings?.modules?.retiredIds || []).includes(sourceId), reversibleThroughHistory: true });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/modules/merge/apply") {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireAdmin(session, response);
+        if (!context) return;
+        const body = await readBody(request);
+        if (!(await requirePrivilegedMfa(context.user, body, response))) return;
+        const sourceId = cleanText(body.sourceId, 80) || "";
+        const targetId = cleanText(body.targetId, 80) || "";
+        if (MODULE_MERGE_TARGETS.get(sourceId) !== targetId) return errorResponse(response, 400, "invalid_module_merge", "Cette fusion ne fait pas partie des consolidations vérifiées.");
+        if (String(body.confirmation || "").trim() !== "FUSIONNER") return errorResponse(response, 400, "module_merge_confirmation_required", "Saisissez FUSIONNER pour confirmer.");
+        let nextDocument;
+        let recordCount = 0;
+        let templateCount = 0;
+        await enqueueWrite(async () => {
+          const store = await getStore();
+          const current = store.readDocument();
+          const nextData = structuredClone(current.data);
+          for (const record of nextData.moduleRecords || []) {
+            if (record.moduleId !== sourceId) continue;
+            record.moduleId = targetId;
+            record.schemaVersion = Math.max(Number(record.schemaVersion) || 1, 1);
+            record.migratedFromModuleId = sourceId;
+            record.updatedAt = nowIso();
+            recordCount += 1;
+          }
+          for (const template of nextData.templates || []) {
+            if (template.moduleId !== sourceId) continue;
+            template.moduleId = targetId;
+            templateCount += 1;
+          }
+          nextData.settings = { ...(nextData.settings || {}), modules: { ...(nextData.settings?.modules || {}), retiredIds: [...new Set([...(nextData.settings?.modules?.retiredIds || []), sourceId])] } };
+          if (!validateWorkspace(nextData)) throw Object.assign(new Error("La fusion produirait un espace de travail invalide."), { statusCode: 400 });
+          nextDocument = store.commitDocument(current.revision, nextData, context.user.displayName, `module-merged:${sourceId}:${targetId}`);
+          await mirrorStore(store, nextDocument);
+        });
+        await recordAudit(context.user, "module-merged", { details: { sourceId, targetId, recordCount, templateCount } });
+        return jsonResponse(response, 200, { document: await workspacePayload(nextDocument, context.user), result: { sourceId, targetId, recordCount, templateCount, retired: true } });
       }
 
       if (request.method === "PUT" && url.pathname === "/api/workspace") {
@@ -3049,7 +3227,7 @@ export function createAtlasServer(options = {}) {
           await mirrorStore(store, nextDocument);
         });
         void dispatchLocalWebhooks("workspace.updated", { revision: nextDocument.revision, actor: context.user.displayName }).catch(() => {});
-        return jsonResponse(response, 200, filterWorkspaceForUser(nextDocument, context.user));
+        return jsonResponse(response, 200, await workspacePayload(nextDocument, context.user));
       }
 
       const assetHistoryMatch = url.pathname.match(/^\/api\/assets\/([^/]+)\/history$/);

@@ -43,6 +43,9 @@ required for the current single-node local architecture.
 
 - SQLite transactions and integrity constraints.
 - Durable record revisions and audit events.
+- A derived SQLite metadata index rebuilt from the authoritative workspace.
+- Targeted record changesets with optimistic concurrency checked against the
+  latest asset revision.
 - Compatibility JSON mirror and versioned documentation import/export.
 - Universal bidirectional relationships scoped to one organization.
 - Typed references for sites, configurations, procedures, modules, and vault
@@ -68,7 +71,8 @@ remain required. Application encryption does not replace host security.
 
 ## Search and interface
 
-- Global or single-organization search built from authorized metadata only.
+- Global or single-organization server-side search built from authorized,
+  paginated metadata only.
 - Organization results before record results.
 - No indexing of vault plaintext.
 - Pagination for large collections.
@@ -77,6 +81,11 @@ remain required. Application encryption does not replace host security.
 - Mobile Progressive Web App with a static-shell cache only.
 - All `/api/` routes remain network-only and are never cached by the service
   worker.
+
+The quality report is also derived locally. It reports explicit conditions
+only: missing ownership, stale review dates, duplicate identifiers, orphaned
+references, and records behind their local module schema. It does not assign an
+opaque score and it never indexes vault plaintext.
 
 ## Installation and instance configuration
 

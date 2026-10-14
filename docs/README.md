@@ -27,6 +27,8 @@ Start with the guides below rather than the historical QA records.
 - [GitHub distribution readiness](GITHUB_READINESS.md)
 - [Release and update design](PLAN_GITHUB_INSTALL_UPDATE.md)
 - [Windows release signing](CODE_SIGNING.md)
+- [Migration and backup compatibility](MIGRATION_COMPATIBILITY.md)
+- [Private vulnerability reporting](../SECURITY.md)
 - [Release notes](RELEASE_NOTES.md)
 
 ## Development and project policy

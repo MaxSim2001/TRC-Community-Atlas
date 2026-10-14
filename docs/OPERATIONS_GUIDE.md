@@ -1,6 +1,6 @@
 # TRC Community Atlas operations guide
 
-Guide version: **0.15.6**
+Guide version: **0.16.0**
 
 ## Instance port and configuration
 
@@ -94,7 +94,7 @@ command, script, log, issue, or unprotected file.
 4. Wait for the completed result.
 5. Confirm the timestamp, size, and validation status.
 6. Store the passphrase separately from the backup.
-7. Run **Inspect** or a controlled restore rehearsal.
+7. Run **Test integrity**, then **Test restore** on the new backup.
 
 ![Atlas backup management](../public/assets/help/settings-backups.png)
 
@@ -122,6 +122,21 @@ Validate an existing backup without restoring it:
 .\scripts\Invoke-AtlasFullBackup.ps1 -Mode Inspect `
   -InputPath .\backups\TRC_Community_Atlas_Full_Backup_YYYY-MM-DD_HH-mm-ss.trcatlas
 ~~~
+
+### Isolated restore drill
+
+From **Settings > Backups**, expand a backup and select **Test restore**. After
+the administrator confirms MFA and enters the backup passphrase, Atlas:
+
+1. authenticates and extracts the encrypted package to a new temporary local
+   directory;
+2. verifies the required account, vault-key, and SQLite files;
+3. opens the restored SQLite copy in read-only mode;
+4. runs `PRAGMA quick_check` and confirms that one workspace state is readable;
+5. reports the restored object counts, then removes only the temporary copy.
+
+The drill never replaces active data. Its last success or failure is retained
+in backup settings for operational follow-up.
 
 ## Restore
 

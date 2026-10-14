@@ -1,17 +1,17 @@
-const SHELL_CACHE = "trc-atlas-shell-0.15.6";
+const SHELL_CACHE = "trc-atlas-shell-0.16.0";
 const SHELL_URLS = [
   "/",
   "/index.html",
-  "/assets/styles.css?v=0.15.6",
-  "/assets/help-content.js?v=0.15.6",
-  "/assets/app.js?v=0.15.6",
+  "/assets/styles.css?v=0.16.0",
+  "/assets/help-content.js?v=0.16.0",
+  "/assets/app.js?v=0.16.0",
   "/assets/trc-atlas-layers-logo.svg",
   "/assets/trc-atlas-icon-192.png",
   "/assets/trc-atlas-icon-512.png",
   "/assets/help/github-release-0.15.2.png",
   "/assets/help/settings-backups.png",
   "/assets/help/settings-updates.png",
-  "/manifest.webmanifest?v=0.15.6",
+  "/manifest.webmanifest?v=0.16.0",
 ];
 
 self.addEventListener("install", (event) => {

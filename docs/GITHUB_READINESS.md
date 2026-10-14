@@ -44,14 +44,14 @@ design is recorded in
   rollback.
 - [QA evidence for signed update and rollback](QA_SIGNED_UPDATE_2026-10-09.md).
 - Architecture, user, security, operations, licensing, and installation guides.
+- A private vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+- A maintained [migration and backup compatibility matrix](MIGRATION_COMPATIBILITY.md).
 - Local assets, PWA API-cache exclusions, and no telemetry.
 
 ## Remaining distribution work
 
 - Public Authenticode trust for the future Windows installer executable.
 - Windows 10 and Windows 11 clean-VM validation for each stable Release.
-- A documented security-reporting channel.
-- A maintained migration and backup-compatibility matrix.
 - Final production-specific HTTPS and reverse-proxy configuration by each
   instance administrator.
 

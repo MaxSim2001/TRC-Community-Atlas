@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.15.6";
+  const ATLAS_VERSION = "0.16.0";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -188,9 +188,15 @@
     createdApiToken: "",
     createdWebhookSecret: "",
     importPreview: null,
+    entityVersions: {},
+    serverSearch: { query: "", scope: "", items: [], total: 0, loading: false },
+    qualityReport: null,
+    qualityLoading: false,
+    moduleMergePreview: null,
   };
 
   let sessionExpiryTimer = null;
+  let serverSearchTimer = null;
   let deferredInstallPrompt = null;
   let pwaInstalledThisVisit = false;
 
@@ -300,12 +306,14 @@
   ];
 
   function moduleConsolidationReport() {
-    const resolve = (id) => moduleMap.get(id)?.label || id;
+    const resolve = (id) => moduleMap.get(id)?.label || builtInModuleDefinitions.find((module) => module.id === id)?.label || id;
+    const retiredIds = new Set(state.workspace?.settings?.modules?.retiredIds || []);
     const candidates = moduleConsolidationCandidates.map((group) => ({
       canonicalId: group.canonicalId,
       canonical: resolve(group.canonicalId),
       duplicateIds: group.duplicateIds,
       duplicates: group.duplicateIds.map(resolve),
+      retiredIds: group.duplicateIds.filter((id) => retiredIds.has(id)),
       reason: group.reason,
     }));
     return {
@@ -1765,6 +1773,7 @@
   async function loadWorkspace() {
     const document = await api("/api/workspace");
     state.workspace = document.data;
+    state.entityVersions = document.entityVersions || {};
     normalizeWorkspace();
     state.revision = document.revision;
     loadModulePreferences();
@@ -1811,6 +1820,22 @@
     finally { state.localApiLoading = false; if (renderAfter) render(); }
   }
 
+  async function loadQualityReport({ renderAfter = true } = {}) {
+    if (state.qualityLoading) return;
+    state.qualityLoading = true;
+    if (renderAfter) render();
+    try {
+      const organizationId = activeOrganizationId();
+      const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
+      state.qualityReport = { ...(await api(`/api/quality${query}`)), organizationId };
+    } catch (error) {
+      state.qualityReport = { error: error.message, issues: [], counts: {}, totalAssets: 0, healthyAssets: 0, organizationId: activeOrganizationId() };
+    } finally {
+      state.qualityLoading = false;
+      if (renderAfter) render();
+    }
+  }
+
   function refreshModuleDefinitions() {
     const allowedIcons = new Set(["grid", "server", "book", "users", "globe", "pin", "key", "lock", "network", "refresh", "mail", "file", "printer", "phone", "wifi", "shield", "activity"]);
     const localModules = (state.workspace?.customModuleDefinitions || []).map((definition) => ({
@@ -1821,10 +1846,12 @@
       description: definition.description || `Module personnalisé : ${definition.label}.`,
       titleLabel: definition.titleLabel || "Nom de la fiche",
       fields: definition.fields || [],
+      schemaVersion: Number(definition.schemaVersion) || 1,
       userDefined: true,
       archived: definition.archived === true,
     })).filter((module) => !module.archived && !builtInModuleDefinitions.some((builtIn) => builtIn.id === module.id));
-    moduleDefinitions = [...builtInModuleDefinitions, ...localModules];
+    const retiredIds = new Set(state.workspace?.settings?.modules?.retiredIds || []);
+    moduleDefinitions = [...builtInModuleDefinitions.filter((module) => !retiredIds.has(module.id)).map((module) => ({ ...module, schemaVersion: Number(module.schemaVersion) || 1 })), ...localModules];
     moduleMap.clear();
     moduleDefinitions.forEach((module) => moduleMap.set(module.id, module));
   }
@@ -1832,6 +1859,10 @@
   function normalizeWorkspace() {
     if (!Array.isArray(state.workspace.moduleRecords)) state.workspace.moduleRecords = [];
     if (!Array.isArray(state.workspace.customModuleDefinitions)) state.workspace.customModuleDefinitions = [];
+    for (const definition of state.workspace.customModuleDefinitions) {
+      definition.schemaVersion = Math.max(1, Number(definition.schemaVersion) || 1);
+      if (!Array.isArray(definition.schemaHistory)) definition.schemaHistory = [];
+    }
     if (!Array.isArray(state.workspace.relations)) state.workspace.relations = [];
     if (!Array.isArray(state.workspace.relationshipEvents)) state.workspace.relationshipEvents = [];
     if (!Array.isArray(state.workspace.templates)) state.workspace.templates = [
@@ -1842,6 +1873,8 @@
     ];
     migrateRetiredModuleReferences(state.workspace);
     if (!state.workspace.settings.workflows) state.workspace.settings.workflows = { expiryDays: 30, staleDays: 90, requireOwner: true };
+    if (!state.workspace.settings.modules) state.workspace.settings.modules = { retiredIds: [] };
+    if (!Array.isArray(state.workspace.settings.modules.retiredIds)) state.workspace.settings.modules.retiredIds = [];
     if (!state.workspace.settings.security) state.workspace.settings.security = { privilegedMfaEnabled: true, passwordRotationEnabled: false, passwordRotationDays: 90, passwordRotationReminderDays: 14 };
     state.workspace.settings.security = {
       privilegedMfaEnabled: state.workspace.settings.security.privilegedMfaEnabled !== false,
@@ -2313,6 +2346,7 @@
         ${navLink(["workspace", "activity", "activity", "activity"])}
         <button class="nav-item ${state.page === "templates" ? "active" : ""}" data-route="templates">${icon("file")}<span>Modèles</span>${state.page === "templates" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "workflows" ? "active" : ""}" data-route="workflows">${icon("refresh")}<span>Workflows</span>${state.page === "workflows" ? '<span class="nav-dot"></span>' : ""}</button>
+        <button class="nav-item ${state.page === "quality" ? "active" : ""}" data-route="quality">${icon("shield")}<span>Qualité</span>${state.page === "quality" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "versions" ? "active" : ""}" data-route="versions">${icon("history")}<span>Versions</span>${state.page === "versions" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "data-tools" ? "active" : ""}" data-route="data-tools">${icon("download")}<span>Import / Export</span>${state.page === "data-tools" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "manage-modules" ? "active" : ""}" data-route="manage-modules">${icon("settings")}<span>Gérer les modules</span>${state.page === "manage-modules" ? '<span class="nav-dot"></span>' : ""}</button>
@@ -2486,6 +2520,7 @@
       activity: renderActivity,
       templates: renderTemplates,
       workflows: renderWorkflows,
+      quality: renderQualityDashboard,
       versions: renderVersions,
       "data-tools": renderDataTools,
       "manage-modules": renderModulesManager,
@@ -3457,12 +3492,30 @@
     </div>`;
   }
 
+  function renderQualityDashboard() {
+    const organizationId = activeOrganizationId();
+    const report = state.qualityReport;
+    if ((!report || report.organizationId !== organizationId) && !state.qualityLoading) queueMicrotask(() => loadQualityReport());
+    if (!report || report.organizationId !== organizationId) return `<div class="page quality-page">${pageHeader("Qualité documentaire", "Contrôles explicables sur les fiches de la compagnie active.")}<section class="panel quality-loading">${icon("refresh", 20)} Analyse en cours…</section></div>`;
+    const labels = { "missing-owner": "Sans responsable", stale: "Révision ancienne", duplicate: "Doublon probable", "broken-relation": "Relation brisée", "orphan-organization": "Compagnie absente", "schema-outdated": "Schéma ancien" };
+    const issues = report.issues || [];
+    const issueRows = issues.map((issue) => {
+      const open = issue.ref.startsWith("relation:") ? `<button class="secondary compact" type="button" data-route="relations">Voir les relations</button>` : `<button class="secondary compact" type="button" data-action="open-asset" data-asset-ref="${escapeHtml(issue.ref)}">Ouvrir</button>`;
+      return `<tr><td><strong>${escapeHtml(issue.title)}</strong><small>${escapeHtml(issue.kind)}</small></td><td>${escapeHtml(labels[issue.code] || issue.label)}</td><td><span class="quality-severity ${escapeHtml(issue.severity)}">${issue.severity === "error" ? "Erreur" : "À corriger"}</span></td><td>${open}</td></tr>`;
+    }).join("");
+    return `<div class="page quality-page">${pageHeader("Qualité documentaire", "Des critères visibles, sans score opaque ni envoi externe.", `<button class="secondary" type="button" data-action="refresh-quality">${icon("refresh", 15)} Actualiser</button>`)}
+      <section class="metrics-grid quality-metrics">${metricCard("check", report.healthyAssets, "Fiches sans signal", `${report.totalAssets} analysées`, "mint")}${metricCard("users", report.counts?.["missing-owner"] || 0, "Responsables manquants", "à attribuer", "cyan")}${metricCard("history", report.counts?.stale || 0, "Révisions anciennes", `plus de ${report.staleDays} jours`, "blue")}${metricCard("link", (report.counts?.["broken-relation"] || 0) + (report.counts?.["orphan-organization"] || 0), "Références brisées", "relations et compagnies", "violet")}</section>
+      <section class="panel quality-summary"><div><p class="eyebrow">CONTRÔLES EXPLICABLES</p><h2>${issues.length ? `${issues.length} point${issues.length === 1 ? "" : "s"} à traiter` : "Documentation cohérente"}</h2><p>Atlas vérifie les responsables, l’ancienneté, les doublons, les relations orphelines et les versions de schéma. Chaque signal mène à une fiche précise.</p></div><div class="quality-counts">${Object.entries(report.counts || {}).map(([code, count]) => `<span><strong>${count}</strong>${escapeHtml(labels[code] || code)}</span>`).join("")}</div></section>
+      <section class="panel quality-table"><header><div><p class="eyebrow">ACTIONS</p><h2>Fiches à corriger</h2></div><span>${issues.length}</span></header>${issues.length ? `<div class="table-scroll"><table><thead><tr><th>Fiche</th><th>Motif</th><th>Niveau</th><th></th></tr></thead><tbody>${issueRows}</tbody></table></div>` : emptyState("Aucun problème détecté avec les règles actuelles.")}</section>
+    </div>`;
+  }
+
   function renderModulesManager() {
     const selectedCount = state.visibleModuleIds.size;
     const audit = moduleCatalogAudit();
     const consolidation = moduleConsolidationReport();
     const localDefinitions = state.workspace.customModuleDefinitions || [];
-    const localBuilder = isAdministrator() ? `<section class="panel local-module-builder"><header><div><p class="eyebrow">CONSTRUCTEUR LOCAL</p><h2>Modules créés sur cette instance</h2><p>Ajoutez un registre métier avec ses propres champs typés, sans code et sans champ secret.</p></div><button class="primary compact" type="button" data-action="new-custom-module">${icon("plus", 15)} Nouveau module</button></header>${localDefinitions.length ? `<div class="local-module-list">${localDefinitions.map((definition) => { const count = state.workspace.moduleRecords.filter((record) => record.moduleId === definition.id).length; return `<button type="button" data-action="edit-custom-module" data-id="${escapeHtml(definition.id)}"><span class="module-toggle-icon">${icon(definition.icon || "grid", 18)}</span><span><strong>${escapeHtml(definition.label)}</strong><small>${definition.fields.length} champs · ${count} fiche${count === 1 ? "" : "s"}</small></span>${icon("edit", 14)}</button>`; }).join("")}</div>` : `<div class="local-module-empty">${icon("grid", 20)}<span><strong>Aucun module local</strong><small>Les ${audit.total} modules fournis restent disponibles ci-dessous.</small></span></div>`}<div class="module-boundary-note"><strong>Secrets interdits :</strong> les mots de passe, jetons et clés API doivent rester dans Passwords puis être reliés à la fiche.</div></section>` : "";
+    const localBuilder = isAdministrator() ? `<section class="panel local-module-builder"><header><div><p class="eyebrow">CONSTRUCTEUR LOCAL</p><h2>Modules créés sur cette instance</h2><p>Chaque modification des champs crée une version de schéma traçable, sans effacer les anciennes valeurs des fiches.</p></div><button class="primary compact" type="button" data-action="new-custom-module">${icon("plus", 15)} Nouveau module</button></header>${localDefinitions.length ? `<div class="local-module-list">${localDefinitions.map((definition) => { const count = state.workspace.moduleRecords.filter((record) => record.moduleId === definition.id).length; return `<button type="button" data-action="edit-custom-module" data-id="${escapeHtml(definition.id)}"><span class="module-toggle-icon">${icon(definition.icon || "grid", 18)}</span><span><strong>${escapeHtml(definition.label)}</strong><small>Schéma v${Number(definition.schemaVersion) || 1} · ${definition.fields.length} champs · ${count} fiche${count === 1 ? "" : "s"}</small></span>${icon("edit", 14)}</button>`; }).join("")}</div>` : `<div class="local-module-empty">${icon("grid", 20)}<span><strong>Aucun module local</strong><small>Les ${audit.total} modules fournis restent disponibles ci-dessous.</small></span></div>`}<div class="module-boundary-note"><strong>Secrets interdits :</strong> les mots de passe, jetons et clés API doivent rester dans Passwords puis être reliés à la fiche.</div></section>` : "";
     return `<div class="page modules-manager-page">
       ${pageHeader("Gérer les modules", "Choisissez précisément les sections affichées dans votre navigation. Chaque module possède maintenant un profil métier vérifié; les données restent conservées lorsqu’un module est masqué.")}
       <section class="module-audit-summary" aria-label="Couverture de la bibliothèque">
@@ -3488,7 +3541,7 @@
   }
 
   function renderModuleConsolidationReport(report) {
-    const candidateRows = report.candidates.map((group) => `<li><div><strong>Conserver ${escapeHtml(group.canonical)}</strong><small>${escapeHtml(group.reason)}</small></div><span>${group.duplicates.map((label) => `<em>${escapeHtml(label)}</em>`).join("")}</span></li>`).join("");
+    const candidateRows = report.candidates.map((group) => `<li><div><strong>Conserver ${escapeHtml(group.canonical)}</strong><small>${escapeHtml(group.reason)}</small></div><span>${group.duplicates.map((label, index) => { const sourceId = group.duplicateIds[index]; const retired = group.retiredIds.includes(sourceId); return `<button class="module-merge-chip ${retired ? "done" : ""}" type="button" data-action="preview-module-merge" data-source-id="${escapeHtml(sourceId)}" data-target-id="${escapeHtml(group.canonicalId)}" ${!isAdministrator() || retired ? "disabled" : ""}>${escapeHtml(label)}${retired ? " · fusionné" : " · analyser"}</button>`; }).join("")}</span></li>`).join("");
     const relatedRows = report.related.map((group) => `<li><div><strong>${escapeHtml(group.title)}</strong><small>${escapeHtml(group.note)}</small></div><span>${group.modules.map((label) => `<em>${escapeHtml(label)}</em>`).join("")}</span></li>`).join("");
     return `<section class="panel module-consolidation-report" aria-labelledby="module-consolidation-title">
       <header><div><p class="eyebrow">RAPPORT DE CONSOLIDATION</p><h2 id="module-consolidation-title">Modules semblables et doublons probables</h2><p>Analyse des libellés, de l’usage et des profils métier. Les suggestions ne suppriment aucune fiche automatiquement.</p></div><div class="module-consolidation-metrics"><span><strong>${report.recommendedRemovalCount}</strong> doublons probables</span><span><strong>${report.related.length}</strong> groupes à vérifier</span></div></header>
@@ -3656,10 +3709,11 @@
     const files = status.files || [];
     const schedulerLabel = settings.enabled ? `Prochaine exécution ${settings.nextRunAt ? formatDateTime(settings.nextRunAt) : "à calculer"}` : "Planification désactivée";
     const lastRun = settings.lastSuccessAt ? `${formatDateTime(settings.lastSuccessAt)} · ${formatFileSize(settings.lastBytes)} · ${settings.lastFileCount} fichiers` : "Aucune sauvegarde complète réussie";
-    const filesMarkup = files.length ? `<div class="backup-history-list">${files.map((file) => `<details class="backup-history-item"><summary><span>${icon("shield", 17)}<span><strong>${escapeHtml(file.name)}</strong><small>${formatDateTime(file.modifiedAt)} · ${formatFileSize(file.size)}</small></span></span>${icon("chevron", 14)}</summary><form data-form="backup-inspect" data-name="${escapeHtml(file.name)}"><p>Déchiffre la sauvegarde en mémoire, valide chaque empreinte SHA-256 et n’écrit aucun fichier restauré.</p><label>Phrase secrète de cette sauvegarde<input name="passphrase" type="password" minlength="12" autocomplete="new-password" required/></label>${settingsAdminMfaMarkup("Le test lit une sauvegarde contenant toutes les données de l’instance.", `inspect-${file.name.replace(/[^a-z0-9]/gi, "-")}`)}<p class="form-error" role="alert"></p><button class="secondary compact" type="submit">${icon("check", 14)} Tester l’intégrité</button></form></details>`).join("")}</div>` : emptyState("Aucune sauvegarde Atlas n’est encore présente dans cet emplacement.");
+    const filesMarkup = files.length ? `<div class="backup-history-list">${files.map((file) => `<details class="backup-history-item"><summary><span>${icon("shield", 17)}<span><strong>${escapeHtml(file.name)}</strong><small>${formatDateTime(file.modifiedAt)} · ${formatFileSize(file.size)}</small></span></span>${icon("chevron", 14)}</summary><div class="backup-test-actions"><form data-form="backup-inspect" data-name="${escapeHtml(file.name)}"><p>Valide le chiffrement et chaque empreinte SHA-256, sans extraire de fichiers.</p><label>Phrase secrète<input name="passphrase" type="password" minlength="12" autocomplete="new-password" required/></label>${settingsAdminMfaMarkup("Le test lit une sauvegarde contenant toutes les données de l’instance.", `inspect-${file.name.replace(/[^a-z0-9]/gi, "-")}`)}<p class="form-error" role="alert"></p><button class="secondary compact" type="submit">${icon("check", 14)} Tester l’intégrité</button></form><form data-form="backup-drill" data-name="${escapeHtml(file.name)}"><p>Restaure dans un dossier temporaire isolé, ouvre la copie SQLite et vérifie qu’elle peut être relue.</p><label>Phrase secrète<input name="passphrase" type="password" minlength="12" autocomplete="new-password" required/></label>${settingsAdminMfaMarkup("Le test de restauration crée puis efface uniquement une copie temporaire locale.", `drill-${file.name.replace(/[^a-z0-9]/gi, "-")}`)}<p class="form-error" role="alert"></p><button class="primary compact" type="submit">${icon("history", 14)} Tester la restauration</button></form></div></details>`).join("")}</div>` : emptyState("Aucune sauvegarde Atlas n’est encore présente dans cet emplacement.");
     const scheduleForm = `<form class="settings-dedicated-form" data-form="settings-backups"><section class="panel settings-section backup-settings-section"><div><p class="eyebrow">PLANIFICATION LOCALE</p><h2>Emplacement et horaire</h2><p>Atlas crée un fichier complet AES-256-GCM. La phrase secrète planifiée est protégée par Windows pour le compte qui exécute Atlas.</p><div class="backup-current-state ${settings.enabled ? "enabled" : "disabled"}"><span>${icon(settings.enabled ? "check" : "clock", 17)}</span><div><small>${escapeHtml(schedulerLabel)}</small><strong>${escapeHtml(lastRun)}</strong></div></div></div><div class="backup-settings-controls"><label class="permission-switch"><input name="enabled" type="checkbox" ${settings.enabled ? "checked" : ""}/><span><strong>Activer les sauvegardes planifiées</strong><small>Le planificateur fonctionne pendant qu’Atlas est démarré; activez aussi l’autodémarrage Windows pour une exécution fiable.</small></span></label><label>Emplacement des sauvegardes<input name="destination" value="${escapeHtml(settings.destination)}" maxlength="500" required/><small>Chemin absolu local ou UNC. Atlas ne remplace jamais une ancienne sauvegarde.</small></label><div class="backup-schedule-grid"><label>Fréquence<select name="cadence"><option value="daily" ${settings.cadence === "daily" ? "selected" : ""}>Chaque jour</option><option value="weekly" ${settings.cadence === "weekly" ? "selected" : ""}>Chaque semaine</option></select></label><label>Jour<select name="weekday">${weekdayOptions}</select></label><label>Heure<input name="hour" type="number" min="0" max="23" value="${settings.hour}" required/></label><label>Minute<input name="minute" type="number" min="0" max="59" value="${settings.minute}" required/></label></div><label>Phrase secrète planifiée<input name="passphrase" type="password" minlength="12" autocomplete="new-password" placeholder="${settings.secretConfigured ? "Déjà protégée — laisser vide pour conserver" : "12 caractères minimum"}"/><small>Conservez-la aussi dans un emplacement distinct. Atlas ne pourra pas restaurer une sauvegarde si vous la perdez.</small></label><label class="permission-switch"><input name="retentionEnabled" type="checkbox" ${settings.retentionEnabled ? "checked" : ""}/><span><strong>Rétention automatique explicite</strong><small>Après une réussite, retirer uniquement les anciens fichiers Atlas de cet emplacement.</small></span></label><label>Nombre de sauvegardes à conserver<input name="retentionCount" type="number" min="2" max="365" value="${settings.retentionCount}" required/></label><div class="module-boundary-note"><strong>Restauration hors ligne seulement :</strong> arrêtez Atlas puis utilisez l’outil local. Une copie de sécurité préalable sera créée; les sessions ne sont jamais restaurées.</div></div></section>${settingsAdminMfaMarkup("Confirmez avant de changer l’emplacement, la phrase secrète, l’horaire ou la rétention.", "backups")}<p class="form-error" role="alert"></p><div class="settings-save"><span>${status.destinationReady ? "Destination lisible" : escapeHtml(status.destinationError || "Destination non vérifiée")}</span><button class="primary" type="submit">Enregistrer la planification</button></div></form>`;
     const runForm = `<form class="panel backup-run-card" data-form="backup-run"><div><p class="eyebrow">SAUVEGARDE IMMÉDIATE</p><h2>Créer un point de restauration maintenant</h2><p>Utilisez la phrase protégée de la planification ou saisissez une phrase différente pour ce fichier seulement.</p></div><label>Phrase secrète facultative<input name="passphrase" type="password" minlength="12" autocomplete="new-password" placeholder="${settings.secretConfigured ? "Laisser vide pour utiliser la phrase planifiée" : "Requise si aucune phrase planifiée"}"/></label>${settingsAdminMfaMarkup("La sauvegarde complète lit le coffre, les comptes, le MFA, SQLite et les pièces jointes.", "backup-run")}<p class="form-error" role="alert"></p><button class="primary" type="submit" ${status.running ? "disabled" : ""}>${icon("download", 15)} ${status.running ? "Sauvegarde en cours…" : "Sauvegarder maintenant"}</button></form>`;
-    const history = `<section class="panel backup-history-card"><header><div><p class="eyebrow">HISTORIQUE</p><h2>Fichiers gérés par Atlas</h2><p>${files.length} sauvegarde${files.length === 1 ? "" : "s"} trouvée${files.length === 1 ? "" : "s"}. Aucun fichier tiers n’est touché par la rétention.</p></div><button class="secondary compact" type="button" data-action="refresh-backups">${icon("refresh", 14)} Actualiser</button></header>${settings.lastError ? `<div class="notice danger">${icon("alert", 16)} Dernier échec : ${escapeHtml(settings.lastError)}</div>` : ""}${filesMarkup}<div class="health-boundary-note">${icon("info", 16)} Pour restaurer : arrêtez Atlas et exécutez <code>powershell -ExecutionPolicy Bypass -File .\\scripts\\Invoke-AtlasFullBackup.ps1 -Mode Restore -InputPath &lt;fichier&gt;</code>.</div></section>`;
+    const drillStatus = settings.lastDrillAt ? `<div class="notice ${settings.lastDrillStatus === "failed" ? "danger" : "success"}">${icon(settings.lastDrillStatus === "failed" ? "alert" : "check", 16)} Dernier test de restauration : ${escapeHtml(settings.lastDrillFile || "sauvegarde")} · ${formatDateTime(settings.lastDrillAt)} · ${escapeHtml(settings.lastDrillMessage || settings.lastDrillStatus)}</div>` : "";
+    const history = `<section class="panel backup-history-card"><header><div><p class="eyebrow">HISTORIQUE</p><h2>Fichiers gérés par Atlas</h2><p>${files.length} sauvegarde${files.length === 1 ? "" : "s"} trouvée${files.length === 1 ? "" : "s"}. Aucun fichier tiers n’est touché par la rétention.</p></div><button class="secondary compact" type="button" data-action="refresh-backups">${icon("refresh", 14)} Actualiser</button></header>${settings.lastError ? `<div class="notice danger">${icon("alert", 16)} Dernier échec : ${escapeHtml(settings.lastError)}</div>` : ""}${drillStatus}${filesMarkup}<div class="health-boundary-note">${icon("info", 16)} La restauration réelle reste hors ligne. Le test guidé utilise uniquement un dossier temporaire isolé et ne modifie jamais les données actives.</div></section>`;
     return renderSettingsShell("backups", "Sauvegardes", "Planification, emplacement, rétention et vérification des sauvegardes complètes chiffrées.", `${scheduleForm}${runForm}${history}`);
   }
 
@@ -4461,6 +4515,13 @@
       const visibleItems = category.items.slice(0, 200);
       return `<div class="priority-dialog"><div class="modal-heading"><div><p class="eyebrow">${state.locale === "fr" ? "CRITÈRES FACTUELS" : "FACTUAL CRITERIA"}</p><h2 id="modal-title">${escapeHtml(category.label)}</h2><p>${escapeHtml(category.description)}</p></div>${close}</div><div class="priority-dialog-summary"><span class="priority-dialog-icon">${icon(category.icon, 21)}</span><div><strong>${category.items.length}</strong><span>${state.locale === "fr" ? `${category.items.length === 1 ? "signal" : "signaux"} dans la portée actuelle` : `signal${category.items.length === 1 ? "" : "s"} in the current scope`}</span></div><small>${state.dashboardIncludeTests ? (state.locale === "fr" ? "Tests inclus" : "Tests included") : (state.locale === "fr" ? "Organisations [TEST] masquées" : "[TEST] organizations hidden")}</small></div>${visibleItems.length ? `<div class="priority-dialog-list">${visibleItems.map((item) => `<button type="button" data-action="open-priority-item" data-asset-ref="${escapeHtml(item.ref || "")}" ${item.ref ? "" : "disabled"}><span class="type-icon">${icon(item.icon || "alert", 17)}</span><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.subtitle)} · ${escapeHtml(item.reason)}${item.categoryLabel ? ` · ${escapeHtml(item.categoryLabel)}` : ""}</small></span>${item.ref ? icon("chevron", 15) : ""}</button>`).join("")}</div>` : `<div class="priority-dialog-empty">${icon("check", 24)}<h3>${state.locale === "fr" ? "Aucun signal pour ce critère" : "No signal for this criterion"}</h3><p>${state.locale === "fr" ? "Atlas n’ajoute aucune note cachée : zéro signifie simplement qu’aucune fiche ne correspond à cette règle." : "Atlas adds no hidden score: zero simply means no record matches this rule."}</p></div>`}${category.items.length > visibleItems.length ? `<p class="priority-dialog-limit">${state.locale === "fr" ? `200 résultats affichés sur ${category.items.length}. Affinez la portée en masquant les organisations de test.` : `Showing 200 of ${category.items.length}. Narrow the scope by hiding test organizations.`}</p>` : ""}<div class="modal-actions"><button class="secondary" type="button" data-action="close-modal">${t("close")}</button></div></div>`;
     }
+    if (kind === "module-merge") {
+      const preview = state.moduleMergePreview;
+      if (!preview) return `<div class="modal-heading"><div><h2 id="modal-title">Analyse indisponible</h2></div>${close}</div>`;
+      const source = builtInModuleDefinitions.find((module) => module.id === preview.sourceId)?.label || preview.sourceId;
+      const target = builtInModuleDefinitions.find((module) => module.id === preview.targetId)?.label || preview.targetId;
+      return `<form data-form="module-merge"><input type="hidden" name="sourceId" value="${escapeHtml(preview.sourceId)}"/><input type="hidden" name="targetId" value="${escapeHtml(preview.targetId)}"/><div class="modal-heading"><div><p class="eyebrow">ASSISTANT DE FUSION</p><h2 id="modal-title">Fusionner le module « ${escapeHtml(source)} »</h2><p>Atlas migre les fiches et modèles vers le module conservé, puis masque le doublon. Aucune fiche n’est supprimée.</p><div class="module-merge-path"><span><small>MODULE À RETIRER</small><strong>${escapeHtml(source)}</strong><code>${escapeHtml(preview.sourceId)}</code></span>${icon("chevron", 16)}<span><small>MODULE CONSERVÉ</small><strong>${escapeHtml(target)}</strong><code>${escapeHtml(preview.targetId)}</code></span></div></div>${close}</div><div class="module-merge-preview"><span><strong>${preview.recordCount}</strong> fiches à migrer</span><span><strong>${preview.templateCount}</strong> modèles à migrer</span><span><strong>${preview.organizations.length}</strong> compagnies touchées</span></div><div class="notice">${icon("history", 16)} L’état précédent restera disponible dans Versions pour un retour arrière.</div><div class="form-grid"><label class="span-2">Confirmation<input name="confirmation" required autocomplete="off" placeholder="FUSIONNER" pattern="FUSIONNER"/><small>Saisissez exactement FUSIONNER.</small></label>${privilegedMfaField()}</div><p class="form-error" role="alert"></p>${modalActions("Fusionner les modules")}</form>`;
+    }
     if (kind === "organization") {
       const item = existingId ? state.workspace.organizations.find((entry) => entry.id === existingId) : null;
       const details = item?.details || {};
@@ -4531,7 +4592,7 @@
       const mapping = fields.map((field) => `<label>${escapeHtml(field.label)}${field.required ? " *" : ""}<select name="map_${field.key}" ${field.required ? "required" : ""}>${headerOptions(field)}</select></label>`).join("");
       const organizationField = preview.target === "organizations" ? "" : `<label class="span-2">Organisation de destination<select name="organizationId" required><option value="">Choisir une organisation</option>${state.workspace.organizations.map((organization) => `<option value="${escapeHtml(organization.id)}" ${organization.id === activeOrganizationId() ? "selected" : ""}>${escapeHtml(organizationPathLabel(organization.id))}</option>`).join("")}</select><small>Les lignes sont ajoutées uniquement à cette organisation; aucune portée globale implicite.</small></label>`;
       const sampleRows = preview.rows.slice(0, 5);
-      return `<form data-form="guided-import"><div class="modal-heading"><div><p class="eyebrow">APERÇU CSV</p><h2 id="modal-title">${escapeHtml(preview.fileName)}</h2><p>${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"} vers ${escapeHtml(preview.target === "organizations" ? "Organisations" : preview.target === "configurations" ? "Configurations" : targetModule?.label || "Module")}. Aucun enregistrement n’est encore écrit.</p></div>${close}</div><div class="guided-import-layout"><section><h3>1. Associer les colonnes</h3><div class="form-grid">${organizationField}${preview.target === "configurations" ? `<label class="span-2">Site par défaut<select name="siteId"><option value="">Aucun site</option>${siteOptions("", activeOrganizationId())}</select></label>` : ""}${mapping}</div></section><section><h3>2. Vérifier l’aperçu</h3><div class="table-scroll"><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${sampleRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="notice">${icon("history", 16)} L’import complet sera enregistré dans une seule révision. La page Versions permettra un retour arrière.</div></section></div><p class="form-error" role="alert"></p>${modalActions(`Importer ${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"}`)}</form>`;
+      return `<form data-form="guided-import"><div class="modal-heading"><div><p class="eyebrow">APERÇU CSV</p><h2 id="modal-title">${escapeHtml(preview.fileName)}</h2><p>${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"} vers ${escapeHtml(preview.target === "organizations" ? "Organisations" : preview.target === "configurations" ? "Configurations" : targetModule?.label || "Module")}. Aucun enregistrement n’est encore écrit.</p></div>${close}</div><div class="guided-import-layout"><section><h3>1. Associer les colonnes</h3><div class="form-grid">${organizationField}<label class="span-2">Si une fiche semblable existe<select name="duplicateStrategy"><option value="skip">Ignorer la ligne en double (recommandé)</option><option value="merge">Compléter la fiche existante</option><option value="create">Créer une nouvelle fiche malgré le doublon</option></select><small>Atlas compare le nom, le code, l’adresse IP ou la référence selon le type importé.</small></label>${preview.target === "configurations" ? `<label class="span-2">Site par défaut<select name="siteId"><option value="">Aucun site</option>${siteOptions("", activeOrganizationId())}</select></label>` : ""}${mapping}</div></section><section><h3>2. Vérifier l’aperçu</h3><div class="table-scroll"><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${sampleRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="notice">${icon("history", 16)} Les doublons seront traités selon votre choix. L’import complet reste une seule révision restaurable.</div></section></div><p class="form-error" role="alert"></p>${modalActions(`Importer ${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"}`)}</form>`;
     }
     if (kind === "user") {
       const item = existingId ? state.users.find((user) => user.id === existingId) : null;
@@ -4651,13 +4712,35 @@
     mutator(state.workspace);
     const currentAsset = state.page === "asset" ? assetByRef(state.detailId) : null;
     const organizationId = currentAsset?.organizationId || activeOrganizationId();
-    state.workspace.activities.unshift({ id: `act-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, at: new Date().toISOString(), actor: state.user.displayName, action, target, kind, organizationId });
-    state.workspace.activities = state.workspace.activities.slice(0, 500);
+    const activity = { id: `act-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, at: new Date().toISOString(), actor: state.user.displayName, action, target, kind, organizationId };
+    const collectionTypes = new Map([["sites", "site"], ["configurations", "configuration"], ["procedures", "procedure"], ["relations", "relation"], ["moduleRecords", "module"]]);
+    const operations = [];
+    for (const [collection, type] of collectionTypes) {
+      const before = new Map((previous[collection] || []).map((item) => [item.id, item]));
+      const after = new Map((state.workspace[collection] || []).map((item) => [item.id, item]));
+      for (const id of new Set([...before.keys(), ...after.keys()])) {
+        if (JSON.stringify(before.get(id)) === JSON.stringify(after.get(id))) continue;
+        operations.push({ collection, id, expectedVersion: state.entityVersions[`${type}:${id}`] || 0, ...(after.has(id) ? { value: after.get(id) } : { delete: true }) });
+      }
+    }
+    const targetedKeys = new Set([...collectionTypes.keys(), "updatedAt", "activities"]);
+    const onlyTargetedChanges = operations.length > 0 && [...new Set([...Object.keys(previous), ...Object.keys(state.workspace)])]
+      .filter((key) => !targetedKeys.has(key))
+      .every((key) => JSON.stringify(previous[key]) === JSON.stringify(state.workspace[key]))
+      && JSON.stringify(previous.relationshipEvents || []) === JSON.stringify(state.workspace.relationshipEvents || []);
     try {
       state.saving = true;
-      const document = await api("/api/workspace", { method: "PUT", body: JSON.stringify({ revision: state.revision, data: state.workspace }) });
+      let document;
+      if (onlyTargetedChanges) {
+        document = await api("/api/workspace/changeset", { method: "POST", body: JSON.stringify({ operations, action, activity }) });
+      } else {
+        state.workspace.activities.unshift(activity);
+        state.workspace.activities = state.workspace.activities.slice(0, 500);
+        document = await api("/api/workspace", { method: "PUT", body: JSON.stringify({ revision: state.revision, data: state.workspace }) });
+      }
       state.workspace = document.data;
       state.revision = document.revision;
+      state.entityVersions = document.entityVersions || state.entityVersions;
       normalizeWorkspace();
       await loadWorkspaceHistory();
       if (state.page === "asset" && state.detailId) await loadAssetHistory(state.detailId);
@@ -4734,6 +4817,43 @@
     return results.sort((a, b) => compareSearchResults(a, b, query));
   }
 
+  function serverSearchResult(item) {
+    const kinds = { organization: "Organisation", site: "Site", configuration: "Configuration", procedure: "Procédure", module: moduleMap.get(item.moduleId)?.label || "Module", relation: "Relation", template: "Modèle" };
+    const icons = { organization: "building", site: "pin", configuration: "server", procedure: "book", module: moduleMap.get(item.moduleId)?.icon || "grid", relation: "link", template: "file" };
+    return {
+      kind: kinds[item.type] || "Fiche",
+      icon: icons[item.type] || "grid",
+      label: item.title,
+      meta: [item.subtitle, item.organizationId ? orgName(item.organizationId) : ""].filter(Boolean).join(" · "),
+      route: item.type === "organization" ? `organization/${item.id}` : item.type === "module" ? `module/${item.moduleId}` : `${item.type}s`,
+      assetRef: ["site", "configuration", "procedure", "module"].includes(item.type) ? item.ref : "",
+      organizationIds: item.organizationId ? [item.organizationId] : item.type === "organization" ? [item.id] : [],
+      filterOrg: item.organizationId || "",
+      id: item.id,
+      moduleId: item.moduleId || "",
+    };
+  }
+
+  function queueServerSearch() {
+    clearTimeout(serverSearchTimer);
+    const query = state.search.trim();
+    const scope = state.searchScope;
+    if (!query) { state.serverSearch = { query: "", scope: "", items: [], total: 0, loading: false }; return; }
+    state.serverSearch.loading = true;
+    serverSearchTimer = setTimeout(async () => {
+      try {
+        const parameters = new URLSearchParams({ q: query, limit: "50" });
+        if (scope !== "global") parameters.set("organizationId", scope);
+        const result = await api(`/api/search?${parameters}`);
+        if (state.search.trim() !== query || state.searchScope !== scope) return;
+        state.serverSearch = { query, scope, items: result.items.map(serverSearchResult), total: result.total, loading: false };
+      } catch {
+        state.serverSearch = { query, scope, items: [], total: 0, loading: false, failed: true };
+      }
+      renderSearchResults();
+    }, 180);
+  }
+
   function searchResultMarkup(result, compact = true) {
     const filterAttribute = result.filterOrg ? ` data-filter-org="${escapeHtml(result.filterOrg)}"` : "";
     const moduleAttribute = result.moduleId ? ` data-module-id="${escapeHtml(result.moduleId)}"` : "";
@@ -4759,8 +4879,10 @@
     if (!container) return;
     const query = state.search.trim();
     if (!query) { container.innerHTML = ""; return; }
-    const results = searchEntries(query, state.searchScope);
-    container.innerHTML = `<div class="search-popover"><div class="search-popover-heading"><span>${escapeHtml(activeSearchScopeName())}</span><strong>${results.length} résultat${results.length === 1 ? "" : "s"}</strong></div>${results.length ? searchResultsMarkup(results) : `<div class="search-empty">Aucun résultat pour « ${escapeHtml(state.search)} » dans cette portée.</div>`}</div>`;
+    const serverReady = state.serverSearch.query === query && state.serverSearch.scope === state.searchScope && !state.serverSearch.failed;
+    const results = serverReady ? state.serverSearch.items : searchEntries(query, state.searchScope);
+    const total = serverReady ? state.serverSearch.total : results.length;
+    container.innerHTML = `<div class="search-popover"><div class="search-popover-heading"><span>${escapeHtml(activeSearchScopeName())}${state.serverSearch.loading ? " · recherche…" : ""}</span><strong>${total} résultat${total === 1 ? "" : "s"}</strong></div>${results.length ? searchResultsMarkup(results) : `<div class="search-empty">Aucun résultat pour « ${escapeHtml(state.search)} » dans cette portée.</div>`}</div>`;
   }
 
   function navigate(route) {
@@ -4832,6 +4954,20 @@
     const actionTarget = event.target.closest("[data-action]");
     if (!actionTarget || (modal && actionTarget.classList.contains("modal-backdrop"))) return;
     const action = actionTarget.dataset.action;
+    if (action === "refresh-quality") {
+      state.qualityReport = null;
+      await loadQualityReport();
+      return;
+    }
+    if (action === "preview-module-merge") {
+      const sourceId = actionTarget.dataset.sourceId || "";
+      const targetId = actionTarget.dataset.targetId || "";
+      try {
+        state.moduleMergePreview = await api(`/api/modules/merge/preview?sourceId=${encodeURIComponent(sourceId)}&targetId=${encodeURIComponent(targetId)}`);
+        showModal("module-merge");
+      } catch (error) { toast(error.message, "error"); }
+      return;
+    }
     if (action === "dismiss-pwa-install") {
       localStorage.setItem(storageKeys.pwaInstallDismissedUntil, String(Date.now() + (7 * 24 * 60 * 60 * 1000)));
       renderPwaInstallBanner();
@@ -4948,6 +5084,7 @@
       state.searchScopeQuery = "";
       if (scope !== "global") activateOrganizationContext(scope);
       if (scope === "global" && requiresOrganizationContext()) { navigate("dashboard"); return; }
+      queueServerSearch();
       const caret = state.search.length;
       render();
       requestAnimationFrame(() => { const input = document.getElementById("global-search"); if (input) { input.focus(); input.setSelectionRange(caret, caret); } });
@@ -5211,7 +5348,7 @@
       if (!window.confirm(`Restaurer la révision #${revision}? L’état actuel sera conservé dans l’historique.`)) return;
       try {
         const document = await api(`/api/workspace/history/${revision}/restore`, { method: "POST", body: "{}" });
-        state.workspace = document.data; state.revision = document.revision; normalizeWorkspace();
+        state.workspace = document.data; state.revision = document.revision; state.entityVersions = document.entityVersions || {}; normalizeWorkspace();
         await loadWorkspaceHistory(); render(); toast(`Révision #${revision} restaurée dans une nouvelle version.`);
       } catch (error) { toast(error.message, "error"); }
     }
@@ -5450,6 +5587,7 @@
         document.querySelector("[data-action='toggle-search-scope']")?.setAttribute("aria-expanded", "false");
       }
       state.search = event.target.value;
+      queueServerSearch();
       renderSearchResults();
     }
     if (event.target.matches("[data-search-scope-query]")) {
@@ -5560,7 +5698,7 @@
       const payload = JSON.parse(await file.text());
       if (!window.confirm("Importer ce fichier remplacera la documentation actuelle. Une version de retour arrière sera créée. Continuer?")) return;
       const document = await api("/api/import", { method: "POST", body: JSON.stringify(payload) });
-      state.workspace = document.data; state.revision = document.revision; normalizeWorkspace();
+      state.workspace = document.data; state.revision = document.revision; state.entityVersions = document.entityVersions || {}; normalizeWorkspace();
       await loadWorkspaceHistory(); render(); toast("Import terminé; l’état précédent reste disponible dans Versions.");
     } catch (error) {
       toast(error.message || "Le fichier d’import est invalide.", "error");
@@ -5590,6 +5728,18 @@
     if (value || row.length) { row.push(value.trim().replace(/\r$/, "")); rows.push(row); }
     const width = Math.max(0, ...rows.map((entry) => entry.length));
     return rows.filter((entry) => entry.some((cell) => cell)).map((entry) => [...entry, ...Array(Math.max(0, width - entry.length)).fill("")]);
+  }
+
+  function mergeImportedRecord(existing, incoming) {
+    const result = structuredClone(existing);
+    for (const [key, value] of Object.entries(incoming)) {
+      if (["id", "organizationId", "moduleId", "createdAt"].includes(key)) continue;
+      if (key === "details") { result.details = mergeImportedRecord(result.details || {}, value || {}); continue; }
+      const current = result[key];
+      const missing = current === undefined || current === null || current === "" || (Array.isArray(current) && current.length === 0);
+      if (missing && value !== "" && value !== null && value !== undefined) result[key] = value;
+    }
+    return result;
   }
 
   async function prepareGuidedImport(file) {
@@ -5789,6 +5939,7 @@
         const payload = await api(`/api/organizations/${encodeURIComponent(organization.id)}`, { method: "DELETE", body: JSON.stringify({ confirmation: data.confirmation, code: data.code }) });
         state.workspace = payload.workspace.data;
         state.revision = payload.workspace.revision;
+        state.entityVersions = payload.workspace.entityVersions || {};
         normalizeWorkspace();
         state.searchScope = "global";
         state.filter = "all";
@@ -5871,6 +6022,10 @@
           fields.push({ key: uniqueKey, label: fieldLabel, type, ...(type === "select" ? { options } : {}), ...(type === "textarea" ? { rows: 4, span: 2 } : {}) });
         }
         if (fields.length < 4) throw new Error("Ajoutez au moins quatre champs métier pour créer un module utile.");
+        const schemaChanged = !existing || JSON.stringify(existing.fields || []) !== JSON.stringify(fields);
+        const schemaVersion = existing ? Math.max(1, Number(existing.schemaVersion) || 1) + (schemaChanged ? 1 : 0) : 1;
+        const schemaHistory = [...(existing?.schemaHistory || [])];
+        if (schemaChanged) schemaHistory.push({ version: schemaVersion, changedAt: new Date().toISOString(), fields: structuredClone(fields) });
         const item = {
           id: existing?.id || uniqueId("local", label, state.workspace.customModuleDefinitions),
           label,
@@ -5878,6 +6033,8 @@
           titleLabel: String(data.titleLabel || "Nom de la fiche").trim(),
           icon: String(data.icon || "grid"),
           fields,
+          schemaVersion,
+          schemaHistory: schemaHistory.slice(-20),
           createdAt: existing?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -5906,15 +6063,21 @@
           return Number.isInteger(index) && index >= 0 ? String(row[index] || "").trim() : "";
         };
         const imported = [];
+        const updated = [];
+        let skipped = 0;
+        const duplicateStrategy = ["skip", "merge", "create"].includes(data.duplicateStrategy) ? data.duplicateStrategy : "skip";
         if (preview.target === "organizations") {
           const identifiers = [...state.workspace.organizations];
           for (const row of preview.rows) {
             const name = mapped("name", row);
             if (!name) throw new Error("Chaque ligne doit contenir un nom de compagnie.");
             const item = { id: uniqueId("org", name, identifiers), name: name.slice(0, 120), code: (mapped("code", row) || name.split(/\s+/).map((part) => part[0]).join("")).replace(/[^A-Za-z0-9]/g, "").slice(0, 8).toUpperCase() || "ORG", industry: mapped("industry", row).slice(0, 80), owner: mapped("owner", row).slice(0, 96), notes: mapped("notes", row).slice(0, 2000), quickNotes: "", parentOrganizationId: "", status: "active", details: {} };
+            const duplicate = state.workspace.organizations.find((entry) => normalizeSearch(entry.name) === normalizeSearch(item.name) || (item.code && normalizeSearch(entry.code) === normalizeSearch(item.code)));
+            if (duplicate && duplicateStrategy === "skip") { skipped += 1; continue; }
+            if (duplicate && duplicateStrategy === "merge") { updated.push(mergeImportedRecord(duplicate, item)); continue; }
             identifiers.push(item); imported.push(item);
           }
-          await commit((workspace) => workspace.organizations.push(...imported), "Import CSV terminé", `${imported.length} organisations`, "import");
+          await commit((workspace) => { for (const item of updated) { const index = workspace.organizations.findIndex((entry) => entry.id === item.id); if (index >= 0) workspace.organizations[index] = item; } workspace.organizations.push(...imported); }, "Import CSV terminé", `${imported.length} ajoutées · ${updated.length} complétées · ${skipped} ignorées`, "import");
         } else if (preview.target === "configurations") {
           const organizationId = String(data.organizationId || "");
           if (!state.workspace.organizations.some((organization) => organization.id === organizationId)) throw new Error("Choisissez l’organisation de destination.");
@@ -5924,9 +6087,12 @@
             const name = mapped("name", row);
             if (!name) throw new Error("Chaque ligne doit contenir un nom de configuration.");
             const item = { id: uniqueId("cfg", name, identifiers), organizationId, siteId, name: name.slice(0, 120), type: (mapped("type", row) || "Autre").slice(0, 80), os: mapped("os", row).slice(0, 160), ip: mapped("ip", row).slice(0, 80), owner: mapped("owner", row).slice(0, 96), location: mapped("location", row).slice(0, 160), warranty: "", criticality: "normal", status: "draft", lastReviewed: "", rmmId: "", summary: mapped("summary", row).slice(0, 1200), notes: mapped("notes", row).slice(0, 6000), procedureIds: [], relationIds: [], details: {} };
+            const duplicate = state.workspace.configurations.find((entry) => entry.organizationId === organizationId && (normalizeSearch(entry.name) === normalizeSearch(item.name) || (item.ip && normalizeSearch(entry.ip) === normalizeSearch(item.ip))));
+            if (duplicate && duplicateStrategy === "skip") { skipped += 1; continue; }
+            if (duplicate && duplicateStrategy === "merge") { updated.push(mergeImportedRecord(duplicate, item)); continue; }
             identifiers.push(item); imported.push(item);
           }
-          await commit((workspace) => workspace.configurations.push(...imported), "Import CSV terminé", `${imported.length} configurations · ${orgName(organizationId)}`, "import");
+          await commit((workspace) => { for (const item of updated) { const index = workspace.configurations.findIndex((entry) => entry.id === item.id); if (index >= 0) workspace.configurations[index] = item; } workspace.configurations.push(...imported); }, "Import CSV terminé", `${imported.length} ajoutées · ${updated.length} complétées · ${skipped} ignorées · ${orgName(organizationId)}`, "import");
         } else {
           const moduleId = preview.target.startsWith("module:") ? preview.target.slice(7) : "";
           const module = moduleMap.get(moduleId);
@@ -5940,13 +6106,16 @@
             const rawStatus = normalizeSearch(mapped("status", row));
             const details = {};
             for (const field of moduleProfile(module).fields || []) details[field.key] = mapped(`detail_${field.key}`, row).slice(0, field.type === "textarea" ? 8000 : 1000);
-            const item = { id: uniqueId("rec", title, identifiers), moduleId, organizationId, siteId: "", title: title.slice(0, 160), owner: mapped("owner", row).slice(0, 96), status: rawStatus === "archive" || rawStatus === "archived" ? "archived" : rawStatus === "review" || rawStatus === "a reviser" ? "review" : "active", expiresOn: mapped("expiresOn", row).slice(0, 10), reference: mapped("reference", row).slice(0, 500), tags: mapped("tags", row).split(/[,;]+/).map((tag) => tag.trim()).filter(Boolean).slice(0, 20), summary: mapped("summary", row).slice(0, 1000), notes: mapped("notes", row).slice(0, 4000), updatedAt: new Date().toISOString().slice(0, 10), reviewState: "draft", reviewOwner: mapped("owner", row).slice(0, 96), reviewDueAt: "", reviewIntervalDays: 0, details, checklist: [] };
+            const item = { id: uniqueId("rec", title, identifiers), moduleId, schemaVersion: Number(module.schemaVersion) || 1, organizationId, siteId: "", title: title.slice(0, 160), owner: mapped("owner", row).slice(0, 96), status: rawStatus === "archive" || rawStatus === "archived" ? "archived" : rawStatus === "review" || rawStatus === "a reviser" ? "review" : "active", expiresOn: mapped("expiresOn", row).slice(0, 10), reference: mapped("reference", row).slice(0, 500), tags: mapped("tags", row).split(/[,;]+/).map((tag) => tag.trim()).filter(Boolean).slice(0, 20), summary: mapped("summary", row).slice(0, 1000), notes: mapped("notes", row).slice(0, 4000), updatedAt: new Date().toISOString().slice(0, 10), reviewState: "draft", reviewOwner: mapped("owner", row).slice(0, 96), reviewDueAt: "", reviewIntervalDays: 0, details, checklist: [] };
+            const duplicate = state.workspace.moduleRecords.find((entry) => entry.organizationId === organizationId && entry.moduleId === moduleId && (normalizeSearch(entry.title) === normalizeSearch(item.title) || (item.reference && normalizeSearch(entry.reference) === normalizeSearch(item.reference))));
+            if (duplicate && duplicateStrategy === "skip") { skipped += 1; continue; }
+            if (duplicate && duplicateStrategy === "merge") { updated.push(mergeImportedRecord(duplicate, item)); continue; }
             identifiers.push(item); imported.push(item);
           }
-          await commit((workspace) => workspace.moduleRecords.push(...imported), "Import CSV terminé", `${imported.length} fiches ${module.label} · ${orgName(organizationId)}`, "import");
+          await commit((workspace) => { for (const item of updated) { const index = workspace.moduleRecords.findIndex((entry) => entry.id === item.id); if (index >= 0) workspace.moduleRecords[index] = item; } workspace.moduleRecords.push(...imported); }, "Import CSV terminé", `${imported.length} ajoutées · ${updated.length} complétées · ${skipped} ignorées · ${module.label}`, "import");
         }
         state.importPreview = null;
-        toast(`${imported.length} ligne${imported.length === 1 ? "" : "s"} importée${imported.length === 1 ? "" : "s"} dans une révision restaurable.`);
+        toast(`${imported.length} ajoutée${imported.length === 1 ? "" : "s"}, ${updated.length} complétée${updated.length === 1 ? "" : "s"}, ${skipped} doublon${skipped === 1 ? "" : "s"} ignoré${skipped === 1 ? "" : "s"}.`);
         return;
       }
       if (form.dataset.form === "workflows") {
@@ -6018,6 +6187,19 @@
         await loadVault(); closeModal(); navigate(`asset/${encodeURIComponent(`vault:${payload.item.id}`)}`); render(); toast(existingId ? "Entrée chiffrée mise à jour." : "Entrée ajoutée au coffre chiffré.");
         return;
       }
+      if (form.dataset.form === "module-merge") {
+        const payload = await api("/api/modules/merge/apply", { method: "POST", body: JSON.stringify({ sourceId: data.sourceId, targetId: data.targetId, confirmation: data.confirmation, adminMfaCode: data.adminMfaCode || "" }) });
+        state.workspace = payload.document.data;
+        state.revision = payload.document.revision;
+        state.entityVersions = payload.document.entityVersions || {};
+        state.moduleMergePreview = null;
+        normalizeWorkspace();
+        await loadWorkspaceHistory();
+        closeModal();
+        render();
+        toast(`${payload.result.recordCount} fiche${payload.result.recordCount === 1 ? "" : "s"} migrée${payload.result.recordCount === 1 ? "" : "s"}; le doublon est maintenant masqué.`);
+        return;
+      }
       if (form.dataset.form === "module-preferences") {
         const selected = new FormData(form).getAll("visibleModules").filter((id) => moduleMap.has(id));
         const payload = await api("/api/me/preferences", { method: "PUT", body: JSON.stringify({ visibleModules: selected }) });
@@ -6053,7 +6235,7 @@
           details.publishedToAd = formData.has("detail_publishedToAd") ? "Oui" : "Non";
         }
         const item = {
-          id: existing?.id || uniqueId("rec", data.title, state.workspace.moduleRecords), moduleId, organizationId: data.organizationId, siteId: data.siteId || "",
+          id: existing?.id || uniqueId("rec", data.title, state.workspace.moduleRecords), moduleId, schemaVersion: Number(module.schemaVersion) || 1, organizationId: data.organizationId, siteId: data.siteId || "",
           title: data.title.trim(), owner: data.owner.trim(), status: data.status, expiresOn: data.expiresOn || "", reference: moduleId === PRINTING_MODULE_ID ? String(details.hostAddress || "").trim() : data.reference.trim(),
           tags: data.tags.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 20), summary: data.summary.trim(), notes: data.notes.trim(), updatedAt: new Date().toISOString().slice(0, 10),
           details,
@@ -6242,6 +6424,17 @@
         toast(`Intégrité confirmée : ${result.fileCount} fichiers vérifiés, aucune restauration effectuée.`);
         return;
       }
+      if (form.dataset.form === "backup-drill") {
+        if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut tester une restauration complète.");
+        const currentSecurity = state.workspace.settings.security;
+        if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
+        const payload = await api("/api/settings/backups/drill", { method: "POST", body: JSON.stringify({ name: form.dataset.name, passphrase: data.passphrase || "", adminMfaCode: data.adminMfaCode || "" }) });
+        state.backupStatus = payload.status;
+        await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadAudit()]);
+        render();
+        toast(`Restauration isolée validée : SQLite ${payload.result.sqliteIntegrity}, ${payload.result.fileCount} fichiers relus.`);
+        return;
+      }
       if (form.dataset.form === "settings-deployment") {
         if (!isAdministrator()) throw new Error("Seul le super administrateur Atlas peut modifier la configuration initiale.");
         const currentDeployment = state.workspace.settings.deployment;
@@ -6266,7 +6459,7 @@
         const currentSecurity = state.workspace.settings.security;
         if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
         const document = await api("/api/settings/deployment", { method: "PUT", body: JSON.stringify({ revision: state.revision, ...nextDeployment, adminMfaCode: data.adminMfaCode || "" }) });
-        state.workspace = document.data; state.revision = document.revision; normalizeWorkspace();
+        state.workspace = document.data; state.revision = document.revision; state.entityVersions = document.entityVersions || {}; normalizeWorkspace();
         state.deploymentProbe = null;
         await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadWorkspaceHistory(), loadAudit()]);
         render();
@@ -6298,7 +6491,7 @@
         if (!securityChanged) { toast("Aucune modification à enregistrer."); return; }
         if (currentSecurity.privilegedMfaEnabled && !/^\d{6}$/.test(String(data.adminMfaCode || ""))) throw new Error("Entrez le code MFA actuel affiché dans votre application d’authentification.");
         const document = await api("/api/settings/security", { method: "PUT", body: JSON.stringify({ revision: state.revision, ...nextSecurity, adminMfaCode: data.adminMfaCode || "" }) });
-        state.workspace = document.data; state.revision = document.revision; normalizeWorkspace();
+        state.workspace = document.data; state.revision = document.revision; state.entityVersions = document.entityVersions || {}; normalizeWorkspace();
         await Promise.all([loadWorkspaceHistory(), loadAudit()]);
         render();
         toast("Politiques de sécurité enregistrées.");

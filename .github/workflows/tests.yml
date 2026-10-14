@@ -16,9 +16,13 @@ concurrency:
 
 jobs:
   test-windows:
-    name: Windows / Node.js 24
+    name: Windows / Node.js ${{ matrix.node }}
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["22", "24"]
 
     steps:
       - name: Checkout source
@@ -27,7 +31,7 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: ${{ matrix.node }}
 
       - name: Validate JavaScript
         run: npm run check
@@ -45,6 +49,7 @@ jobs:
             -TestRoot (Join-Path $env:RUNNER_TEMP 'atlas-deployment-9095')
 
       - name: Build the self-contained Windows package
+        if: matrix.node == '24'
         shell: pwsh
         run: |
           ./scripts/New-TRCCommunityAtlasPortablePackage.ps1 `
@@ -52,6 +57,7 @@ jobs:
             -NodePath (Get-Command node).Source
 
       - name: Publish the Windows test package
+        if: matrix.node == '24'
         uses: actions/upload-artifact@v7
         with:
           name: TRC-Atlas-Windows-${{ github.sha }}

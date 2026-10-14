@@ -1,6 +1,6 @@
 # TRC Community Atlas user guide
 
-Guide version: **0.15.6**
+Guide version: **0.16.0**
 
 This guide complements the built-in Help Center available from the `?` icon in
 the header. Atlas serves help locally and does not call an external
@@ -30,8 +30,10 @@ organization navigation. After an organization is selected, its enabled
 modules appear and the breadcrumb shows the organization path.
 
 The top search can search every accessible organization or one selected
-organization. Matching organizations appear before matching records. Vault
-secrets are never indexed.
+organization. Matching organizations appear before matching records. Results
+are filtered and paginated by the local SQLite metadata index, so large
+collections do not require loading every fiche into the browser. Vault secrets
+are never indexed.
 
 Press `Ctrl+K` to focus global search. In the Help Center, press `/` to focus
 documentation search.
@@ -47,6 +49,42 @@ documentation search.
 
 Atlas does not ask for an organization inside every creation form because the
 active organization defines the destination.
+
+Edits to supported records are sent as targeted changes. If another session
+has changed the same fiche since it was opened, Atlas refuses the stale write
+and asks the user to reload instead of silently overwriting the newer version.
+
+## Documentation quality
+
+Open **Quality** under **Atlas tools** to review only explicit, actionable
+signals for the active organization: missing owners, stale review dates,
+duplicate identifiers, broken relationships, and records that use an older
+local-module schema. The dashboard does not calculate an arbitrary quality
+score. Select **Open** to correct the exact fiche that generated a signal.
+
+## Module consolidation and schemas
+
+The consolidation report under **Manage modules** lists only reviewed pairs.
+An administrator can preview the number of records, templates, and affected
+organizations before entering MFA and the exact confirmation `FUSIONNER`.
+Atlas moves the records to the retained module, records their source module,
+retires the duplicate, and preserves the previous workspace revision.
+
+Editing the fields of a local module increments its schema version and keeps a
+short schema history. Existing records remain readable; Quality identifies the
+ones that should be reviewed against the newer schema.
+
+## Guided CSV import
+
+Before writing a CSV import, choose how Atlas should handle a likely duplicate:
+
+- skip the row, which is the recommended default;
+- fill only missing fields on the existing fiche;
+- create a separate fiche explicitly.
+
+Atlas compares the appropriate business key for the destination, such as
+company name/code, configuration name/IP, or module title/reference. The whole
+import remains one reversible workspace revision.
 
 ## Documents and procedures
 

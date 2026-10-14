@@ -1,5 +1,25 @@
 # TRC Community Atlas release notes
 
+## 0.16.0 — Scalable documentation operations
+
+- Added a local SQLite asset index with server-side search, filtering, and
+  pagination.
+- Added targeted per-record writes with optimistic conflict detection instead
+  of requiring every edit to replace the complete workspace.
+- Added a previewed, MFA-confirmed module merge assistant that preserves
+  records and templates and leaves a revision rollback point.
+- Added an explainable documentation-quality dashboard for ownership, age,
+  duplicates, broken relationships, and schema versions.
+- Added CSV duplicate handling with skip, fill-missing-fields, and explicit
+  create-anyway choices.
+- Added versioned local-module schemas and schema history.
+- Added an isolated encrypted-backup restore drill with SQLite quick-check.
+- Added the public security-reporting policy, migration compatibility matrix,
+  and Node.js 22/24 Windows CI coverage.
+- Hardened the Windows updater so rollback can stop only the listener proven to
+  belong to the configured Atlas scheduled task; the signed lifecycle now
+  exercises a failed update, rollback, SQLite integrity, and vault preservation.
+
 ## 0.15.6 — Profile consolidated in the header
 
 - Removed the duplicate profile block from the bottom of navigation.

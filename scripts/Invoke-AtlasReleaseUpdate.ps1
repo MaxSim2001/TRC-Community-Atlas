@@ -89,9 +89,19 @@ function Wait-AtlasStatus {
 }
 
 function Stop-AtlasInstance {
-    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     $serverPath = Join-Path $InstallRoot 'server.mjs'
     $runtimePath = Join-Path $InstallRoot 'runtime\node.exe'
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    $taskAction = @($task.Actions)[0]
+    $taskArguments = [string]$taskAction.Arguments
+    $taskMatchesInstance = $taskAction -and
+        [IO.Path]::GetFullPath([string]$taskAction.Execute).Equals([IO.Path]::GetFullPath($runtimePath), [StringComparison]::OrdinalIgnoreCase) -and
+        $taskArguments.IndexOf($serverPath, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $taskArguments.IndexOf($DataRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0 -and
+        $taskArguments -match ('--port\s+"?{0}(?:"|\s|$)' -f $Port)
+    $ownedListener = netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+(\d+)\s*$' -f $Port) | Select-Object -First 1
+    $ownedListenerId = if ($taskMatchesInstance -and $ownedListener) { [int]$ownedListener.Matches[0].Groups[1].Value } else { 0 }
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     $deadline = (Get-Date).AddSeconds(20)
     do {
         $matchingProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -104,7 +114,8 @@ function Stop-AtlasInstance {
             $listenerProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $listenerId" -ErrorAction SilentlyContinue
             $commandMatches = $listenerProcess -and $listenerProcess.CommandLine -and $listenerProcess.CommandLine.IndexOf($serverPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
             $runtimeMatches = $listenerProcess -and $listenerProcess.ExecutablePath -and [IO.Path]::GetFullPath([string]$listenerProcess.ExecutablePath).Equals([IO.Path]::GetFullPath($runtimePath), [StringComparison]::OrdinalIgnoreCase)
-            if ($commandMatches -or $runtimeMatches) {
+            $verifiedTaskChild = $taskMatchesInstance -and $ownedListenerId -eq $listenerId -and [string]$listenerProcess.Name -ieq 'node.exe'
+            if ($commandMatches -or $runtimeMatches -or $verifiedTaskChild) {
                 Stop-Process -Id $listenerId -ErrorAction SilentlyContinue
             }
             elseif ($listenerProcess) { throw "Le port $Port est occupé par un processus qui n’est pas cette instance Atlas." }
