@@ -1005,13 +1005,12 @@ tbody tr:hover { background: color-mix(in srgb, var(--panel-raised) 55%, transpa
 .printing-list-toolbar .list-search { flex: 1 1 420px; max-width: none; }
 .printing-archive-filter { min-height: 42px; flex: 0 0 auto; align-items: center; gap: 8px; padding: 0 3px; white-space: nowrap; }
 .printing-archive-filter input { width: 17px; height: 17px; }
-.printing-table table { width: 100%; min-width: 860px; table-layout: fixed; }
-.printing-table th:nth-child(1), .printing-table td:nth-child(1) { width: 14%; }
-.printing-table th:nth-child(2), .printing-table td:nth-child(2) { width: 23%; }
-.printing-table th:nth-child(3), .printing-table td:nth-child(3), .printing-table th:nth-child(4), .printing-table td:nth-child(4) { width: 18%; }
-.printing-table th:nth-child(5), .printing-table td:nth-child(5) { width: 11%; }
+.printing-table table { width: 100%; min-width: 780px; table-layout: fixed; }
+.printing-table th:nth-child(1), .printing-table td:nth-child(1) { width: 27%; }
+.printing-table th:nth-child(2), .printing-table td:nth-child(2), .printing-table th:nth-child(3), .printing-table td:nth-child(3) { width: 20%; }
+.printing-table th:nth-child(4), .printing-table td:nth-child(4) { width: 14%; }
+.printing-table th:nth-child(5), .printing-table td:nth-child(5) { width: 10%; }
 .printing-table th:nth-child(6), .printing-table td:nth-child(6) { width: 9%; }
-.printing-table th:nth-child(7), .printing-table td:nth-child(7) { width: 7%; }
 .printing-site-link { width: 100%; }
 .printing-list-value { min-width: 0; display: flex; align-items: center; gap: 6px; margin: 3px 0; overflow: hidden; color: var(--text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .printing-list-value svg { flex: none; color: var(--action); }
@@ -1208,8 +1207,8 @@ td { min-height: 58px; font-size: 11px; }
 .organization-table-link.hierarchy-level-3 { padding-left: 36px; }
 .organization-table-link.hierarchy-level-2::before, .organization-table-link.hierarchy-level-3::before { content: ""; width: 10px; height: 18px; flex: none; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0 0 0 5px; }
 .organization-table-link { min-width: 230px; }
-.module-records-table table { min-width: 980px; }
-.vault-table table { min-width: 820px; }
+.module-records-table table { min-width: 900px; }
+.vault-table table { min-width: 720px; }
 .table-pagination { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; color: var(--text-muted); border-top: 1px solid var(--line-soft); font-size: 10px; }
 .table-pagination > div { display: flex; align-items: center; gap: 10px; }
 .table-pagination strong { color: var(--text-secondary); font-size: 10px; }
@@ -1804,9 +1803,9 @@ td { min-height: 60px; font-size: 12px; }
   .asset-drawer { width: min(470px, 100%); }
   .impact-explorer { grid-template-columns: 1fr; }
   .impact-explorer-result { grid-template-columns: 1fr; }
-  .module-records-table table { min-width: 760px; }
-  .module-records-table th:nth-child(3), .module-records-table td:nth-child(3),
-  .module-records-table th:nth-child(6), .module-records-table td:nth-child(6) { display: none; }
+  .module-records-table table { min-width: 680px; }
+  .module-records-table th:nth-child(2), .module-records-table td:nth-child(2),
+  .module-records-table th:nth-child(5), .module-records-table td:nth-child(5) { display: none; }
   .document-editor-canvas { grid-template-columns: minmax(0, 1fr); }
   .document-editor.mode-split .document-write-pane { border-right: 0; border-bottom: 1px solid var(--line); }
 }
@@ -2011,13 +2010,13 @@ td { min-height: 60px; font-size: 12px; }
   .organizations-table th:nth-child(3), .organizations-table td:nth-child(3),
   .organizations-table th:nth-child(6), .organizations-table td:nth-child(6) { display: none; }
   .organization-table-link { min-width: 190px; }
-  .module-records-table table { min-width: 620px; }
-  .module-records-table th:nth-child(3), .module-records-table td:nth-child(3),
-  .module-records-table th:nth-child(5), .module-records-table td:nth-child(5),
-  .module-records-table th:nth-child(6), .module-records-table td:nth-child(6) { display: none; }
-  .vault-table table { min-width: 560px; }
-  .vault-table th:nth-child(3), .vault-table td:nth-child(3),
-  .vault-table th:nth-child(5), .vault-table td:nth-child(5) { display: none; }
+  .module-records-table table { min-width: 560px; }
+  .module-records-table th:nth-child(2), .module-records-table td:nth-child(2),
+  .module-records-table th:nth-child(4), .module-records-table td:nth-child(4),
+  .module-records-table th:nth-child(5), .module-records-table td:nth-child(5) { display: none; }
+  .vault-table table { min-width: 500px; }
+  .vault-table th:nth-child(2), .vault-table td:nth-child(2),
+  .vault-table th:nth-child(4), .vault-table td:nth-child(4) { display: none; }
   .vault-secret-list { grid-template-columns: 1fr; }
   .vault-secret-list .span-2 { grid-column: 1; }
   .workflow-metrics, .workflow-form { grid-template-columns: 1fr; }

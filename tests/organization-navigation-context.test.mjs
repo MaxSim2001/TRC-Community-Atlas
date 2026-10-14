@@ -56,6 +56,31 @@ test("les modules et outils du menu sont rendus seulement avec une organisation 
   assert.doesNotMatch(source, /return\s+organizations\.length\s*===\s*1\s*\?/, "une organisation unique ne doit pas etre selectionnee implicitement");
 });
 
+test("les registres déjà limités à la compagnie active ne répètent pas la colonne Organisation", () => {
+  const start = source.indexOf("function renderSites()");
+  const end = source.indexOf("function vaultRotationPresentation(");
+  const scopedLists = source.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, "les vues de registres doivent être détectables");
+  assert.doesNotMatch(scopedLists, /data-filter="organization"/);
+  assert.doesNotMatch(scopedLists, /data-relation-filter/);
+  assert.doesNotMatch(scopedLists, /<th>Organisation<\/th>/);
+  assert.doesNotMatch(scopedLists, /<th>\$\{t\("organization"\)\}<\/th>/);
+  assert.doesNotMatch(scopedLists, /data-label="Organisation"/);
+  assert.match(scopedLists, /const scopedRecords = filteredByOrganization\(allRecords\)/);
+  assert.match(scopedLists, /const scopedVaultItems = filteredByOrganization\(state\.vaultItems\)/);
+});
+
+test("la file Workflows suit elle aussi la compagnie active sans colonne redondante", () => {
+  const start = source.indexOf("function renderWorkflows()");
+  const end = source.indexOf("function renderModulesManager()");
+  const workflow = source.slice(start, end);
+
+  assert.match(workflow, /assetRegistry\(activeOrganizationId\(\)\)/);
+  assert.doesNotMatch(workflow, /<th>Organisation<\/th>/);
+  assert.doesNotMatch(workflow, /orgName\(asset\.organizationId\)/);
+});
+
 test("le fil d’Ariane suit les organisations imbriquées sans changer les compteurs directs", () => {
   const qa = loadQa();
   const workspace = {
