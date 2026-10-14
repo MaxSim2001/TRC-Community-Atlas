@@ -60,7 +60,7 @@ port. SQLite is local and needs no database server or additional port.
 
 ## Product highlights
 
-- 179 structured documentation modules.
+- 177 structured documentation modules with a built-in duplicate review.
 - Organizations and three-level child-organization hierarchy.
 - Organization-scoped read, edit, and vault permissions.
 - AES-256-GCM local vault with TOTP support.

@@ -48,8 +48,8 @@ test("the complete Atlas module catalog has valid business schemas", async () =>
   const qa = await loadModuleQa();
   const report = qa.report();
 
-  assert.equal(report.total, 179, "the IT Glue-compatible catalog must keep all 179 modules");
-  assert.deepEqual(JSON.parse(JSON.stringify(report.groups)), { core: 9, services: 22, custom: 148 });
+  assert.equal(report.total, 177, "the maintained Atlas catalog must expose all supported modules");
+  assert.deepEqual(JSON.parse(JSON.stringify(report.groups)), { core: 9, services: 22, custom: 146 });
   assert.equal(report.issues.length, 0, report.issues.join("\n"));
   assert.ok(report.profileCount >= 30, `expected broad business coverage, got ${report.profileCount} profiles`);
   assert.ok(report.genericCount <= 10, `too many modules still use the generic profile: ${report.genericCount}`);
@@ -65,6 +65,27 @@ test("the complete Atlas module catalog has valid business schemas", async () =>
   assert.equal(profileOf("custom-documents"), "documents");
   assert.equal(profileOf("custom-exchange-server"), "messaging");
   assert.equal(profileOf("custom-probe-virtuel"), "monitoring");
+  assert.equal(report.modules.some((module) => /datto/i.test(`${module.id} ${module.label}`)), false, "retired Datto modules must not remain in the active catalog");
+  const consolidation = qa.consolidationReport();
+  assert.equal(consolidation.recommendedRemovalCount, 22);
+  assert.equal(consolidation.candidates.length, 18);
+  assert.equal(consolidation.related.length, 6);
+  const catalogIds = new Set(report.modules.map((module) => module.id));
+  for (const group of consolidation.candidates) {
+    assert.ok(catalogIds.has(group.canonicalId), `missing consolidation target ${group.canonicalId}`);
+    for (const duplicateId of group.duplicateIds) assert.ok(catalogIds.has(duplicateId), `missing duplicate candidate ${duplicateId}`);
+  }
+  const retiredWorkspace = {
+    moduleRecords: [
+      { id: "legacy-datto-appliance", moduleId: "custom-datto-appliance", notes: "Preserve this record" },
+      { id: "legacy-datto-asset", moduleId: "custom-datto-asset", notes: "Preserve this record too" },
+    ],
+    templates: [{ id: "legacy-datto-template", moduleId: "custom-datto-appliance" }],
+  };
+  assert.equal(qa.migrateRetiredModuleReferences(retiredWorkspace), 3);
+  assert.deepEqual(retiredWorkspace.moduleRecords.map((record) => record.moduleId), ["service-backup", "service-backup"]);
+  assert.equal(retiredWorkspace.templates[0].moduleId, "service-backup");
+  assert.equal(retiredWorkspace.moduleRecords[0].notes, "Preserve this record");
   assert.equal(qa.pwaInstallDecision({ mobile: true, standalone: false, dismissed: false, installed: false }), true);
   assert.equal(qa.pwaInstallDecision({ mobile: true, standalone: true, dismissed: false, installed: false }), false);
   assert.equal(qa.pwaInstallDecision({ mobile: false, standalone: false, dismissed: false, installed: false }), false);

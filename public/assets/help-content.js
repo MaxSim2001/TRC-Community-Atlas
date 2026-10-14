@@ -70,10 +70,10 @@
       {
         id: "modules-records", category: "documentation", icon: "grid",
         title: copy("Modules et fiches structurées", "Modules and structured records"),
-        summary: copy("Utiliser les 179 modules sans transformer le menu en liste ingérable.", "Use all 179 modules without turning the menu into an unmanageable list."),
-        keywords: ["modules", "fiches", "179", "formulaire", "registre"],
+        summary: copy("Utiliser les 177 modules et repérer les doublons sans transformer le menu en liste ingérable.", "Use all 177 modules and identify duplicates without turning the menu into an unmanageable list."),
+        keywords: ["modules", "fiches", "177", "doublons", "formulaire", "registre"],
         sections: [
-          section("Choisir les modules", "Choose modules", { paragraphs: [copy("La page Gérer les modules contrôle ce qui apparaît dans la navigation de votre compte. Masquer un module ne supprime aucune donnée.", "The Manage modules page controls what appears in your account navigation. Hiding a module does not delete data.")] }),
+          section("Choisir les modules", "Choose modules", { paragraphs: [copy("La page Gérer les modules contrôle ce qui apparaît dans la navigation de votre compte. Masquer un module ne supprime aucune donnée. Le rapport de consolidation indique les doublons probables et les familles qui doivent être vérifiées avant toute fusion.", "The Manage modules page controls what appears in your account navigation. Hiding a module does not delete data. The consolidation report identifies likely duplicates and families that require review before any merge.")] }),
           section("Créer une fiche", "Create a record", { steps: [copy("Ouvrez la compagnie concernée.", "Open the relevant company."), copy("Choisissez le module puis Nouveau.", "Choose the module, then New."), copy("Remplissez les champs structurés; la compagnie est imposée par le contexte actif.", "Fill in the structured fields; the company is imposed by the active context."), copy("Ajoutez des relations vers les autres objets utiles.", "Add relationships to other useful objects.")] }),
           section("Volumes importants", "Large volumes", { bullets: [copy("Les listes sont paginées et recherchables.", "Lists are paginated and searchable."), copy("Les compteurs du menu concernent uniquement la compagnie active.", "Menu counts apply only to the active company."), copy("Les vues mobiles remplacent les tableaux trop larges par des cartes lisibles.", "Mobile views replace overly wide tables with readable cards.")] }),
         ],

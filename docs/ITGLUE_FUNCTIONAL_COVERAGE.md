@@ -19,7 +19,7 @@ Reference sources:
 | --- | --- |
 | Core assets | Configurations, checklists, contacts, documents, technical-account load, Domain Tracker, locations, passwords, and SSL Tracker |
 | Apps and services | 22 supplied modules, including Microsoft 365 and wireless documentation |
-| Structured record types | 148 additional module definitions available as an optional library |
+| Structured record types | 146 additional module definitions available as an optional library, with an in-product consolidation report |
 | Navigation | Manage Modules, grouped navigation, collapsible tool sections, presets, and per-account preferences |
 | Records | Real counts, organization and state filtering, pagination, create/edit forms, ownership, due date, reference, tags, notes, and archives |
 | Search | Global or active-organization scope, accent-insensitive metadata search, and direct editing according to role; vault plaintext is excluded |

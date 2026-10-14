@@ -35,7 +35,7 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
 
 - organizations, sites, configurations, contacts, documents, procedures, and
   passwords;
-- 179 structured documentation modules;
+- 177 structured documentation modules, plus a built-in consolidation report;
 - organization hierarchies up to three levels without sharing child-company
   passwords or permissions;
 - role- and organization-scoped read, edit, and vault permissions;

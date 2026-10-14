@@ -36,6 +36,8 @@ Start with the guides below rather than the historical QA records.
 - [Contributor ownership](CONTRIBUTOR_OWNERSHIP.md)
 - [Contributing](../CONTRIBUTING.md)
 - [IT Glue functional coverage](ITGLUE_FUNCTIONAL_COVERAGE.md)
+- [Module consolidation report](MODULE_CONSOLIDATION_REPORT.md) — duplicate
+  candidates, related-but-distinct families, and the Datto removal decision.
 
 ## Screenshots
 

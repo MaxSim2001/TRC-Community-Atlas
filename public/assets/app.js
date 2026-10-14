@@ -247,7 +247,7 @@
   const customModuleLabels = [
     "!Info de base", "ATA", "AWS Instance", "Access Point", "Account Management", "Alarme", "Antenne", "AntiSpam", "Antivirus", "Automate", "Autotask Default",
     "Azure - Virtual network gateway", "Azure Instance Serveur", "Azure Virtual Desktop", "Backup", "CNC", "CW SC Partner Server", "Camera", "Change Control Request", "Changelogs", "Cloud", "Cloud Key",
-    "Composant réseau", "Connexion Internet", "Console de Gestion", "Container", "Controle de ventilation", "Controleur d'accès", "Datto Appliance", "Datto Asset", "Digital Signage",
+    "Composant réseau", "Connexion Internet", "Console de Gestion", "Container", "Controle de ventilation", "Controleur d'accès", "Digital Signage",
     "Digital Video Recorder (DVR)", "Documents", "Email", "Exchange", "Exchange Server", "FAI (Fournisseur d'Accès Internet)", "Field-Effect Appliance", "Firewall", "FortiAP", "FortiAuthenticator",
     "Fortimail", "Hypervisor", "Hébergement", "ILO", "Imprimante", "Information de sécurité", "KVM", "Laptop", "Laptop - Apple", "Laptop - Windows", "License", "Logiciel",
     "Machine Distributrice", "Machine Outil", "Magasin Korvette", "Managed Server", "Managed Workstation", "Messagerie", "Microsoft 365", "NAS", "Network Audio Media", "Network Camera",
@@ -266,6 +266,71 @@
   let moduleDefinitions = [...builtInModuleDefinitions];
   const moduleMap = new Map(moduleDefinitions.map((module) => [module.id, module]));
   const defaultVisibleModuleIds = coreModules.map((module) => module.id);
+  const retiredModuleReplacements = new Map([
+    ["custom-datto-appliance", "service-backup"],
+    ["custom-datto-asset", "service-backup"],
+  ]);
+  const moduleConsolidationCandidates = [
+    { canonicalId: "documents", duplicateIds: ["custom-documents"], reason: "Même registre documentaire." },
+    { canonicalId: "service-backup", duplicateIds: ["custom-backup"], reason: "Même service de sauvegarde." },
+    { canonicalId: "service-email", duplicateIds: ["custom-email"], reason: "Même service de messagerie." },
+    { canonicalId: "service-antivirus", duplicateIds: ["custom-antivirus"], reason: "Même service antivirus." },
+    { canonicalId: "service-printing", duplicateIds: ["custom-printer", "custom-imprimante"], reason: "Le module Printing possède déjà l’éditeur spécialisé." },
+    { canonicalId: "ssl-tracker", duplicateIds: ["custom-ssl"], reason: "SSL Tracker couvre déjà le suivi des certificats." },
+    { canonicalId: "service-licensing", duplicateIds: ["custom-license"], reason: "Même registre de licences." },
+    { canonicalId: "service-virtualization", duplicateIds: ["custom-virtualisation"], reason: "Même service, libellé traduit." },
+    { canonicalId: "service-wireless", duplicateIds: ["custom-wifi"], reason: "Même service sans-fil, libellé différent." },
+    { canonicalId: "custom-website", duplicateIds: ["custom-site-internet"], reason: "Même actif Web, libellé traduit." },
+    { canonicalId: "custom-ups", duplicateIds: ["custom-ups-uninterruptible-power-supply"], reason: "Même équipement UPS, acronyme développé." },
+    { canonicalId: "custom-workstation", duplicateIds: ["custom-ordinateur", "custom-ordinateurs"], reason: "Même poste de travail générique." },
+    { canonicalId: "custom-server", duplicateIds: ["custom-serveurs", "custom-servers-generic"], reason: "Même serveur générique au singulier, pluriel ou en anglais." },
+    { canonicalId: "custom-switch", duplicateIds: ["custom-switch-reseau"], reason: "Même commutateur réseau générique." },
+    { canonicalId: "custom-digital-signage", duplicateIds: ["custom-tv-signage"], reason: "Même équipement d’affichage numérique." },
+    { canonicalId: "custom-punch-clock", duplicateIds: ["custom-time-punch-clocks"], reason: "Même équipement de pointage." },
+    { canonicalId: "custom-vm", duplicateIds: ["custom-ordinateur-virtuel", "custom-serveur-virtuel"], reason: "Même machine virtuelle générique." },
+    { canonicalId: "custom-laptop", duplicateIds: ["custom-portable"], reason: "Même poste portable générique." },
+  ];
+  const moduleRelatedGroups = [
+    { title: "Sauvegarde", moduleIds: ["service-backup", "custom-msbackup", "custom-sauvegarde-2bback", "custom-serveur-veeam-2bback", "custom-serveur-linux-2bback"], note: "Service, logiciel et serveurs de sauvegarde peuvent représenter des objets différents." },
+    { title: "Périmètre réseau", moduleIds: ["custom-firewall", "custom-pare-feu-et-routeur", "custom-router-firewall", "custom-watchguard-firebox", "custom-switch-router"], note: "Les rôles se recoupent, mais le matériel combiné et les produits précis peuvent devoir rester distincts." },
+    { title: "Stockage", moduleIds: ["custom-nas", "custom-san", "custom-san-nas", "custom-storage", "custom-unite-de-stockage", "custom-qnap"], note: "Technologies, équipements et marques ne sont pas nécessairement interchangeables." },
+    { title: "Serveurs spécialisés", moduleIds: ["custom-managed-server", "custom-servers-windows", "custom-windows-server", "custom-servers-esxi", "custom-servers-proxmox", "custom-serveur-physique"], note: "Conserver si les champs ou processus diffèrent selon la plateforme." },
+    { title: "Téléphonie", moduleIds: ["service-voice-pbx", "custom-pbx-ip", "custom-phone-system", "custom-voip-phone", "custom-telephone", "custom-ata"], note: "Le service PBX et ses appareils physiques ne sont pas le même actif." },
+    { title: "Infrastructure sans-fil", moduleIds: ["service-wireless", "custom-access-point", "custom-fortiap", "custom-wireless-controler", "custom-wireless-router", "custom-wifi-booster", "custom-point-to-point-ap"], note: "Le service, le contrôleur, les bornes et les liaisons point à point ont des rôles distincts." },
+  ];
+
+  function moduleConsolidationReport() {
+    const resolve = (id) => moduleMap.get(id)?.label || id;
+    const candidates = moduleConsolidationCandidates.map((group) => ({
+      canonicalId: group.canonicalId,
+      canonical: resolve(group.canonicalId),
+      duplicateIds: group.duplicateIds,
+      duplicates: group.duplicateIds.map(resolve),
+      reason: group.reason,
+    }));
+    return {
+      removed: [
+        { label: "Datto Appliance", replacementId: "service-backup", replacement: resolve("service-backup") },
+        { label: "Datto Asset", replacementId: "service-backup", replacement: resolve("service-backup") },
+      ],
+      candidates,
+      related: moduleRelatedGroups.map((group) => ({ ...group, modules: group.moduleIds.map(resolve) })),
+      recommendedRemovalCount: candidates.reduce((total, group) => total + group.duplicateIds.length, 0),
+    };
+  }
+
+  function migrateRetiredModuleReferences(workspace) {
+    let migrated = 0;
+    for (const collectionName of ["moduleRecords", "templates"]) {
+      for (const item of workspace?.[collectionName] || []) {
+        const replacement = retiredModuleReplacements.get(item.moduleId);
+        if (!replacement) continue;
+        item.moduleId = replacement;
+        migrated += 1;
+      }
+    }
+    return migrated;
+  }
 
   const moduleProfileCatalog = {
     generic: {
@@ -918,7 +983,7 @@
     if (/^documents?$/.test(label)) return "documents";
     if (/^ssl$|certificate/.test(label)) return "certificate";
     if (/change control|changelog/.test(label)) return "change";
-    if (/backup|sauvegarde|msbackup|veeam|datto asset|datto appliance/.test(label)) return "backup";
+    if (/backup|sauvegarde|msbackup|veeam/.test(label)) return "backup";
     if (/licen[cs]|renewal|abonnement/.test(label)) return "licensing";
     if (/vendor|fournisseur/.test(label)) return "vendor";
     if (/microsoft 365|acces conditionnel|sharepoint|teams/.test(label)) return "microsoft365";
@@ -1014,6 +1079,8 @@
 
   window.__ATLAS_MODULE_QA__ = {
     report: () => JSON.parse(JSON.stringify(moduleCatalogAudit())),
+    consolidationReport: () => JSON.parse(JSON.stringify(moduleConsolidationReport())),
+    migrateRetiredModuleReferences: (workspace) => migrateRetiredModuleReferences(workspace),
     pwaInstallDecision: (context) => shouldShowPwaInstallBanner(context),
     passwordHealthSnapshot: (items) => passwordHealthSnapshot(items),
     fieldsMarkup: (moduleId) => {
@@ -1773,6 +1840,7 @@
       { id: "tpl-certificat-tls", name: "Certificat TLS", moduleId: "ssl-tracker", defaultTags: ["tls", "échéance"], defaultSummary: "Certificat et service protégé.", defaultNotes: "Émetteur :\nNom alternatif :\nProcédure de renouvellement :" },
       { id: "tpl-fiche-application", name: "Application métier", moduleId: "service-applications", defaultTags: ["application"], defaultSummary: "Application, propriétaire et dépendances.", defaultNotes: "Éditeur :\nSupport :\nAuthentification :\nDépendances :" },
     ];
+    migrateRetiredModuleReferences(state.workspace);
     if (!state.workspace.settings.workflows) state.workspace.settings.workflows = { expiryDays: 30, staleDays: 90, requireOwner: true };
     if (!state.workspace.settings.security) state.workspace.settings.security = { privilegedMfaEnabled: true, passwordRotationEnabled: false, passwordRotationDays: 90, passwordRotationReminderDays: 14 };
     state.workspace.settings.security = {
@@ -3392,8 +3460,9 @@
   function renderModulesManager() {
     const selectedCount = state.visibleModuleIds.size;
     const audit = moduleCatalogAudit();
+    const consolidation = moduleConsolidationReport();
     const localDefinitions = state.workspace.customModuleDefinitions || [];
-    const localBuilder = isAdministrator() ? `<section class="panel local-module-builder"><header><div><p class="eyebrow">CONSTRUCTEUR LOCAL</p><h2>Modules créés sur cette instance</h2><p>Ajoutez un registre métier avec ses propres champs typés, sans code et sans champ secret.</p></div><button class="primary compact" type="button" data-action="new-custom-module">${icon("plus", 15)} Nouveau module</button></header>${localDefinitions.length ? `<div class="local-module-list">${localDefinitions.map((definition) => { const count = state.workspace.moduleRecords.filter((record) => record.moduleId === definition.id).length; return `<button type="button" data-action="edit-custom-module" data-id="${escapeHtml(definition.id)}"><span class="module-toggle-icon">${icon(definition.icon || "grid", 18)}</span><span><strong>${escapeHtml(definition.label)}</strong><small>${definition.fields.length} champs · ${count} fiche${count === 1 ? "" : "s"}</small></span>${icon("edit", 14)}</button>`; }).join("")}</div>` : `<div class="local-module-empty">${icon("grid", 20)}<span><strong>Aucun module local</strong><small>Les 179 modules fournis restent disponibles ci-dessous.</small></span></div>`}<div class="module-boundary-note"><strong>Secrets interdits :</strong> les mots de passe, jetons et clés API doivent rester dans Passwords puis être reliés à la fiche.</div></section>` : "";
+    const localBuilder = isAdministrator() ? `<section class="panel local-module-builder"><header><div><p class="eyebrow">CONSTRUCTEUR LOCAL</p><h2>Modules créés sur cette instance</h2><p>Ajoutez un registre métier avec ses propres champs typés, sans code et sans champ secret.</p></div><button class="primary compact" type="button" data-action="new-custom-module">${icon("plus", 15)} Nouveau module</button></header>${localDefinitions.length ? `<div class="local-module-list">${localDefinitions.map((definition) => { const count = state.workspace.moduleRecords.filter((record) => record.moduleId === definition.id).length; return `<button type="button" data-action="edit-custom-module" data-id="${escapeHtml(definition.id)}"><span class="module-toggle-icon">${icon(definition.icon || "grid", 18)}</span><span><strong>${escapeHtml(definition.label)}</strong><small>${definition.fields.length} champs · ${count} fiche${count === 1 ? "" : "s"}</small></span>${icon("edit", 14)}</button>`; }).join("")}</div>` : `<div class="local-module-empty">${icon("grid", 20)}<span><strong>Aucun module local</strong><small>Les ${audit.total} modules fournis restent disponibles ci-dessous.</small></span></div>`}<div class="module-boundary-note"><strong>Secrets interdits :</strong> les mots de passe, jetons et clés API doivent rester dans Passwords puis être reliés à la fiche.</div></section>` : "";
     return `<div class="page modules-manager-page">
       ${pageHeader("Gérer les modules", "Choisissez précisément les sections affichées dans votre navigation. Chaque module possède maintenant un profil métier vérifié; les données restent conservées lorsqu’un module est masqué.")}
       <section class="module-audit-summary" aria-label="Couverture de la bibliothèque">
@@ -3402,6 +3471,7 @@
         <article><span>${icon("check", 18)}</span><div><strong>${audit.total - audit.issues.length}</strong><small>modules validés</small></div></article>
         <article class="${audit.issues.length ? "has-issues" : "is-valid"}"><span>${icon(audit.issues.length ? "alert" : "shield", 18)}</span><div><strong>${audit.issues.length}</strong><small>anomalie de schéma</small></div></article>
       </section>
+      ${renderModuleConsolidationReport(consolidation)}
       ${localBuilder}
       <form data-form="module-preferences" class="modules-manager-form">
         <section class="panel module-manager-toolbar">
@@ -3415,6 +3485,18 @@
         <div class="settings-save module-manager-save"><span>Préférence locale liée au compte <strong>${escapeHtml(state.user.username)}</strong>.</span><button class="primary" type="submit">${t("save")}</button></div>
       </form>
     </div>`;
+  }
+
+  function renderModuleConsolidationReport(report) {
+    const candidateRows = report.candidates.map((group) => `<li><div><strong>Conserver ${escapeHtml(group.canonical)}</strong><small>${escapeHtml(group.reason)}</small></div><span>${group.duplicates.map((label) => `<em>${escapeHtml(label)}</em>`).join("")}</span></li>`).join("");
+    const relatedRows = report.related.map((group) => `<li><div><strong>${escapeHtml(group.title)}</strong><small>${escapeHtml(group.note)}</small></div><span>${group.modules.map((label) => `<em>${escapeHtml(label)}</em>`).join("")}</span></li>`).join("");
+    return `<section class="panel module-consolidation-report" aria-labelledby="module-consolidation-title">
+      <header><div><p class="eyebrow">RAPPORT DE CONSOLIDATION</p><h2 id="module-consolidation-title">Modules semblables et doublons probables</h2><p>Analyse des libellés, de l’usage et des profils métier. Les suggestions ne suppriment aucune fiche automatiquement.</p></div><div class="module-consolidation-metrics"><span><strong>${report.recommendedRemovalCount}</strong> doublons probables</span><span><strong>${report.related.length}</strong> groupes à vérifier</span></div></header>
+      <div class="module-retired-note">${icon("check", 18)}<div><strong>Datto retiré du catalogue</strong><p>${report.removed.map((item) => escapeHtml(item.label)).join(" et ")} ne sont plus proposés. Toute fiche historique est reclassée dans ${escapeHtml(report.removed[0].replacement)} sans supprimer son contenu.</p></div></div>
+      <details open><summary><span>Suppressions recommandées après validation des fiches</span><strong>${report.recommendedRemovalCount}</strong></summary><ul class="module-consolidation-list">${candidateRows}</ul></details>
+      <details><summary><span>Modules proches à conserver pour l’instant</span><strong>${report.related.length}</strong></summary><ul class="module-consolidation-list related">${relatedRows}</ul></details>
+      <footer>${icon("info", 15)} Fusionnez les fiches vers le module indiqué avant de retirer un doublon. Les groupes « à vérifier » couvrent souvent des équipements ou processus réellement différents.</footer>
+    </section>`;
   }
 
   function moduleManagerGroup(group, title, description) {
