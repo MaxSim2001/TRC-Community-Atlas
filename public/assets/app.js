@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.16.1";
+  const ATLAS_VERSION = "0.16.2";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -1505,7 +1505,7 @@
 
   function certificateRecordPresentation(record) {
     if (record.status === "archived") return { label: "Archivé", tone: "muted" };
-    const checks = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : [];
+    const checks = certificateChecksForRecord(record);
     if (!checks.length) return { label: "À vérifier", tone: "muted" };
     const counts = checks.reduce((result, check) => { result[check.status] = (result[check.status] || 0) + 1; return result; }, {});
     const overdue = checks.filter((check) => check.nextCheckAt && Date.parse(check.nextCheckAt) < Date.now()).length;
@@ -1517,19 +1517,70 @@
     return { label: `${checks.length} domaine${checks.length === 1 ? "" : "s"}`, tone: "muted" };
   }
 
-  function certificateChecksMarkup(record) {
+  function certificateChecksForRecord(record) {
     const checks = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : [];
+    const checksByHost = new Map(checks.filter((check) => check?.host).map((check) => [String(check.host).toLocaleLowerCase("en"), check]));
+    const configuredHosts = [...new Set(String(record.details?.hosts || "").split(/[\n,;]+/).map((host) => host.trim()).filter(Boolean))];
+    const configuredKeys = new Set(configuredHosts.map((host) => host.toLocaleLowerCase("en")));
+    return [
+      ...configuredHosts.map((host) => checksByHost.get(host.toLocaleLowerCase("en")) || { host, status: "pending" }),
+      ...checks.filter((check) => check?.host && !configuredKeys.has(String(check.host).toLocaleLowerCase("en"))),
+    ];
+  }
+
+  function certificateChecksMarkup(record) {
+    const checks = certificateChecksForRecord(record);
     if (!checks.length) return `<section class="certificate-monitor"><header><div><p class="eyebrow">CONTRÔLE AUTOMATIQUE</p><h3>Certificats par domaine</h3><p>Enregistrez la fiche ou lancez une vérification pour lire le certificat actuellement présenté par chaque domaine.</p></div></header><div class="certificate-monitor-empty">${icon("lock", 22)} Aucun résultat de vérification pour le moment.</div></section>`;
     return `<section class="certificate-monitor"><header><div><p class="eyebrow">CONTRÔLE AUTOMATIQUE</p><h3>Certificats par domaine</h3><p>Chaque domaine conserve sa propre échéance, même lorsqu’ils partagent actuellement le même certificat.</p></div><span>${checks.length} domaine${checks.length === 1 ? "" : "s"}</span></header><div class="certificate-domain-list">${checks.map((check) => { const presentation = certificateCheckPresentation(check); return `<article class="certificate-domain-row ${presentation.tone}"><div class="certificate-domain-name"><span>${icon("globe", 16)}</span><div><strong>${escapeHtml(check.host || "Domaine inconnu")}</strong><small>${escapeHtml(check.subject || check.address || "Aucun certificat lu")}</small></div></div><div><small>Émetteur</small><strong>${escapeHtml(check.issuer || "—")}</strong></div><div><small>Expiration</small><strong>${check.validTo ? formatDate(check.validTo) : "—"}</strong></div><div><small>État</small><span class="status-badge ${presentation.tone}">${escapeHtml(presentation.label)}</span></div><div><small>Dernière vérification</small><strong>${check.checkedAt ? formatDateTime(check.checkedAt) : "—"}</strong>${check.nextCheckAt ? `<em>Prochaine : ${formatDateTime(check.nextCheckAt)}</em>` : ""}</div>${check.error ? `<p class="certificate-domain-error">${escapeHtml(check.error)}</p>` : ""}</article>`; }).join("")}</div></section>`;
+  }
+
+  function sslTrackerOverviewMarkup(records) {
+    const tonePriority = { danger: 0, warning: 1, muted: 2, success: 3 };
+    if (!records.length) return `<section class="ssl-tracker-groups">${emptyState("Aucune fiche SSL ne correspond aux filtres.")}</section>`;
+    return `<section class="ssl-tracker-groups" aria-label="Fiches SSL Tracker">${records.map((record) => {
+      const recordPresentation = certificateRecordPresentation(record);
+      const checks = certificateChecksForRecord(record).map((check) => ({ check, presentation: certificateCheckPresentation(check) })).sort((left, right) => {
+        const toneDifference = (tonePriority[left.presentation.tone] ?? 9) - (tonePriority[right.presentation.tone] ?? 9);
+        if (toneDifference) return toneDifference;
+        const leftDays = Number.isFinite(Number(left.check.daysRemaining)) ? Number(left.check.daysRemaining) : Number.POSITIVE_INFINITY;
+        const rightDays = Number.isFinite(Number(right.check.daysRemaining)) ? Number(right.check.daysRemaining) : Number.POSITIVE_INFINITY;
+        return leftDays - rightDays || String(left.check.host || "").localeCompare(String(right.check.host || ""), state.locale);
+      });
+      const datedChecks = checks.filter(({ check }) => check.validTo).sort((left, right) => Date.parse(left.check.validTo) - Date.parse(right.check.validTo));
+      const earliest = datedChecks[0]?.check || null;
+      const earliestDays = earliest && Number.isFinite(Number(earliest.daysRemaining)) ? Math.max(0, Number(earliest.daysRemaining)) : null;
+      return `<details class="ssl-tracker-group ${recordPresentation.tone}">
+        <summary>
+          <span class="ssl-tracker-group-name"><i>${icon("lock", 15)}</i><span><strong>${escapeHtml(record.title || "Fiche SSL sans titre")}</strong><small>${escapeHtml(record.owner || "Responsable non attribué")}</small></span></span>
+          <span class="ssl-tracker-group-count"><small>Domaines</small><strong>${checks.length}</strong></span>
+          <span class="ssl-tracker-group-expiry"><small>Première expiration</small><strong>${earliest?.validTo ? formatDate(earliest.validTo) : "Non vérifiée"}</strong>${earliestDays === null ? "" : `<em>${earliestDays} jour${earliestDays === 1 ? "" : "s"} minimum</em>`}</span>
+          <span class="ssl-tracker-group-status"><small>État</small><span class="status-badge ${recordPresentation.tone}">${escapeHtml(recordPresentation.label)}</span></span>
+          <span class="ssl-tracker-group-chevron" aria-hidden="true">${icon("chevron", 15)}</span>
+        </summary>
+        <div class="ssl-tracker-domain-list">
+          <div class="ssl-tracker-domain-head" aria-hidden="true"><span>Domaine</span><span>Expiration</span><span>Jours restants</span><span>État</span></div>
+          ${checks.length ? checks.map(({ check, presentation }) => {
+            const days = Number(check.daysRemaining);
+            const hasDays = Number.isFinite(days) && check.validTo;
+            return `<button class="ssl-tracker-domain-row ${presentation.tone}" type="button" data-action="open-asset" data-asset-ref="module:${escapeHtml(record.id)}" aria-label="Ouvrir ${escapeHtml(record.title)} pour ${escapeHtml(check.host || "ce domaine")}">
+              <span class="ssl-tracker-domain-name"><i>${icon("globe", 14)}</i><span><small>Domaine</small><strong>${escapeHtml(check.host || "Domaine non déclaré")}</strong><em>${escapeHtml(check.issuer || "Certificat non vérifié")}</em></span></span>
+              <span><small>Expiration</small><strong>${check.validTo ? formatDate(check.validTo) : "—"}</strong></span>
+              <span class="ssl-tracker-domain-days"><small>Jours restants</small><strong>${hasDays ? Math.max(0, days) : "—"}</strong><em>${hasDays ? "jours" : "non vérifié"}</em></span>
+              <span class="ssl-tracker-domain-status"><small>État</small><span class="status-badge ${presentation.tone}">${escapeHtml(presentation.label)}</span>${icon("chevron", 13)}</span>
+            </button>`;
+          }).join("") : `<div class="ssl-tracker-domain-empty">${icon("globe", 16)} Aucun domaine déclaré dans cette fiche.</div>`}
+        </div>
+      </details>`;
+    }).join("")}</section>`;
   }
 
   function moduleRenewalMetrics(records, profile, module) {
     if (!profile.renewal) return "";
     if (module?.id === "ssl-tracker") {
-      const checks = records.flatMap((record) => Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : []);
+      const checks = records.flatMap((record) => certificateChecksForRecord(record));
       const expired = checks.filter((check) => check.status === "expired").length;
       const soon = checks.filter((check) => check.status === "expiring").length;
-      const attention = checks.filter((check) => ["invalid", "error"].includes(check.status)).length;
+      const attention = checks.filter((check) => ["invalid", "error", "pending"].includes(check.status)).length;
       return `<section class="metrics-grid module-renewal-metrics">${metricCard("globe", checks.length, "Domaines suivis", `${records.length} fiche${records.length === 1 ? "" : "s"}`, "blue")}${metricCard("alert", expired, "Expirés", "certificats réellement lus", "violet")}${metricCard("clock", soon, "Dans 30 jours", "vérification quotidienne", "cyan")}${metricCard("refresh", attention, "À vérifier", "échec ou certificat invalide", "mint")}</section>`;
     }
     const now = Date.now();
@@ -3413,12 +3464,15 @@
     const records = scopedRecords.filter((record) => (state.listStatus === "all" || record.status === state.listStatus) && (!query || [record.title, record.owner, record.summary, record.reference, ...(record.tags || []), ...Object.values(record.details || {})].join(" ").toLocaleLowerCase(state.locale).includes(query))).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)) || a.title.localeCompare(b.title, state.locale));
     const page = paginate(records, 25);
     const notice = module.id === "domain-tracker" ? `<div class="notice secure-module-notice">${icon("globe", 17)} <span><strong>Suivi réel des domaines</strong> Registraire, DNS, titulaire, serveurs de noms, renouvellement automatique et expiration sont conservés dans chaque fiche.</span></div>` : module.id === "ssl-tracker" ? `<div class="notice secure-module-notice">${icon("lock", 17)} <span><strong>Un contrôle indépendant par domaine</strong> Atlas relit le certificat de chaque domaine tous les 5 jours, puis chaque jour sous 30 jours. Aucune clé privée n’est demandée ou conservée.</span></div>` : "";
+    const sslDomainCount = module.id === "ssl-tracker" ? records.reduce((total, record) => total + certificateChecksForRecord(record).length, 0) : 0;
+    const toolbarSummary = module.id === "ssl-tracker" ? `<strong>${sslDomainCount}</strong> domaine${sslDomainCount === 1 ? "" : "s"} · ${records.length} fiche${records.length === 1 ? "" : "s"}` : `<strong>${records.length}</strong> sur ${scopedRecords.length}`;
+    const recordsMarkup = module.id === "ssl-tracker" ? sslTrackerOverviewMarkup(records) : `<section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr><th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="module:${record.id}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="module:${record.id}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>`;
     return `<div class="page module-page">
       ${pageHeader(module.label, module.description, writeButton(`<button class="primary" data-action="new-module-record" data-module-id="${module.id}">${icon("plus")} Nouvelle fiche</button>`))}
       ${notice}
       ${moduleRenewalMetrics(records, profile, module)}
-      <div class="toolbar compact-list-toolbar module-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans ${escapeHtml(module.label)}…" value="${escapeHtml(state.listSearch)}" /></label><label>État<select data-list-status><option value="all">Tous</option><option value="active" ${state.listStatus === "active" ? "selected" : ""}>Actives</option><option value="review" ${state.listStatus === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${state.listStatus === "archived" ? "selected" : ""}>Archivées</option></select></label><div class="toolbar-summary"><strong>${records.length}</strong> sur ${scopedRecords.length}</div></div>
-      <section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr><th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); const domainCount = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks.length : 0; return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="module:${record.id}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}${module.id === "ssl-tracker" && domainCount ? `<small class="table-cell-note">${domainCount} domaine${domainCount === 1 ? "" : "s"} contrôlé${domainCount === 1 ? "" : "s"}</small>` : ""}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="module:${record.id}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>
+      <div class="toolbar compact-list-toolbar module-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans ${escapeHtml(module.label)}…" value="${escapeHtml(state.listSearch)}" /></label><label>État<select data-list-status><option value="all">Tous</option><option value="active" ${state.listStatus === "active" ? "selected" : ""}>Actives</option><option value="review" ${state.listStatus === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${state.listStatus === "archived" ? "selected" : ""}>Archivées</option></select></label><div class="toolbar-summary">${toolbarSummary}</div></div>
+      ${recordsMarkup}
     </div>`;
   }
 

@@ -1,10 +1,15 @@
 # TRC Community Atlas user guide
 
-Guide version: **0.16.1**
+Guide version: **0.16.2**
 
 ## Monitor public TLS certificates
 
 Open an organization, select **SSL Tracker**, then create or edit a record.
+
+The SSL Tracker overview displays one compact expandable row per record. The
+collapsed row summarizes the domain count, earliest verified expiration, and
+minimum days remaining. Expand it to display every configured domain; the list
+is not truncated when a record contains 20 domains.
 Enter one public DNS hostname per line under **Domains to check**. A single
 record may contain up to 20 domains; Atlas keeps the result and expiration date
 of every domain separate.

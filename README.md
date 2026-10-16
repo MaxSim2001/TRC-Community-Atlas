@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Current version: **0.16.1**
+Current version: **0.16.2**
 
 [![Atlas tests](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 

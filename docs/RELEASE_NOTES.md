@@ -1,5 +1,16 @@
 # TRC Community Atlas release notes
 
+## 0.16.2 — Compact expandable SSL overview
+
+- Replaced the redundant SSL Tracker record table with one compact expandable
+  row per SSL record.
+- Added the domain count, earliest verified expiration, minimum days remaining,
+  and overall status to every collapsed row.
+- Expanded rows show every configured domain without truncation, including
+  records containing 20 domains, with independent expiration and status data.
+- Added a responsive card layout for mobile while retaining keyboard-accessible
+  native disclosure controls.
+
 ## 0.16.1 — Independent TLS certificate monitoring
 
 - Added automatic public TLS certificate checks for SSL Tracker records.

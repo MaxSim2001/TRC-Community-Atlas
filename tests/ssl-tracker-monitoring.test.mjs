@@ -43,6 +43,9 @@ test("les domaines TLS sont normalisés, dédupliqués et limités à des noms p
   assert.equal(normalizeTlsHostname("*.example.com"), "");
   assert.equal(normalizeTlsHostname("192.168.50.12"), "");
   assert.deepEqual(parseTlsHostnames("a.example.com\nB.example.com, a.example.com"), ["a.example.com", "b.example.com"]);
+  const twentyHosts = Array.from({ length: 20 }, (_, index) => `domain-${index + 1}.example.com`).join("\n");
+  assert.equal(parseTlsHostnames(twentyHosts).length, 20, "une fiche SSL peut afficher et vérifier ses 20 domaines");
+  assert.throws(() => parseTlsHostnames(`${twentyHosts}\ndomain-21.example.com`), /maximum 20/);
   assert.throws(() => parseTlsHostnames("localhost"), /invalide/);
   await assert.rejects(
     probeTlsCertificateHost("private.example.com", { lookupFn: async () => [{ address: "192.168.50.14", family: 4 }] }),
@@ -73,7 +76,14 @@ test("l'interface présente une ligne distincte par domaine et un contrôle manu
   assert.match(app, /certificate-domain-row/);
   assert.match(app, /data-action="check-ssl-record"/);
   assert.match(app, /Chaque domaine conserve sa propre échéance/);
+  assert.match(app, /function sslTrackerOverviewMarkup/);
+  assert.match(app, /<details class="ssl-tracker-group/);
+  assert.match(app, /checks\.map\(\(\{ check, presentation \}\)/);
+  const overviewSource = app.slice(app.indexOf("function sslTrackerOverviewMarkup"), app.indexOf("function moduleRenewalMetrics"));
+  assert.doesNotMatch(overviewSource, /checks\.slice\(/, "la fiche dépliée doit rendre tous ses domaines, y compris 20 domaines");
   assert.match(styles, /grid-template-columns: minmax\(220px/);
+  assert.match(styles, /\.ssl-tracker-group\[open\]/);
+  assert.match(styles, /\.ssl-tracker-domain-row/);
   assert.match(help, /Échéances indépendantes/);
 });
 
