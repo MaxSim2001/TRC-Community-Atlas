@@ -1,5 +1,19 @@
 # TRC Community Atlas release notes
 
+## 0.16.1 — Independent TLS certificate monitoring
+
+- Added automatic public TLS certificate checks for SSL Tracker records.
+- Stored issuer, subject, serial number, validity, trust, hostname match, last
+  check, and next check separately for every documented domain.
+- Added a responsive per-domain status view so domains in the same record can
+  have different certificate authorities and expiration dates.
+- Scheduled normal checks every five days and daily checks when a certificate
+  has 30 days or fewer remaining, with an explicit manual check action.
+- Kept failed or overdue checks distinct from actual certificate expiration so
+  stale dates do not create false renewal alerts.
+- Blocked private, local, IP, wildcard, URL, and mixed public/private probe
+  destinations; Atlas never requests or stores TLS private keys.
+
 ## 0.16.0 — Scalable documentation operations
 
 - Added a local SQLite asset index with server-side search, filtering, and

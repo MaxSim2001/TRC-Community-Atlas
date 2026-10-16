@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rename, stat, statfs, unlink, writeFile } from "node:fs/promises";
 import { createConnection, isIP } from "node:net";
 import path from "node:path";
+import { checkServerIdentity, connect as tlsConnect } from "node:tls";
 import { domainToASCII, fileURLToPath } from "node:url";
 import { AtlasStore } from "./lib/atlas-store.mjs";
 import {
@@ -55,7 +56,10 @@ const MFA_IP_LIMIT = 30;
 const MFA_CHALLENGE_LIMIT = 5;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.16.0";
+const ATLAS_VERSION = "0.16.1";
+const SSL_TRACKER_MAX_HOSTS = 20;
+const SSL_TRACKER_NORMAL_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
+const SSL_TRACKER_URGENT_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -426,6 +430,119 @@ export function isPublicProbeAddress(address) {
   return false;
 }
 
+export function normalizeTlsHostname(value) {
+  const candidate = String(value || "").trim().replace(/\.$/, "").toLowerCase();
+  if (!candidate || candidate.length > 253 || candidate.includes("://") || candidate.includes("/") || candidate.includes(":") || candidate.includes("*") || isIP(candidate)) return "";
+  const ascii = domainToASCII(candidate).toLowerCase();
+  if (!ascii || ascii.length > 253 || !ascii.includes(".")) return "";
+  const labels = ascii.split(".");
+  if (labels.some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) return "";
+  return ascii;
+}
+
+export function parseTlsHostnames(value, limit = SSL_TRACKER_MAX_HOSTS) {
+  const rawHosts = String(value || "").split(/[\s,;]+/).map((entry) => entry.trim()).filter(Boolean);
+  if (rawHosts.length > 100) throw Object.assign(new Error(`Une fiche SSL peut vérifier au maximum ${limit} domaines distincts.`), { statusCode: 400, code: "too_many_tls_hosts" });
+  const hosts = [];
+  for (const rawHost of rawHosts) {
+    const host = normalizeTlsHostname(rawHost);
+    if (!host) throw Object.assign(new Error(`Le domaine « ${rawHost.slice(0, 120)} » est invalide. Saisissez seulement un nom DNS public, sans protocole, port, chemin ni joker.`), { statusCode: 400, code: "invalid_tls_hostname" });
+    if (!hosts.includes(host)) {
+      if (hosts.length >= limit) throw Object.assign(new Error(`Une fiche SSL peut vérifier au maximum ${limit} domaines distincts.`), { statusCode: 400, code: "too_many_tls_hosts" });
+      hosts.push(host);
+    }
+  }
+  if (!hosts.length) throw Object.assign(new Error("Ajoutez au moins un domaine public à vérifier."), { statusCode: 400, code: "tls_hostname_required" });
+  return hosts;
+}
+
+function certificateName(value) {
+  if (!value || typeof value !== "object") return "";
+  return String(value.CN || value.O || value.OU || "").slice(0, 300);
+}
+
+function certificateAltNames(value) {
+  return String(value || "").split(/,\s*/).map((entry) => entry.replace(/^DNS:/i, "").trim()).filter(Boolean).slice(0, 100);
+}
+
+export async function probeTlsCertificateHost(hostname, options = {}) {
+  const host = normalizeTlsHostname(hostname);
+  if (!host) throw Object.assign(new Error("Le domaine TLS est invalide."), { statusCode: 400, code: "invalid_tls_hostname" });
+  const lookupFn = options.lookupFn || lookup;
+  const connectFn = options.connectFn || tlsConnect;
+  const clock = typeof options.now === "function" ? options.now : Date.now;
+  let addresses;
+  try { addresses = await lookupFn(host, { all: true, verbatim: true }); }
+  catch { throw Object.assign(new Error("Le domaine ne peut pas être résolu par DNS."), { statusCode: 502, code: "tls_probe_dns_failed" }); }
+  if (!addresses.length || addresses.some((entry) => !isPublicProbeAddress(entry.address))) {
+    throw Object.assign(new Error("La vérification est refusée : le domaine doit résoudre uniquement vers des adresses Internet publiques."), { statusCode: 400, code: "unsafe_probe_destination" });
+  }
+  const destination = addresses[0];
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      callback(value);
+    };
+    const socket = connectFn({ host: destination.address, family: destination.family, port: 443, servername: host, rejectUnauthorized: false });
+    socket.setTimeout(Number(options.timeoutMs) || 5000);
+    socket.once("secureConnect", () => {
+      try {
+        const certificate = socket.getPeerCertificate(true);
+        if (!certificate || !certificate.raw) throw new Error("le serveur n’a présenté aucun certificat");
+        const validFromTime = Date.parse(certificate.valid_from || "");
+        const validToTime = Date.parse(certificate.valid_to || "");
+        const identityError = checkServerIdentity(host, certificate);
+        const checkedAt = new Date(clock()).toISOString();
+        const validFrom = Number.isFinite(validFromTime) ? new Date(validFromTime).toISOString() : "";
+        const validTo = Number.isFinite(validToTime) ? new Date(validToTime).toISOString() : "";
+        const daysRemaining = Number.isFinite(validToTime) ? Math.ceil((validToTime - clock()) / 86400000) : null;
+        const expired = Number.isFinite(daysRemaining) && daysRemaining < 0;
+        const hostnameValid = !identityError;
+        const trusted = socket.authorized === true;
+        const status = expired ? "expired" : !hostnameValid || !trusted ? "invalid" : daysRemaining <= 30 ? "expiring" : "valid";
+        finish(resolve, {
+          host, status, checkedAt, lastSuccessfulAt: checkedAt, address: destination.address,
+          subject: certificateName(certificate.subject), issuer: certificateName(certificate.issuer),
+          serialNumber: String(certificate.serialNumber || "").slice(0, 300), validFrom, validTo, daysRemaining,
+          subjectAltNames: certificateAltNames(certificate.subjectaltname), hostnameValid, trusted,
+          authorizationError: String(socket.authorizationError || identityError?.code || "").slice(0, 300),
+        });
+      } catch (error) {
+        finish(reject, Object.assign(new Error(`La lecture du certificat a échoué : ${error.message}`), { statusCode: 502, code: "tls_probe_failed" }));
+      } finally {
+        socket.end();
+      }
+    });
+    socket.once("timeout", () => socket.destroy(new Error("délai de 5 secondes dépassé")));
+    socket.once("error", (error) => finish(reject, Object.assign(new Error(`La connexion TLS a échoué : ${error.message}`), { statusCode: 502, code: "tls_probe_failed" })));
+  });
+}
+
+function nextCertificateCheckAt(check, now = Date.now()) {
+  const urgent = check.status !== "valid" || (Number.isFinite(check.daysRemaining) && check.daysRemaining <= 30);
+  return new Date(now + (urgent ? SSL_TRACKER_URGENT_INTERVAL_MS : SSL_TRACKER_NORMAL_INTERVAL_MS)).toISOString();
+}
+
+export function summarizeCertificateChecks(checks, now = Date.now()) {
+  const items = Array.isArray(checks) ? checks : [];
+  const counts = { total: items.length, valid: 0, expiring: 0, expired: 0, invalid: 0, error: 0, overdue: 0 };
+  for (const check of items) {
+    if (Object.hasOwn(counts, check?.status)) counts[check.status] += 1;
+    if (check?.nextCheckAt && Date.parse(check.nextCheckAt) < now) counts.overdue += 1;
+  }
+  const successful = items.filter((check) => check?.validTo && check?.lastSuccessfulAt);
+  const earliestValidTo = successful.map((check) => check.validTo).sort()[0] || "";
+  let status = "unchecked";
+  if (counts.expired) status = "expired";
+  else if (counts.invalid) status = "invalid";
+  else if (counts.expiring) status = "expiring";
+  else if (counts.error || counts.overdue) status = "attention";
+  else if (counts.valid && counts.valid === counts.total) status = "valid";
+  return { status, counts, earliestValidTo, checkedAt: items.map((check) => check?.checkedAt || "").sort().at(-1) || "" };
+}
+
 async function probePublicAtlasDomain(domain) {
   const normalizedDomain = normalizeAtlasDomain(domain);
   if (!normalizedDomain) throw Object.assign(new Error("Aucun domaine public valide n’est configuré."), { statusCode: 400, code: "invalid_primary_domain" });
@@ -761,6 +878,7 @@ export function createAtlasServer(options = {}) {
   const releasePreparer = typeof options.releasePreparer === "function" ? options.releasePreparer : prepareGithubRelease;
   const updaterLauncher = typeof options.updateLauncher === "function" ? options.updateLauncher : launchReleaseUpdater;
   const backupSecretProtector = typeof options.backupSecretProtector === "function" ? options.backupSecretProtector : protectBackupSecret;
+  const certificateProbe = typeof options.certificateProbe === "function" ? options.certificateProbe : (host) => probeTlsCertificateHost(host, { now: sessionNow });
   const authPath = path.join(dataRoot, "auth.json");
   const sessionsPath = path.join(dataRoot, "sessions.json");
   const workspacePath = path.join(dataRoot, "workspace.json");
@@ -788,6 +906,8 @@ export function createAtlasServer(options = {}) {
   let deploymentOriginsLoaded = false;
   let backupRunning = false;
   let backupTimer = null;
+  let certificateCheckRunning = false;
+  let certificateTimer = null;
   let lastReleaseCheck = null;
   let authRateLimitKey;
   let authRateLimits = { schemaVersion: 1, entries: {} };
@@ -1652,6 +1772,77 @@ export function createAtlasServer(options = {}) {
     const store = await getStore();
     const document = store.readDocument();
     store.insertAudit({ actor: user?.displayName || user?.username || "Système", action, assetRef, organizationId, workspaceRevision: document?.revision || 0, details });
+  }
+
+  async function checkedSslTrackerRecord(record, { dueOnly = false } = {}) {
+    const hosts = parseTlsHostnames(record?.details?.hosts || "");
+    const checkedAtMs = sessionNow();
+    const previousByHost = new Map((Array.isArray(record?.details?.certificateChecks) ? record.details.certificateChecks : []).map((check) => [check?.host, check]));
+    const certificateChecks = [];
+    for (const host of hosts) {
+      const previous = previousByHost.get(host) || null;
+      if (dueOnly && previous?.nextCheckAt && Date.parse(previous.nextCheckAt) > checkedAtMs) {
+        certificateChecks.push(previous);
+        continue;
+      }
+      try {
+        const check = await certificateProbe(host);
+        certificateChecks.push({ ...check, host, errorCode: "", error: "", nextCheckAt: nextCertificateCheckAt(check, checkedAtMs) });
+      } catch (error) {
+        const failed = {
+          ...(previous || {}), host, status: "error", checkedAt: new Date(checkedAtMs).toISOString(),
+          errorCode: cleanText(String(error?.code || "tls_probe_failed"), 80) || "tls_probe_failed",
+          error: cleanText(String(error?.message || "La vérification TLS a échoué."), 500) || "La vérification TLS a échoué.",
+        };
+        failed.nextCheckAt = nextCertificateCheckAt(failed, checkedAtMs);
+        certificateChecks.push(failed);
+      }
+    }
+    const summary = summarizeCertificateChecks(certificateChecks, checkedAtMs);
+    const successfulIssuers = [...new Set(certificateChecks.filter((check) => check.lastSuccessfulAt && check.issuer).map((check) => check.issuer))];
+    const nextRecord = structuredClone(record);
+    nextRecord.details = { ...(nextRecord.details || {}), certificateChecks, certificateSummary: summary };
+    nextRecord.expiresOn = summary.earliestValidTo ? summary.earliestValidTo.slice(0, 10) : nextRecord.expiresOn || "";
+    if (successfulIssuers.length === 1) nextRecord.reference = successfulIssuers[0];
+    else if (successfulIssuers.length > 1) nextRecord.reference = `${successfulIssuers.length} émetteurs détectés`;
+    nextRecord.updatedAt = new Date(checkedAtMs).toISOString().slice(0, 10);
+    return { record: nextRecord, summary };
+  }
+
+  async function runScheduledCertificateChecksIfDue() {
+    if (certificateCheckRunning) return;
+    certificateCheckRunning = true;
+    try {
+      await enqueueWrite(async () => {
+        const store = await getStore();
+        const current = store.readDocument();
+        if (!current) return;
+        const dueRecords = (current.data.moduleRecords || []).filter((record) => {
+          if (record.moduleId !== "ssl-tracker" || record.status === "archived" || record.details?.autoCheck !== "Activée") return false;
+          let hosts;
+          try { hosts = parseTlsHostnames(record.details?.hosts || ""); }
+          catch { return false; }
+          const byHost = new Map((Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : []).map((check) => [check?.host, check]));
+          return hosts.some((host) => !byHost.get(host)?.nextCheckAt || Date.parse(byHost.get(host).nextCheckAt) <= sessionNow());
+        });
+        if (!dueRecords.length) return;
+        const nextData = structuredClone(current.data);
+        let checkedRecords = 0;
+        for (const dueRecord of dueRecords.slice(0, 25)) {
+          const index = nextData.moduleRecords.findIndex((record) => record.id === dueRecord.id);
+          if (index < 0) continue;
+          const checked = await checkedSslTrackerRecord(nextData.moduleRecords[index], { dueOnly: true });
+          nextData.moduleRecords[index] = checked.record;
+          checkedRecords += 1;
+        }
+        if (!checkedRecords || !validateWorkspace(nextData)) return;
+        const nextDocument = store.commitDocument(current.revision, nextData, "Atlas · SSL Tracker", `ssl-tracker-scheduled:${checkedRecords}`);
+        await mirrorStore(store, nextDocument);
+        store.insertAudit({ actor: "Atlas · SSL Tracker", action: "ssl-certificates-scheduled-check", workspaceRevision: nextDocument.revision, details: { records: checkedRecords } });
+      });
+    } finally {
+      certificateCheckRunning = false;
+    }
   }
 
   async function deploymentHealth(request) {
@@ -3102,6 +3293,33 @@ export function createAtlasServer(options = {}) {
         return jsonResponse(response, 200, await workspacePayload(nextDocument, context.user));
       }
 
+      const sslTrackerCheckMatch = url.pathname.match(/^\/api\/ssl-tracker\/([a-z0-9][a-z0-9-]{0,63})\/check$/i);
+      if (request.method === "POST" && sslTrackerCheckMatch) {
+        const session = requireSession(request, response, true);
+        if (!session) return;
+        const context = await requireWriter(session, response);
+        if (!context) return;
+        const recordId = sslTrackerCheckMatch[1];
+        let nextDocument;
+        let result;
+        await enqueueWrite(async () => {
+          const store = await getStore();
+          const current = store.readDocument();
+          const record = current?.data?.moduleRecords?.find((item) => item.id === recordId && item.moduleId === "ssl-tracker");
+          if (!record) throw Object.assign(new Error("La fiche SSL Tracker est introuvable."), { statusCode: 404, code: "ssl_tracker_not_found" });
+          if (!canWriteOrganization(context.user, record.organizationId)) throw Object.assign(new Error("Cette fiche SSL Tracker est en lecture seule."), { statusCode: 403, code: "write_permission_required" });
+          result = await checkedSslTrackerRecord(record);
+          const nextData = structuredClone(current.data);
+          const index = nextData.moduleRecords.findIndex((item) => item.id === record.id);
+          nextData.moduleRecords[index] = result.record;
+          if (!validateWorkspace(nextData)) throw Object.assign(new Error("Les résultats de certificat dépassent les limites permises."), { statusCode: 400, code: "invalid_certificate_results" });
+          nextDocument = store.commitDocument(current.revision, nextData, context.user.displayName, `ssl-tracker-check:${record.id}`);
+          await mirrorStore(store, nextDocument);
+        });
+        await recordAudit(context.user, "ssl-certificates-checked", { assetRef: `module:${recordId}`, organizationId: result.record.organizationId, details: result.summary });
+        return jsonResponse(response, 200, { document: await workspacePayload(nextDocument, context.user), result: result.summary });
+      }
+
       if (request.method === "POST" && url.pathname === "/api/workspace/changeset") {
         const session = requireSession(request, response, true);
         if (!session) return;
@@ -3277,6 +3495,7 @@ export function createAtlasServer(options = {}) {
   server.on("close", () => {
     sessions.clear();
     if (backupTimer) clearInterval(backupTimer);
+    if (certificateTimer) clearInterval(certificateTimer);
     if (storePromise) void storePromise.then((store) => store.close()).catch(() => {});
   });
   server.on("listening", () => {
@@ -3288,6 +3507,11 @@ export function createAtlasServer(options = {}) {
     }, 60_000);
     backupTimer.unref?.();
     void runScheduledBackupIfDue().catch((error) => console.error("[atlas] La vérification du planificateur de sauvegarde a échoué :", error.message));
+    certificateTimer = setInterval(() => {
+      void runScheduledCertificateChecksIfDue().catch((error) => console.error("[atlas] La vérification SSL planifiée a échoué :", error.message));
+    }, Number(options.certificateSchedulerIntervalMs) || 60 * 60 * 1000);
+    certificateTimer.unref?.();
+    void runScheduledCertificateChecksIfDue().catch((error) => console.error("[atlas] Le démarrage du suivi SSL a échoué :", error.message));
   });
   return server;
 }

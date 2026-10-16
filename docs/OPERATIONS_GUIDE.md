@@ -1,6 +1,6 @@
 # TRC Community Atlas operations guide
 
-Guide version: **0.16.0**
+Guide version: **0.16.1**
 
 ## Instance port and configuration
 

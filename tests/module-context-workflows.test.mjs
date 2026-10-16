@@ -24,11 +24,11 @@ test("module creation is scoped to the active organization and uses business pro
   assert.match(app, /key: "dnsProvider"/);
   assert.match(app, /key: "nameservers"/);
   assert.match(app, /key: "autoRenew"/);
-  assert.match(app, /titleLabel: "Nom commun ou certificat"/);
+  assert.match(app, /titleLabel: "Nom du groupe de certificats"/);
   assert.match(app, /key: "validationMethod"/);
   assert.match(app, /const details = \{ \.\.\.\(existing\?\.details \|\| \{\}\) \}/);
   assert.match(app, /\.\.\.Object\.values\(item\.details \|\| \{\}\)/);
-  assert.match(app, /moduleRenewalMetrics\(records, profile\)/);
+  assert.match(app, /moduleRenewalMetrics\(records, profile, module\)/);
   assert.match(css, /\.form-organization-context\s*\{/);
   assert.match(css, /\.status-badge\.danger\s*\{/);
   assert.match(css, /html\s*\{[^}]*overflow-x:\s*hidden/s);

@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Current version: **0.16.0**
+Current version: **0.16.1**
 
 [![Atlas tests](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -46,6 +46,8 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
   per-record writes, revision-conflict detection, activity history, and audit
   records;
 - bidirectional relationships between records;
+- automatic SSL Tracker checks with separate certificate status and expiration
+  for every documented public domain;
 - a full-page Markdown document editor;
 - a documentation-quality dashboard with explicit ownership, age, duplicate,
   relationship, and schema checks;

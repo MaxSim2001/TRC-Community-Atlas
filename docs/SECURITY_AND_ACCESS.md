@@ -1,6 +1,6 @@
 # Security and access
 
-Guide version: **0.16.0**
+Guide version: **0.16.1**
 
 ## Autonomous security model
 

@@ -100,6 +100,18 @@
         ],
       },
       {
+        id: "ssl-tracker", category: "documentation", icon: "lock", featured: true,
+        title: copy("Surveiller les certificats avec SSL Tracker", "Monitor certificates with SSL Tracker"),
+        summary: copy("Vérifier automatiquement plusieurs domaines sans confondre leurs dates d’expiration.", "Automatically check multiple domains without mixing their expiration dates."),
+        keywords: ["ssl tracker", "tls", "certificat", "expiration", "domaine", "auto renew", "renouvellement"],
+        sections: [
+          section("Créer la fiche", "Create the record", { steps: [copy("Ouvrez une compagnie puis SSL Tracker.", "Open a company, then SSL Tracker."), copy("Ajoutez un domaine public exact par ligne, sans https://, port, chemin ni joker.", "Add one exact public domain per line, without https://, a port, path, or wildcard."), copy("Laissez Vérification automatique activée et enregistrez.", "Keep Automatic verification enabled and save.")] }),
+          section("Échéances indépendantes", "Independent expirations", { paragraphs: [copy("Chaque domaine possède sa propre ligne avec émetteur, expiration, jours restants, dernière vérification et prochaine vérification. Deux domaines peuvent donc partager un certificat aujourd’hui puis diverger plus tard sans écraser leurs résultats.", "Each domain has its own row with issuer, expiration, days remaining, last check, and next check. Two domains may therefore share a certificate today and diverge later without overwriting their results.")] }),
+          section("Fréquence et alertes", "Frequency and alerts", { bullets: [copy("Contrôle normal au moins tous les 5 jours.", "Normal check at least every 5 days."), copy("Contrôle quotidien lorsqu’un certificat vérifié arrive à 30 jours ou moins.", "Daily check when a verified certificate reaches 30 days or fewer."), copy("Un échec ou un contrôle en retard affiche À vérifier, jamais Expiré sans preuve TLS actuelle.", "A failure or overdue check shows Needs check, never Expired without current TLS evidence."), copy("Vérifier maintenant permet une actualisation manuelle immédiate.", "Check now performs an immediate manual refresh.")] }),
+          section("Frontière de sécurité", "Security boundary", { callout: { tone: "warning", title: copy("Domaines Internet publics seulement", "Public Internet domains only"), text: copy("Atlas refuse les adresses privées, locales ou réservées et ne balaie jamais le réseau. Aucune clé privée n’est demandée ou stockée.", "Atlas rejects private, local, or reserved addresses and never scans the network. No private key is requested or stored.") } }),
+        ],
+      },
+      {
         id: "relationships", category: "documentation", icon: "link", featured: true,
         title: copy("Éléments liés et vue d’impact", "Related items and impact view"),
         summary: copy("Relier n’importe quels objets d’une même compagnie et suivre leurs dépendances.", "Link any objects within the same company and follow their dependencies."),
@@ -255,8 +267,9 @@
         id: "release-notes", category: "resources", icon: "history",
         title: copy("Notes de version", "Release notes"),
         summary: copy("Les principales améliorations livrées dans les versions récentes d’Atlas.", "The main improvements delivered in recent Atlas releases."),
-        keywords: ["version", "nouveautés", "release notes", "0.16.0", "0.15.6", "0.15.5", "0.15.4", "0.15.3", "0.15.2", "0.15.1", "0.15.0", "0.14.3", "0.14.2", "0.14.1", "0.14.0", "0.13.2", "0.13.1", "0.13.0"],
+        keywords: ["version", "nouveautés", "release notes", "0.16.1", "0.16.0", "0.15.6", "0.15.5", "0.15.4", "0.15.3", "0.15.2", "0.15.1", "0.15.0", "0.14.3", "0.14.2", "0.14.1", "0.14.0", "0.13.2", "0.13.1", "0.13.0"],
         sections: [
+          section("Version 0.16.1", "Version 0.16.1", { bullets: [copy("SSL Tracker vérifie séparément le certificat de chaque domaine public documenté.", "SSL Tracker checks the certificate of every documented public domain separately."), copy("Contrôle tous les 5 jours, puis chaque jour lorsqu’il reste 30 jours ou moins.", "Checks every 5 days, then daily when 30 days or fewer remain."), copy("Les échecs et contrôles en retard restent distincts d’une expiration réellement observée.", "Failures and overdue checks remain distinct from an actually observed expiration.")] }),
           section("Version 0.16.0", "Version 0.16.0", { bullets: [copy("Recherche et pagination exécutées par l’index SQLite local.", "Search and pagination powered by the local SQLite index."), copy("Écritures ciblées avec détection des conflits par fiche et assistant de fusion des modules.", "Targeted writes with per-record conflict detection and a module merge assistant."), copy("Tableau de qualité, doublons d’import, schémas versionnés et test de restauration isolé.", "Quality dashboard, import deduplication, versioned schemas, and isolated restore drill.")] }),
           section("Version 0.15.6", "Version 0.15.6", { bullets: [copy("Profil retiré du bas de la navigation pour conserver une seule identité dans l’en-tête.", "Profile removed from the bottom of the sidebar to keep a single identity in the header."), copy("Menu de profil compact avec compte local, coffre autorisé, paramètres administratifs et déconnexion.", "Compact profile menu with local account, authorized vault, administrative settings and sign out."), copy("Navigation clavier, fermeture avec Échap ou clic extérieur et adaptation mobile.", "Keyboard navigation, Escape or outside-click dismissal, and mobile adaptation.")] }),
           section("Version 0.15.5", "Version 0.15.5", { bullets: [copy("Confirmation MFA des webhooks réalignée pour conserver un contenu lisible dans sa colonne.", "Webhook MFA confirmation realigned to keep its content readable within its column.")] }),

@@ -1,6 +1,26 @@
 # TRC Community Atlas user guide
 
-Guide version: **0.16.0**
+Guide version: **0.16.1**
+
+## Monitor public TLS certificates
+
+Open an organization, select **SSL Tracker**, then create or edit a record.
+Enter one public DNS hostname per line under **Domains to check**. A single
+record may contain up to 20 domains; Atlas keeps the result and expiration date
+of every domain separate.
+
+Keep **Automatic verification** enabled to check a new or edited record
+immediately. Atlas then checks each domain at least every five days. When a
+verified certificate has 30 days or fewer remaining, the next check is planned
+for the following day. Use **Check now** on the record page whenever an
+immediate refresh is required.
+
+The record summary shows the most urgent factual state, while the domain list
+shows the issuer, expiration date, remaining days, last check, and next planned
+check for each hostname. A failed or overdue check is shown as **Needs check**;
+it is not reported as an expired certificate. Atlas only connects to the exact
+public hostnames entered in the record, refuses private or reserved addresses,
+and never requests or stores a private key.
 
 This guide complements the built-in Help Center available from the `?` icon in
 the header. Atlas serves help locally and does not call an external

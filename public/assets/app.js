@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.16.0";
+  const ATLAS_VERSION = "0.16.1";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -395,10 +395,11 @@
       ],
     },
     certificate: {
-      listLabel: "Certificat", titleLabel: "Nom commun ou certificat", referenceLabel: "Émetteur", ownerLabel: "Responsable", expiryLabel: "Date d’expiration", renewal: true, referenceRequired: true, expiryRequired: true,
+      listLabel: "Certificat", titleLabel: "Nom du groupe de certificats", referenceLabel: "Émetteur détecté", ownerLabel: "Responsable", expiryLabel: "Première expiration détectée", renewal: true,
       fields: [
-        { key: "hosts", label: "Hôtes couverts", type: "textarea", rows: 4, span: 2, placeholder: "Un hôte ou SAN par ligne" },
-        { key: "serialNumber", label: "Numéro de série" },
+        { key: "hosts", label: "Domaines à vérifier", type: "textarea", rows: 6, span: 2, placeholder: "atlas.exemple.com\nportail.exemple.com\nwww.exemple.com", required: true },
+        { key: "autoCheck", label: "Vérification automatique", type: "select", options: ["Activée", "Désactivée"], defaultValue: "Activée" },
+        { key: "serialNumber", label: "Numéro de série documenté" },
         { key: "renewalMethod", label: "Méthode de renouvellement", placeholder: "ACME, manuel, fournisseur…" },
         { key: "autoRenew", label: "Renouvellement automatique", type: "select", options: ["", "Oui", "Non", "À confirmer"] },
         { key: "validationMethod", label: "Validation", type: "select", options: ["", "DNS-01", "HTTP-01", "TLS-ALPN-01", "Manuelle"] },
@@ -1455,7 +1456,7 @@
   }
 
   function moduleProfileFieldMarkup(field, item) {
-    const value = String(item?.details?.[field.key] || "");
+    const value = String(item?.details?.[field.key] ?? (!item ? field.defaultValue || "" : ""));
     const name = `detail_${field.key}`;
     const className = field.span === 2 ? " class=\"span-2\"" : "";
     const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
@@ -1483,6 +1484,7 @@
   }
 
   function expiryPresentation(record) {
+    if (record.moduleId === "ssl-tracker") return certificateRecordPresentation(record);
     if (!record.expiresOn || record.status === "archived") return { label: recordStatusLabel(record.status), tone: record.status === "archived" ? "muted" : record.status === "review" ? "warning" : "success" };
     const days = Math.ceil((new Date(`${record.expiresOn}T23:59:59`).getTime() - Date.now()) / 86400000);
     if (days < 0) return { label: "Expiré", tone: "danger" };
@@ -1490,8 +1492,46 @@
     return { label: recordStatusLabel(record.status), tone: record.status === "review" ? "warning" : "success" };
   }
 
-  function moduleRenewalMetrics(records, profile) {
+  function certificateCheckPresentation(check) {
+    if (!check) return { label: "Non vérifié", tone: "muted" };
+    if (check.nextCheckAt && Date.parse(check.nextCheckAt) < Date.now() && !["expired", "expiring", "invalid"].includes(check.status)) return { label: "Vérification en retard", tone: "warning" };
+    if (check.status === "expired") return { label: "Expiré", tone: "danger" };
+    if (check.status === "invalid") return { label: "Certificat invalide", tone: "danger" };
+    if (check.status === "expiring") return { label: `Expire dans ${Math.max(0, Number(check.daysRemaining) || 0)} j`, tone: "warning" };
+    if (check.status === "error") return { label: "Vérification échouée", tone: "warning" };
+    if (check.status === "valid") return { label: `${Number(check.daysRemaining) || 0} j restants`, tone: "success" };
+    return { label: "Non vérifié", tone: "muted" };
+  }
+
+  function certificateRecordPresentation(record) {
+    if (record.status === "archived") return { label: "Archivé", tone: "muted" };
+    const checks = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : [];
+    if (!checks.length) return { label: "À vérifier", tone: "muted" };
+    const counts = checks.reduce((result, check) => { result[check.status] = (result[check.status] || 0) + 1; return result; }, {});
+    const overdue = checks.filter((check) => check.nextCheckAt && Date.parse(check.nextCheckAt) < Date.now()).length;
+    if (counts.expired) return { label: `${counts.expired} expiré${counts.expired === 1 ? "" : "s"}`, tone: "danger" };
+    if (counts.invalid) return { label: `${counts.invalid} invalide${counts.invalid === 1 ? "" : "s"}`, tone: "danger" };
+    if (counts.expiring) return { label: `${counts.expiring} expire${counts.expiring === 1 ? "" : "nt"} sous 30 j`, tone: "warning" };
+    if (counts.error || overdue) return { label: `${Math.max(counts.error || 0, overdue)} à vérifier`, tone: "warning" };
+    if (counts.valid === checks.length) return { label: `${checks.length} domaine${checks.length === 1 ? "" : "s"} valide${checks.length === 1 ? "" : "s"}`, tone: "success" };
+    return { label: `${checks.length} domaine${checks.length === 1 ? "" : "s"}`, tone: "muted" };
+  }
+
+  function certificateChecksMarkup(record) {
+    const checks = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : [];
+    if (!checks.length) return `<section class="certificate-monitor"><header><div><p class="eyebrow">CONTRÔLE AUTOMATIQUE</p><h3>Certificats par domaine</h3><p>Enregistrez la fiche ou lancez une vérification pour lire le certificat actuellement présenté par chaque domaine.</p></div></header><div class="certificate-monitor-empty">${icon("lock", 22)} Aucun résultat de vérification pour le moment.</div></section>`;
+    return `<section class="certificate-monitor"><header><div><p class="eyebrow">CONTRÔLE AUTOMATIQUE</p><h3>Certificats par domaine</h3><p>Chaque domaine conserve sa propre échéance, même lorsqu’ils partagent actuellement le même certificat.</p></div><span>${checks.length} domaine${checks.length === 1 ? "" : "s"}</span></header><div class="certificate-domain-list">${checks.map((check) => { const presentation = certificateCheckPresentation(check); return `<article class="certificate-domain-row ${presentation.tone}"><div class="certificate-domain-name"><span>${icon("globe", 16)}</span><div><strong>${escapeHtml(check.host || "Domaine inconnu")}</strong><small>${escapeHtml(check.subject || check.address || "Aucun certificat lu")}</small></div></div><div><small>Émetteur</small><strong>${escapeHtml(check.issuer || "—")}</strong></div><div><small>Expiration</small><strong>${check.validTo ? formatDate(check.validTo) : "—"}</strong></div><div><small>État</small><span class="status-badge ${presentation.tone}">${escapeHtml(presentation.label)}</span></div><div><small>Dernière vérification</small><strong>${check.checkedAt ? formatDateTime(check.checkedAt) : "—"}</strong>${check.nextCheckAt ? `<em>Prochaine : ${formatDateTime(check.nextCheckAt)}</em>` : ""}</div>${check.error ? `<p class="certificate-domain-error">${escapeHtml(check.error)}</p>` : ""}</article>`; }).join("")}</div></section>`;
+  }
+
+  function moduleRenewalMetrics(records, profile, module) {
     if (!profile.renewal) return "";
+    if (module?.id === "ssl-tracker") {
+      const checks = records.flatMap((record) => Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks : []);
+      const expired = checks.filter((check) => check.status === "expired").length;
+      const soon = checks.filter((check) => check.status === "expiring").length;
+      const attention = checks.filter((check) => ["invalid", "error"].includes(check.status)).length;
+      return `<section class="metrics-grid module-renewal-metrics">${metricCard("globe", checks.length, "Domaines suivis", `${records.length} fiche${records.length === 1 ? "" : "s"}`, "blue")}${metricCard("alert", expired, "Expirés", "certificats réellement lus", "violet")}${metricCard("clock", soon, "Dans 30 jours", "vérification quotidienne", "cyan")}${metricCard("refresh", attention, "À vérifier", "échec ou certificat invalide", "mint")}</section>`;
+    }
     const now = Date.now();
     const expired = records.filter((record) => record.expiresOn && new Date(`${record.expiresOn}T23:59:59`).getTime() < now && record.status !== "archived").length;
     const soon = records.filter((record) => { const expiry = record.expiresOn ? new Date(`${record.expiresOn}T23:59:59`).getTime() : 0; const days = (expiry - now) / 86400000; return days >= 0 && days <= 30 && record.status !== "archived"; }).length;
@@ -2557,6 +2597,7 @@
     const neverReviewed = assets.filter((asset) => asset.type === "configuration" && !asset.archived && !asset.raw.lastReviewed).map((asset) => itemFromAsset(asset, state.locale === "fr" ? "Aucune date de révision" : "No review date"));
     const deadlines = assets.filter((asset) => {
       if (asset.type !== "module" || asset.archived || !asset.raw.expiresOn) return false;
+      if (asset.raw.moduleId === "ssl-tracker") return (asset.raw.details?.certificateChecks || []).some((check) => ["expired", "expiring"].includes(check.status));
       return (new Date(`${asset.raw.expiresOn}T12:00:00`) - Date.now()) / 86400000 <= expiryDays;
     }).map((asset) => itemFromAsset(asset, state.locale === "fr" ? `Échéance dépassée ou dans ${expiryDays} jours` : `Overdue or due within ${expiryDays} days`));
     const fragileRelations = w.relations.filter((relation) => {
@@ -3172,8 +3213,8 @@
               <label>Site<select name="siteId"><option value="">Aucun site précis</option>${siteOptions(item?.siteId, organizationId)}</select></label>
               <label>${escapeHtml(profile.ownerLabel)}<input name="owner" value="${escapeHtml(item?.owner || "")}" maxlength="96" /></label>
               <label>État<select name="status"><option value="active" ${item?.status === "active" || !item ? "selected" : ""}>Active</option><option value="review" ${item?.status === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${item?.status === "archived" ? "selected" : ""}>Archivée</option></select></label>
-              <label>${escapeHtml(profile.expiryLabel)}<input name="expiresOn" type="date" value="${escapeHtml(item?.expiresOn || "")}" ${profile.expiryRequired ? "required" : ""}/></label>
-              <label class="span-2">${escapeHtml(profile.referenceLabel)}${profile.referenceRequired ? " *" : ""}<input name="reference" value="${escapeHtml(item?.reference || "")}" maxlength="500" ${profile.referenceRequired ? "required" : ""}/></label>
+              <label>${escapeHtml(profile.expiryLabel)}<input name="expiresOn" type="date" value="${escapeHtml(item?.expiresOn || "")}" ${profile.expiryRequired ? "required" : ""} ${module.id === "ssl-tracker" ? "readonly" : ""}/>${module.id === "ssl-tracker" ? "<small>Calculée depuis le domaine qui expire en premier.</small>" : ""}</label>
+              <label class="span-2">${escapeHtml(profile.referenceLabel)}${profile.referenceRequired ? " *" : ""}<input name="reference" value="${escapeHtml(item?.reference || "")}" maxlength="500" ${profile.referenceRequired ? "required" : ""} ${module.id === "ssl-tracker" ? "readonly" : ""}/>${module.id === "ssl-tracker" ? "<small>Mis à jour automatiquement à partir des certificats lus.</small>" : ""}</label>
             </div>
           </section>
           ${moduleFields ? `<section class="record-editor-section record-editor-module-fields"><header><span class="record-editor-section-icon">${icon("grid", 19)}</span><div><h2>Détails · ${escapeHtml(module.label)}</h2><p>Champs adaptés à ce type de documentation.</p></div></header><div class="record-editor-fields">${moduleFields}</div></section>` : ""}
@@ -3371,13 +3412,13 @@
     const scopedRecords = filteredByOrganization(allRecords);
     const records = scopedRecords.filter((record) => (state.listStatus === "all" || record.status === state.listStatus) && (!query || [record.title, record.owner, record.summary, record.reference, ...(record.tags || []), ...Object.values(record.details || {})].join(" ").toLocaleLowerCase(state.locale).includes(query))).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)) || a.title.localeCompare(b.title, state.locale));
     const page = paginate(records, 25);
-    const notice = module.id === "domain-tracker" ? `<div class="notice secure-module-notice">${icon("globe", 17)} <span><strong>Suivi réel des domaines</strong> Registraire, DNS, titulaire, serveurs de noms, renouvellement automatique et expiration sont conservés dans chaque fiche.</span></div>` : module.id === "ssl-tracker" ? `<div class="notice secure-module-notice">${icon("lock", 17)} <span><strong>Suivi réel des certificats</strong> Émetteur, hôtes couverts, méthode de validation, renouvellement et expiration sont suivis sans stocker de clé privée.</span></div>` : "";
+    const notice = module.id === "domain-tracker" ? `<div class="notice secure-module-notice">${icon("globe", 17)} <span><strong>Suivi réel des domaines</strong> Registraire, DNS, titulaire, serveurs de noms, renouvellement automatique et expiration sont conservés dans chaque fiche.</span></div>` : module.id === "ssl-tracker" ? `<div class="notice secure-module-notice">${icon("lock", 17)} <span><strong>Un contrôle indépendant par domaine</strong> Atlas relit le certificat de chaque domaine tous les 5 jours, puis chaque jour sous 30 jours. Aucune clé privée n’est demandée ou conservée.</span></div>` : "";
     return `<div class="page module-page">
       ${pageHeader(module.label, module.description, writeButton(`<button class="primary" data-action="new-module-record" data-module-id="${module.id}">${icon("plus")} Nouvelle fiche</button>`))}
       ${notice}
-      ${moduleRenewalMetrics(records, profile)}
+      ${moduleRenewalMetrics(records, profile, module)}
       <div class="toolbar compact-list-toolbar module-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans ${escapeHtml(module.label)}…" value="${escapeHtml(state.listSearch)}" /></label><label>État<select data-list-status><option value="all">Tous</option><option value="active" ${state.listStatus === "active" ? "selected" : ""}>Actives</option><option value="review" ${state.listStatus === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${state.listStatus === "archived" ? "selected" : ""}>Archivées</option></select></label><div class="toolbar-summary"><strong>${records.length}</strong> sur ${scopedRecords.length}</div></div>
-      <section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr><th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="module:${record.id}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="module:${record.id}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>
+      <section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr><th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); const domainCount = Array.isArray(record.details?.certificateChecks) ? record.details.certificateChecks.length : 0; return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="module:${record.id}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}${module.id === "ssl-tracker" && domainCount ? `<small class="table-cell-note">${domainCount} domaine${domainCount === 1 ? "" : "s"} contrôlé${domainCount === 1 ? "" : "s"}</small>` : ""}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="module:${record.id}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>
     </div>`;
   }
 
@@ -3462,7 +3503,7 @@
     const rules = state.workspace.settings.workflows;
     const now = Date.now();
     const operationalAssets = assetRegistry(activeOrganizationId()).filter((asset) => ["configuration", "procedure", "module"].includes(asset.type) && !asset.archived);
-    const expiryAssets = operationalAssets.filter((asset) => asset.type === "module" && asset.raw.expiresOn && ((new Date(`${asset.raw.expiresOn}T12:00:00`) - now) / 86400000) <= rules.expiryDays);
+    const expiryAssets = operationalAssets.filter((asset) => asset.type === "module" && asset.raw.expiresOn && (asset.raw.moduleId === "ssl-tracker" ? (asset.raw.details?.certificateChecks || []).some((check) => ["expired", "expiring"].includes(check.status)) : ((new Date(`${asset.raw.expiresOn}T12:00:00`) - now) / 86400000) <= rules.expiryDays));
     const staleAssets = operationalAssets.filter((asset) => {
       const reviewedAt = asset.type === "configuration" ? asset.raw.lastReviewed : asset.raw.updatedAt;
       return reviewedAt && ((now - new Date(`${reviewedAt}T12:00:00`)) / 86400000) >= rules.staleDays;
@@ -4392,12 +4433,13 @@
       const reviewLabels = { draft: "Brouillon", "in-review": "En révision", approved: "Approuvée", stale: "À revoir" };
       const reviewState = item.reviewState || "draft";
       const reviewTone = reviewState === "approved" ? "success" : reviewState === "in-review" ? "warning" : "muted";
+      const certificateMonitor = item.moduleId === "ssl-tracker" ? certificateChecksMarkup(item) : "";
       const checklist = item.checklist?.length ? (() => {
         const completed = item.checklist.filter((step) => step.done).length;
         const percent = Math.round((completed / item.checklist.length) * 100);
         return `<section class="interactive-checklist"><div class="checklist-summary"><div><h3>Checklist opérationnelle</h3><p><strong>${completed}/${item.checklist.length}</strong> étapes terminées</p></div><span>${percent}%</span></div><div class="checklist-progress" aria-label="Progression ${percent}%"><i style="width:${percent}%"></i></div><ul class="asset-checklist">${item.checklist.map((step, index) => `<li class="${step.done ? "done" : ""}"><button type="button" data-action="toggle-checklist-step" data-id="${escapeHtml(item.id)}" data-step-index="${index}" aria-pressed="${step.done}" ${canWrite() && !asset.archived ? "" : "disabled"}><span>${step.done ? "✓" : ""}</span><em>${escapeHtml(step.label)}</em></button></li>`).join("")}</ul></section>`;
       })() : "";
-      return `<dl class="asset-facts-grid"><div><dt>${escapeHtml(profile.ownerLabel)}</dt><dd>${escapeHtml(item.owner || "—")}</dd></div><div><dt>Site</dt><dd>${escapeHtml(siteName(item.siteId))}</dd></div><div><dt>${escapeHtml(profile.expiryLabel)}</dt><dd>${formatDate(item.expiresOn)}</dd></div><div><dt>${escapeHtml(profile.referenceLabel)}</dt><dd>${escapeHtml(item.reference || "—")}</dd></div><div><dt>État</dt><dd><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></dd></div><div><dt>Mise à jour</dt><dd>${formatDate(item.updatedAt)}</dd></div><div><dt>Révision</dt><dd><span class="status-badge ${reviewTone}">${escapeHtml(reviewLabels[reviewState] || reviewState)}</span></dd></div><div><dt>Responsable de révision</dt><dd>${escapeHtml(item.reviewOwner || "—")}</dd></div><div><dt>Révision prévue</dt><dd>${formatDate(item.reviewDueAt)}</dd></div><div><dt>Dernière approbation</dt><dd>${item.approvedAt ? `${formatDateTime(item.approvedAt)} · ${escapeHtml(item.approvedBy || "—")}` : "—"}</dd></div>${profileDetails.facts}</dl><div class="asset-copy asset-document-copy">${profileDetails.sections}<h3>Résumé</h3><p>${renderMentionText(item.summary || "Aucun résumé.")}</p><h3>Notes</h3><p>${renderMentionText(item.notes || "Aucune note.")}</p>${item.tags?.length ? `<h3>Étiquettes</h3><div class="asset-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}${checklist}</div>`;
+      return `<dl class="asset-facts-grid"><div><dt>${escapeHtml(profile.ownerLabel)}</dt><dd>${escapeHtml(item.owner || "—")}</dd></div><div><dt>Site</dt><dd>${escapeHtml(siteName(item.siteId))}</dd></div><div><dt>${escapeHtml(profile.expiryLabel)}</dt><dd>${formatDate(item.expiresOn)}</dd></div><div><dt>${escapeHtml(profile.referenceLabel)}</dt><dd>${escapeHtml(item.reference || "—")}</dd></div><div><dt>État</dt><dd><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></dd></div><div><dt>Mise à jour</dt><dd>${formatDate(item.updatedAt)}</dd></div><div><dt>Révision</dt><dd><span class="status-badge ${reviewTone}">${escapeHtml(reviewLabels[reviewState] || reviewState)}</span></dd></div><div><dt>Responsable de révision</dt><dd>${escapeHtml(item.reviewOwner || "—")}</dd></div><div><dt>Révision prévue</dt><dd>${formatDate(item.reviewDueAt)}</dd></div><div><dt>Dernière approbation</dt><dd>${item.approvedAt ? `${formatDateTime(item.approvedAt)} · ${escapeHtml(item.approvedBy || "—")}` : "—"}</dd></div>${profileDetails.facts}</dl>${certificateMonitor}<div class="asset-copy asset-document-copy">${profileDetails.sections}<h3>Résumé</h3><p>${renderMentionText(item.summary || "Aucun résumé.")}</p><h3>Notes</h3><p>${renderMentionText(item.notes || "Aucune note.")}</p>${item.tags?.length ? `<h3>Étiquettes</h3><div class="asset-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}${checklist}</div>`;
     }
     if (asset.type === "vault") {
       const revealed = state.revealedVaultItem?.id === item.id ? state.revealedVaultItem : null;
@@ -4430,6 +4472,7 @@
   function assetStatusPresentation(asset) {
     if (asset.archived) return { tone: "muted", label: "Archivé" };
     if (["review", "draft"].includes(asset.status)) return { tone: "warning", label: asset.status === "draft" ? "Brouillon" : "À réviser" };
+    if (asset.type === "module" && asset.moduleId === "ssl-tracker") return certificateRecordPresentation(asset.raw);
     if (asset.type === "configuration" && asset.status !== "documented") return { tone: "warning", label: statusLabel(asset.status) };
     if (asset.type === "procedure") return { tone: asset.status === "published" ? "success" : "warning", label: asset.status === "published" ? "Publiée" : "En révision" };
     return { tone: "success", label: "Actif" };
@@ -4467,6 +4510,7 @@
     const edit = canWrite() && asset.editAction ? `<button class="secondary" type="button" data-action="${asset.editAction}" data-id="${escapeHtml(asset.id)}"${asset.moduleId ? ` data-module-id="${escapeHtml(asset.moduleId)}"` : ""}>${icon("edit", 15)} Modifier</button>` : "";
     const archive = canWrite() && asset.type !== "vault" ? `<button class="secondary ${asset.archived ? "" : "danger"}" type="button" data-action="toggle-asset-archive" data-asset-ref="${escapeHtml(asset.ref)}">${icon(asset.archived ? "refresh" : "trash", 15)} ${asset.archived ? "Restaurer" : "Archiver"}</button>` : "";
     const reveal = asset.type === "vault" ? (state.revealedVaultItem?.id === asset.id ? `<button class="secondary" type="button" data-action="lock-vault">${icon("lock", 15)} Verrouiller le coffre</button>` : `<button class="secondary" type="button" data-action="reveal-vault-item" data-id="${escapeHtml(asset.id)}" ${asset.archived ? "disabled" : ""}>${icon("key", 15)} Ouvrir</button>`) : "";
+    const certificateCheck = canWrite() && asset.type === "module" && asset.moduleId === "ssl-tracker" && !asset.archived ? `<button class="secondary" type="button" data-action="check-ssl-record" data-id="${escapeHtml(asset.id)}">${icon("refresh", 15)} Vérifier maintenant</button>` : "";
     const reviewActions = asset.type === "module" && !asset.archived
       ? asset.raw.reviewState === "in-review"
         ? (isAdministrator() ? `<button class="primary" type="button" data-action="approve-record" data-id="${escapeHtml(asset.id)}">${icon("check", 15)} Approuver</button>` : "")
@@ -4478,7 +4522,7 @@
     return `<div class="asset-page">
       <header class="asset-page-header">
         <div class="asset-breadcrumbs">${organizationBreadcrumbMarkup(asset.organizationId)}${icon("chevron", 13)}<button type="button" data-route="${escapeHtml(list.route)}">${escapeHtml(list.label)}</button>${icon("chevron", 13)}<span>${escapeHtml(asset.label)}</span></div>
-        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions"><span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${reveal}${reviewActions}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
+        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions"><span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${certificateCheck}${reveal}${reviewActions}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
       </header>
       <div class="asset-page-layout">
         <div class="asset-page-main">
@@ -4660,8 +4704,8 @@
         <label>${t("site")}<select name="siteId"><option value="">Aucun site précis</option>${siteOptions(item?.siteId, organizationId)}</select></label>
         <label>${escapeHtml(profile.ownerLabel)}<input name="owner" value="${escapeHtml(item?.owner || "")}" maxlength="96" /></label>
         <label>${t("status")}<select name="status"><option value="active" ${item?.status === "active" ? "selected" : ""}>Active</option><option value="review" ${item?.status === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${item?.status === "archived" ? "selected" : ""}>Archivée</option></select></label>
-        <label>${escapeHtml(profile.expiryLabel)}<input name="expiresOn" type="date" value="${escapeHtml(item?.expiresOn || "")}" ${profile.expiryRequired ? "required" : ""}/></label>
-        <label>${escapeHtml(profile.referenceLabel)}<input name="reference" value="${escapeHtml(item?.reference || "")}" maxlength="500" ${profile.referenceRequired ? "required" : ""}/></label>
+        <label>${escapeHtml(profile.expiryLabel)}<input name="expiresOn" type="date" value="${escapeHtml(item?.expiresOn || "")}" ${profile.expiryRequired ? "required" : ""} ${module.id === "ssl-tracker" ? "readonly" : ""}/>${module.id === "ssl-tracker" ? "<small>Calculée depuis le domaine qui expire en premier.</small>" : ""}</label>
+        <label>${escapeHtml(profile.referenceLabel)}<input name="reference" value="${escapeHtml(item?.reference || "")}" maxlength="500" ${profile.referenceRequired ? "required" : ""} ${module.id === "ssl-tracker" ? "readonly" : ""}/>${module.id === "ssl-tracker" ? "<small>Mis à jour automatiquement à partir des certificats lus.</small>" : ""}</label>
         ${moduleProfileFieldsMarkup(module, item)}
         <label class="span-2">Étiquettes<input name="tags" value="${escapeHtml((item?.tags || template?.defaultTags || []).join(", "))}" maxlength="300" placeholder="production, critique, renouvellement" /></label>
         <label class="span-2">Résumé<textarea name="summary" maxlength="1000" rows="3">${escapeHtml(item?.summary || template?.defaultSummary || "")}</textarea></label>
@@ -5024,13 +5068,33 @@
       navigate("module/passwords");
       return;
     }
-    const writerActions = new Set(["new-organization", "edit-organization", "edit-quick-notes", "new-site", "edit-site", "new-configuration", "edit-configuration", "new-procedure", "edit-procedure", "new-relation", "edit-relation", "add-related-item", "quick-relate-item", "new-template", "edit-template", "use-template", "new-vault-item", "edit-vault-item", "new-module-record", "edit-module-record", "select-file-sharing-server", "remove-file-sharing-server", "select-printing-configuration", "remove-printing-configuration", "restore-workspace", "delete-attachment", "toggle-checklist-step", "toggle-asset-archive"]);
+    const writerActions = new Set(["new-organization", "edit-organization", "edit-quick-notes", "new-site", "edit-site", "new-configuration", "edit-configuration", "new-procedure", "edit-procedure", "new-relation", "edit-relation", "add-related-item", "quick-relate-item", "new-template", "edit-template", "use-template", "new-vault-item", "edit-vault-item", "new-module-record", "edit-module-record", "select-file-sharing-server", "remove-file-sharing-server", "select-printing-configuration", "remove-printing-configuration", "restore-workspace", "delete-attachment", "toggle-checklist-step", "toggle-asset-archive", "check-ssl-record"]);
     const administratorActions = new Set(["delete-organization", "new-user", "edit-user", "reset-user-password", "reset-user-mfa", "revoke-user-sessions", "toggle-user", "refresh-site-health", "probe-local-port", "probe-public-site"]);
     if (writerActions.has(action) && !canWrite()) { toast("Ce compte est en consultation seulement.", "error"); return; }
     if (administratorActions.has(action) && !isAdministrator()) { toast("Un compte administrateur local est requis.", "error"); return; }
     if (action === "refresh-site-health") {
       await loadDeploymentHealth();
       toast("État local de l’instance actualisé.");
+      return;
+    }
+    if (action === "check-ssl-record") {
+      const recordId = actionTarget.dataset.id || "";
+      actionTarget.disabled = true;
+      actionTarget.innerHTML = `${icon("refresh", 15)} Vérification…`;
+      try {
+        const payload = await api(`/api/ssl-tracker/${encodeURIComponent(recordId)}/check`, { method: "POST", body: "{}" });
+        state.workspace = payload.document.data;
+        state.revision = payload.document.revision;
+        state.entityVersions = payload.document.entityVersions || {};
+        normalizeWorkspace();
+        await Promise.all([loadWorkspaceHistory(), loadAssetHistory(`module:${recordId}`)]);
+        render();
+        const counts = payload.result?.counts || {};
+        toast(`${counts.total || 0} domaine${counts.total === 1 ? "" : "s"} vérifié${counts.total === 1 ? "" : "s"}.`);
+      } catch (error) {
+        toast(error.message, "error");
+        render();
+      }
       return;
     }
     if (action === "probe-public-site") {
@@ -6256,6 +6320,18 @@
           if (moduleId === FILE_SHARING_MODULE_ID) syncFileSharingServerRelations(workspace, item, serverConfigurationIds);
           if (moduleId === PRINTING_MODULE_ID) syncPrintingConfigurationRelations(workspace, item, printServerConfigurationIds, printerConfigurationIds);
         }, existing ? "Fiche mise à jour" : "Fiche créée", `${module.label} · ${item.title}`, "module");
+        if (moduleId === "ssl-tracker" && details.autoCheck === "Activée") {
+          try {
+            const payload = await api(`/api/ssl-tracker/${encodeURIComponent(item.id)}/check`, { method: "POST", body: "{}" });
+            state.workspace = payload.document.data;
+            state.revision = payload.document.revision;
+            state.entityVersions = payload.document.entityVersions || {};
+            normalizeWorkspace();
+            toast(`${payload.result?.counts?.total || 0} certificat${payload.result?.counts?.total === 1 ? "" : "s"} vérifié${payload.result?.counts?.total === 1 ? "" : "s"}.`);
+          } catch (error) {
+            toast(`Fiche enregistrée, mais le contrôle TLS a échoué : ${error.message}`, "error");
+          }
+        }
         state.activeTemplate = null;
         navigate(`asset/${encodeURIComponent(`module:${item.id}`)}`);
         return;
