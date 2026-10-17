@@ -18,6 +18,15 @@ test("Windows updater proves scheduled-task ownership before stopping a listener
   assert.doesNotMatch(source, /Stop-Process\s+-Name\s+node/i);
 });
 
+test("signed update lifecycle derives forward QA versions from the current release", async () => {
+  const source = await readFile(new URL("../scripts/Test-AtlasSignedUpdateLifecycle.ps1", import.meta.url), "utf8");
+  assert.match(source, /\$successVersion\s*=/);
+  assert.match(source, /\$rollbackVersion\s*=/);
+  assert.match(source, /'-ExpectedVersion',\$successVersion/);
+  assert.match(source, /'-ExpectedVersion',\$rollbackVersion/);
+  assert.doesNotMatch(source, /0\.16\.3|0\.16\.4/);
+});
+
 function decodeBase32(value) {
   let bits = 0;
   let accumulator = 0;
