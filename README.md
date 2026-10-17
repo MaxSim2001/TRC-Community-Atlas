@@ -1,6 +1,6 @@
 # TRC Community Atlas
 
-Current version: **0.16.2**
+Current version: **0.17.0**
 
 [![Atlas tests](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml/badge.svg)](https://github.com/MaxSim2001/TRC-Community-Atlas/actions/workflows/tests.yml)
 
@@ -51,8 +51,14 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
 - a full-page Markdown document editor;
 - a documentation-quality dashboard with explicit ownership, age, duplicate,
   relationship, and schema checks;
+- a unified action center, personal favorites, configurable dashboard widgets,
+  saved views, and keyboard command palette;
+- audited bulk editing for non-secret records and printable client reports with
+  intentionally minimized JSON export;
 - guided CSV import with skip, fill-missing-fields, or explicit duplicate
-  creation strategies;
+  creation strategies, plus reusable per-user column-mapping profiles;
+- starter template packs for MSP onboarding, Microsoft 365, and network-core
+  documentation;
 - previewed, reversible module consolidation and versioned local-module
   schemas;
 - encrypted full backups, scheduled backup management, and isolated restore
@@ -60,6 +66,8 @@ TRC Account, a cloud subscription, telemetry, or a separate database server.
 - signed GitHub updates with Ed25519, SHA-256 verification, MFA confirmation,
   snapshots, and automatic rollback;
 - a bilingual English/French interface and mobile PWA support;
+- a limited offline shell with an explicit connectivity warning; business data,
+  APIs, and vault content are never cached;
 - no telemetry and no external content dependency.
 
 ## Windows installation

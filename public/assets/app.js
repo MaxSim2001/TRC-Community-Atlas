@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.16.2";
+  const ATLAS_VERSION = "0.17.0";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -188,11 +188,25 @@
     createdApiToken: "",
     createdWebhookSecret: "",
     importPreview: null,
+    importProfileId: "",
     entityVersions: {},
     serverSearch: { query: "", scope: "", items: [], total: 0, loading: false },
     qualityReport: null,
     qualityLoading: false,
     moduleMergePreview: null,
+    selectedAssetRefs: new Set(),
+    activeSavedViewId: "",
+    savedViewContext: null,
+    actionSearch: "",
+    actionSeverity: "all",
+    actionOrganization: "all",
+    auditActor: "all",
+    auditAction: "all",
+    auditOrganization: "all",
+    auditDateFrom: "",
+    commandPaletteOpen: false,
+    online: window.navigator?.onLine !== false,
+    commandPaletteQuery: "",
   };
 
   let sessionExpiryTimer = null;
@@ -217,6 +231,43 @@
 
   const FILE_SHARING_MODULE_ID = "service-file-sharing";
   const PRINTING_MODULE_ID = "service-printing";
+  const defaultDashboardWidgets = ["priorities", "metrics", "password-health", "recent", "quick-access"];
+  const starterPacks = [
+    {
+      id: "msp-client",
+      name: "Démarrage client MSP",
+      description: "Les fiches essentielles pour prendre en charge une nouvelle compagnie.",
+      templates: [
+        ["Contact d’escalade", "contacts", ["onboarding", "urgence"], "Contact principal et chemin d’escalade.", "Téléphone :\nCourriel :\nDisponibilités :\nEscalade :"],
+        ["Accès Internet principal", "service-internet-wan", ["onboarding", "wan"], "Lien Internet, fournisseur et support.", "Fournisseur :\nCircuit :\nSupport :\nAdresse publique :"],
+        ["Politique de sauvegarde", "service-backup", ["onboarding", "continuité"], "Portée, conservation et test de restauration.", "Sources :\nDestination :\nRétention :\nDernier test :"],
+        ["Domaine principal", "domain-tracker", ["onboarding", "domaine"], "Registraire, DNS et renouvellement.", "Registraire :\nDNS :\nRenouvellement automatique :"],
+        ["Certificats publics", "ssl-tracker", ["onboarding", "tls"], "Domaines publics et certificats à surveiller.", "Domaines :\nResponsable :\nProcédure de renouvellement :"],
+      ],
+    },
+    {
+      id: "microsoft-365",
+      name: "Microsoft 365",
+      description: "Identité, messagerie, licences et sécurité Microsoft 365.",
+      templates: [
+        ["Tenant Microsoft 365", "custom-microsoft-365", ["m365", "tenant"], "Identité et administration du tenant.", "Tenant ID :\nDomaines :\nAdministrateurs :\nSupport :"],
+        ["Accès conditionnels", "service-acces-conditionnels-m365", ["m365", "sécurité"], "Politiques et exclusions contrôlées.", "Politiques :\nComptes exclus :\nProcédure d’urgence :"],
+        ["Licences Microsoft", "service-licensing", ["m365", "licences"], "Licences attribuées et renouvellement.", "Contrat :\nQuantités :\nRenouvellement :"],
+        ["Messagerie Microsoft", "service-email", ["m365", "courriel"], "Configuration, routage et protection du courriel.", "Domaines :\nConnecteurs :\nProtection :"],
+      ],
+    },
+    {
+      id: "network-core",
+      name: "Réseau essentiel",
+      description: "WAN, LAN, Wi-Fi, pare-feu et plans d’adressage.",
+      templates: [
+        ["Pare-feu principal", "custom-firewall", ["réseau", "critique"], "Pare-feu, administration et dépendances.", "Modèle :\nVersion :\nAccès :\nSauvegarde :"],
+        ["Réseau local", "service-lan", ["réseau", "lan"], "Segments, passerelles et responsabilités.", "Sous-réseaux :\nVLAN :\nPasserelles :"],
+        ["Réseau sans fil", "service-wireless", ["réseau", "wifi"], "SSID, authentification et couverture.", "SSID :\nAuthentification :\nContrôleur :"],
+        ["Lien Internet", "service-internet-wan", ["réseau", "wan"], "Circuits et contacts fournisseur.", "Fournisseur :\nCircuit :\nDébit :\nSupport :"],
+      ],
+    },
+  ];
 
   const navItems = [
     ["workspace", "dashboard", "grid", "dashboard"],
@@ -928,6 +979,7 @@
       info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
       compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5Z"/>',
       layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/>',
+      star: '<path d="m12 2.8 2.85 5.77 6.37.93-4.61 4.49 1.09 6.34L12 17.34l-5.7 2.99 1.09-6.34L2.78 9.5l6.37-.93L12 2.8Z"/>',
     };
     return `<svg class="icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.grid}</svg>`;
   }
@@ -1238,7 +1290,7 @@
   }
 
   function requiresOrganizationContext(page = state.page) {
-    return ["sites", "configurations", "procedures", "relations", "workflows", "module", "record", "asset", "configuration"].includes(page);
+    return ["sites", "configurations", "procedures", "relations", "workflows", "reports", "module", "record", "asset", "configuration"].includes(page);
   }
 
   function creationOrganizationId(actionLabel = "créer cette fiche") {
@@ -1846,6 +1898,7 @@
           if (state.page === "asset" && state.detailId) await loadAssetHistory(state.detailId);
           await loadUsers();
           if (state.page === "settings" && state.user?.role === "administrator") await loadDeploymentHealth({ renderAfter: false });
+          if (state.page === "actions" && state.user?.role === "administrator") await Promise.all([loadDeploymentHealth({ renderAfter: false }), loadBackupStatus({ renderAfter: false })]);
           state.phase = "app";
           if (state.page === "asset" && state.detailId?.startsWith("vault:") && vaultSessionUnlocked()) {
             await revealVaultItem(state.detailId.slice(6), { promptOnLocked: false });
@@ -2057,6 +2110,34 @@
     const source = Array.isArray(accountPreference) ? accountPreference : stored;
     const valid = Array.isArray(source) ? source.filter((id) => moduleMap.has(id)) : defaultVisibleModuleIds;
     state.visibleModuleIds = new Set(valid);
+  }
+
+  function userPreferences() {
+    return state.user?.preferences && typeof state.user.preferences === "object" ? state.user.preferences : {};
+  }
+
+  async function saveUserPreferences(patch) {
+    const payload = await api("/api/me/preferences", { method: "PUT", body: JSON.stringify(patch) });
+    state.user = payload.user;
+    return userPreferences();
+  }
+
+  function favoriteAssetRefs() {
+    return Array.isArray(userPreferences().favoriteAssetRefs) ? userPreferences().favoriteAssetRefs : [];
+  }
+
+  function savedViewsFor(page = state.page, moduleId = state.detailId || "") {
+    return (Array.isArray(userPreferences().savedViews) ? userPreferences().savedViews : []).filter((view) => view.page === page && (page !== "module" || view.moduleId === moduleId));
+  }
+
+  function dashboardWidgets() {
+    const selected = userPreferences().dashboardWidgets;
+    return Array.isArray(selected) ? selected.filter((id) => defaultDashboardWidgets.includes(id)) : defaultDashboardWidgets;
+  }
+
+  function isActionSnoozed(key) {
+    const now = Date.now();
+    return (userPreferences().snoozedActions || []).some((item) => item.key === key && Date.parse(item.until) > now);
   }
 
   async function loadUsers() {
@@ -2400,6 +2481,7 @@
               <div id="search-results"></div>
             </div>
             <div class="topbar-actions">
+              <button class="icon-button" type="button" data-action="open-command-palette" title="Commandes (Alt+K)" aria-label="Ouvrir la palette de commandes">${icon("search", 19)}</button>
               <button class="icon-button" data-action="toggle-theme" title="${t("appearance")}" aria-label="${t("appearance")}">${icon(state.theme === "dark" ? "sun" : "moon")}</button>
               <button class="language-button" data-action="toggle-locale" aria-label="${t("language")}">${state.locale.toUpperCase()}</button>
               <div class="help-menu-root" data-help-menu-root>
@@ -2412,6 +2494,7 @@
               </div>
             </div>
           </header>
+          ${state.online ? "" : `<div class="offline-banner" role="status">${icon("alert", 17)}<span><strong>Mode hors ligne limité</strong> L’interface reste consultable, mais les API, le coffre et les enregistrements sont indisponibles jusqu’à la reconnexion.</span></div>`}
           <main id="main-content" tabindex="-1">${renderPage()}</main>
         </div>
       </div>`;
@@ -2438,6 +2521,7 @@
         <button class="nav-item ${state.page === "templates" ? "active" : ""}" data-route="templates">${icon("file")}<span>Modèles</span>${state.page === "templates" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "workflows" ? "active" : ""}" data-route="workflows">${icon("refresh")}<span>Workflows</span>${state.page === "workflows" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "quality" ? "active" : ""}" data-route="quality">${icon("shield")}<span>Qualité</span>${state.page === "quality" ? '<span class="nav-dot"></span>' : ""}</button>
+        <button class="nav-item ${state.page === "reports" ? "active" : ""}" data-route="reports">${icon("file")}<span>Rapport client</span>${state.page === "reports" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "versions" ? "active" : ""}" data-route="versions">${icon("history")}<span>Versions</span>${state.page === "versions" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "data-tools" ? "active" : ""}" data-route="data-tools">${icon("download")}<span>Import / Export</span>${state.page === "data-tools" ? '<span class="nav-dot"></span>' : ""}</button>
         <button class="nav-item ${state.page === "manage-modules" ? "active" : ""}" data-route="manage-modules">${icon("settings")}<span>Gérer les modules</span>${state.page === "manage-modules" ? '<span class="nav-dot"></span>' : ""}</button>
@@ -2619,6 +2703,8 @@
       "my-account": renderMyAccount,
       settings: renderSettings,
       help: renderHelpCenter,
+      actions: renderActionCenter,
+      reports: renderOrganizationReport,
     };
     return (pages[state.page] || pages.dashboard)();
   }
@@ -2692,33 +2778,96 @@
     const scopeLabel = state.dashboardIncludeTests
       ? (state.locale === "fr" ? "Organisations normales et de test incluses" : "Regular and test organizations included")
       : (state.locale === "fr" ? "Organisations [TEST] masquées" : "[TEST] organizations hidden");
+    const widgets = new Set(dashboardWidgets());
+    const favorites = favoriteAssetRefs().map((ref) => assetByRef(ref)).filter(Boolean).slice(0, 8);
+    const headerActions = `<div class="page-header-actions"><button class="secondary" type="button" data-action="dashboard-widgets">${icon("settings", 15)} Personnaliser</button>${writeButton(activeOrganizationId() ? `<button class="primary" data-action="new-configuration">${icon("plus")} ${t("addConfiguration")}</button>` : `<button class="primary" data-action="new-organization">${icon("plus")} ${t("addOrganization")}</button>`)}</div>`;
     return `<div class="page dashboard-page">
-      ${pageHeader(t("dashboard"), state.locale === "fr" ? "Des faits vérifiables pour savoir quoi traiter maintenant." : "Verifiable facts showing what needs attention now.", writeButton(activeOrganizationId() ? `<button class="primary" data-action="new-configuration">${icon("plus")} ${t("addConfiguration")}</button>` : `<button class="primary" data-action="new-organization">${icon("plus")} ${t("addOrganization")}</button>`))}
-      <section class="priority-hero">
+      ${pageHeader(t("dashboard"), state.locale === "fr" ? "Des faits vérifiables pour savoir quoi traiter maintenant." : "Verifiable facts showing what needs attention now.", headerActions)}
+      ${widgets.has("priorities") ? `<section class="priority-hero">
         <div class="priority-hero-heading"><div><p class="eyebrow">${state.locale === "fr" ? "PRIORITÉS DOCUMENTAIRES" : "DOCUMENTATION PRIORITIES"}</p><div class="priority-title-line"><strong>${priorities.total}</strong><div><h2>${state.locale === "fr" ? "signaux à traiter" : "signals to address"}</h2><p>${state.locale === "fr" ? "Aucune note arbitraire : chaque signal correspond à un critère visible." : "No arbitrary score: every signal maps to a visible criterion."}</p></div></div></div><button class="priority-main-action" type="button" data-action="open-priorities" data-priority="all">${state.locale === "fr" ? "Voir les priorités" : "View priorities"} ${icon("arrow", 16)}</button></div>
         <div class="priority-grid">${priorities.categories.map((category) => `<button class="priority-card ${category.tone}" type="button" data-action="open-priorities" data-priority="${category.id}" aria-label="${escapeHtml(category.label)} : ${category.items.length}. ${escapeHtml(category.description)}"><span class="priority-card-icon">${icon(category.icon, 18)}</span><span><strong>${escapeHtml(category.label)}</strong><small>${escapeHtml(category.description)}</small></span><b>${category.items.length}</b></button>`).join("")}</div>
-        <div class="priority-scope">${icon("shield", 15)}<span>${escapeHtml(scopeLabel)}</span><button type="button" data-action="toggle-dashboard-tests">${state.dashboardIncludeTests ? (state.locale === "fr" ? "Masquer les tests" : "Hide tests") : (state.locale === "fr" ? "Inclure les tests" : "Include tests")}</button></div>
-      </section>
-      <section class="metrics-grid dashboard-stats-grid">
+        <div class="priority-scope">${icon("shield", 15)}<span>${escapeHtml(scopeLabel)}</span><button type="button" data-route="actions">${state.locale === "fr" ? "Centre d’actions" : "Action center"}</button><button type="button" data-action="toggle-dashboard-tests">${state.dashboardIncludeTests ? (state.locale === "fr" ? "Masquer les tests" : "Hide tests") : (state.locale === "fr" ? "Inclure les tests" : "Include tests")}</button></div>
+      </section>` : ""}
+      ${widgets.has("metrics") ? `<section class="metrics-grid dashboard-stats-grid">
         ${metricCard("building", priorities.organizations.length, t("organizations"), "répertoriées localement", "cyan")}
         ${metricCard("pin", priorities.sites.length, t("sites"), `${priorities.organizations.length} organisations`, "blue")}
         ${metricCard("server", priorities.configurations.length, t("configurations"), `${critical.length} critiques`, "violet")}
         ${metricCard("grid", priorities.moduleRecords.length, "Fiches de modules", `${state.visibleModuleIds.size} modules visibles`, "mint")}
         ${metricCard("book", priorities.procedures.length, t("procedures"), `${priorities.procedures.filter((item) => item.status === "review").length} en révision`, "blue")}
         ${metricCard("clock", expiringSoon.length, `Échéances à ${priorities.expiryDays} jours`, expiringSoon.length ? "Attention requise" : "Aucune échéance proche", expiringSoon.length ? "violet" : "cyan")}
-      </section>
-      ${passwordHealthCardMarkup(state.vaultItems.filter((item) => priorities.organizationIds.has(item.organizationId)), { global: true, scopeLabel })}
-      <div class="dashboard-grid">
+      </section>` : ""}
+      ${widgets.has("password-health") ? passwordHealthCardMarkup(state.vaultItems.filter((item) => priorities.organizationIds.has(item.organizationId)), { global: true, scopeLabel }) : ""}
+      ${widgets.has("quick-access") ? `<section class="panel dashboard-favorites"><div class="panel-heading"><div><p class="eyebrow">ACCÈS RAPIDES</p><h2>Favoris personnels</h2></div><span class="count-pill">${favorites.length}</span></div><div class="dashboard-favorite-grid">${favorites.length ? favorites.map((asset) => `<button type="button" data-action="open-asset" data-asset-ref="${escapeHtml(asset.ref)}"><span class="type-icon">${icon(asset.icon, 16)}</span><span><strong>${escapeHtml(asset.label)}</strong><small>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.kind)}</small></span>${icon("chevron", 14)}</button>`).join("") : `<div class="dashboard-favorites-empty">${icon("star", 19)}<span><strong>Aucun favori</strong><small>Ouvrez une fiche puis utilisez l’étoile pour l’épingler ici.</small></span></div>`}</div></section>` : ""}
+      ${widgets.has("recent") ? `<div class="dashboard-grid">
         <section class="panel attention-panel"><div class="panel-heading"><div><p class="eyebrow">À SUIVRE</p><h2>Éléments avec un statut à traiter</h2></div><span class="count-pill warning">${reviewItems.length}</span></div>
           <div class="attention-list">${reviewItems.length ? reviewItems.slice(0, 4).map((item) => `<button class="attention-row" data-action="open-asset" data-asset-ref="${escapeHtml(item.ref)}"><span class="type-icon">${icon(item.icon, 17)}</span><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.subtitle)} · ${escapeHtml(item.reason)}</small></span>${icon("chevron", 16)}</button>`).join("") : emptyState("Aucun statut Brouillon ou À réviser dans cette portée.")}</div>
         </section>
         <section class="panel activity-panel"><div class="panel-heading"><div><p class="eyebrow">JOURNAL</p><h2>Activité récente</h2></div><button class="text-button" data-route="activity">Tout voir ${icon("arrow", 15)}</button></div>
           <div class="timeline">${w.activities.slice(0, 5).map(activityRow).join("")}</div>
         </section>
-      </div>
+      </div>` : ""}
       <section class="panel organization-overview"><div class="panel-heading"><div><p class="eyebrow">STRUCTURE</p><h2>Organisations</h2></div><div class="panel-heading-actions"><button class="text-button" data-route="organizations">Voir les organisations</button>${writeButton(`<button class="secondary compact" data-action="new-organization">${icon("plus", 15)} ${t("addOrganization")}</button>`)}</div></div>
         <div class="organization-strip">${priorities.organizations.slice(0, 6).map((org) => organizationMiniCard(org)).join("")}</div>
       </section>
+    </div>`;
+  }
+
+  function actionCenterItems() {
+    const severityByCategory = { owners: "normal", reviews: "normal", deadlines: "critical", relations: "high", status: "normal" };
+    const priorities = dashboardPriorities();
+    const items = priorities.categories.flatMap((category) => category.items.map((item) => {
+      const asset = item.ref ? assetByRef(item.ref) : null;
+      return { ...item, key: `${category.id}:${item.ref || normalizeSearch(item.label).replace(/\s+/g, "-")}`, category: category.id, severity: severityByCategory[category.id] || "normal", organizationId: asset?.organizationId || "", route: item.ref ? `asset/${encodeURIComponent(item.ref)}` : "relations" };
+    }));
+    if (isAdministrator()) {
+      for (const check of state.deploymentHealth?.checks || []) {
+        if (check.status === "ok" || check.status === "neutral") continue;
+        items.push({ key: `health:${check.id || normalizeSearch(check.label).replace(/\s+/g, "-")}`, category: "health", severity: check.status === "error" ? "critical" : "high", organizationId: "", icon: "activity", label: check.label || "Santé du site", subtitle: "Instance Atlas", reason: check.detail || check.message || "Vérification requise", route: "settings/health" });
+      }
+      if (state.backupStatus?.settings?.enabled && state.backupStatus.settings.lastError) items.push({ key: "backup:last-failed", category: "backup", severity: "critical", organizationId: "", icon: "download", label: "Dernière sauvegarde échouée", subtitle: "Protection de l’instance", reason: state.backupStatus.settings.lastError, route: "settings/backups" });
+    }
+    if (canAccessVault() && state.workspace.settings.security.passwordRotationEnabled) {
+      for (const item of state.vaultItems.filter((entry) => !entry.archived && ["due", "soon"].includes(vaultRotationPresentation(entry).state))) {
+        const rotation = vaultRotationPresentation(item);
+        items.push({ key: `vault-rotation:${item.id}`, category: "vault", severity: rotation.state === "due" ? "critical" : "high", organizationId: item.organizationId, icon: "key", label: item.title, subtitle: `${orgName(item.organizationId)} · Coffre`, reason: `Rotation ${rotation.label.toLowerCase()}`, route: `asset/${encodeURIComponent(`vault:${item.id}`)}` });
+      }
+    }
+    return items.filter((item) => !isActionSnoozed(item.key));
+  }
+
+  function renderActionCenter() {
+    const query = normalizeSearch(state.actionSearch);
+    const allItems = actionCenterItems();
+    const organizations = [...new Set(allItems.map((item) => item.organizationId).filter(Boolean))];
+    const items = allItems.filter((item) => (state.actionSeverity === "all" || item.severity === state.actionSeverity) && (state.actionOrganization === "all" || item.organizationId === state.actionOrganization) && (!query || normalizeSearch([item.label, item.subtitle, item.reason, item.category].join(" ")).includes(query)));
+    const counts = { critical: allItems.filter((item) => item.severity === "critical").length, high: allItems.filter((item) => item.severity === "high").length, normal: allItems.filter((item) => item.severity === "normal").length };
+    return `<div class="page action-center-page">${pageHeader("Centre d’actions", "Une file locale et explicable de ce qui demande réellement une intervention.", `<button class="secondary" type="button" data-action="refresh-action-center">${icon("refresh", 15)} Actualiser</button>`)}
+      <section class="action-center-summary"><article class="critical"><strong>${counts.critical}</strong><span>Critiques</span></article><article class="high"><strong>${counts.high}</strong><span>Importantes</span></article><article><strong>${counts.normal}</strong><span>À planifier</span></article><article class="total"><strong>${allItems.length}</strong><span>Actions visibles</span></article></section>
+      <div class="toolbar action-center-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-action-search value="${escapeHtml(state.actionSearch)}" placeholder="Rechercher une action…" /></label><label>Gravité<select data-action-severity><option value="all">Toutes</option><option value="critical" ${state.actionSeverity === "critical" ? "selected" : ""}>Critique</option><option value="high" ${state.actionSeverity === "high" ? "selected" : ""}>Importante</option><option value="normal" ${state.actionSeverity === "normal" ? "selected" : ""}>À planifier</option></select></label><label>Compagnie<select data-action-organization><option value="all">Toutes</option>${organizations.map((id) => `<option value="${escapeHtml(id)}" ${state.actionOrganization === id ? "selected" : ""}>${escapeHtml(orgName(id))}</option>`).join("")}</select></label><div class="toolbar-summary"><strong>${items.length}</strong> sur ${allItems.length}</div></div>
+      <section class="panel action-center-list">${items.length ? items.map((item) => `<article class="action-center-row ${item.severity}"><span class="action-center-icon">${icon(item.icon || "alert", 18)}</span><div><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.subtitle || "Atlas")} · ${escapeHtml(item.reason)}</small></div><span class="action-severity">${item.severity === "critical" ? "Critique" : item.severity === "high" ? "Importante" : "À planifier"}</span><div class="action-center-actions"><button class="secondary compact" type="button" data-action="snooze-action" data-key="${escapeHtml(item.key)}" data-days="1">Demain</button><button class="secondary compact" type="button" data-action="snooze-action" data-key="${escapeHtml(item.key)}" data-days="7">7 jours</button><button class="primary compact" type="button" data-route="${escapeHtml(item.route)}">Ouvrir</button></div></article>`).join("") : emptyState("Aucune action ne correspond aux filtres actuels.")}</section>
+      <div class="health-boundary-note">${icon("shield", 16)} <span><strong>Aucune notification opaque</strong> Chaque élément provient d’un état observable dans Atlas. Reporter une action la masque uniquement pour votre compte.</span></div>
+    </div>`;
+  }
+
+  function renderOrganizationReport() {
+    const organizationId = activeOrganizationId();
+    const organization = state.workspace.organizations.find((item) => item.id === organizationId);
+    if (!organization) return `<div class="page">${pageHeader("Rapport client", "Sélectionnez une compagnie avant de produire un rapport.")}<section class="panel report-empty">${emptyState("Choisissez une compagnie dans le sélecteur supérieur.")}</section></div>`;
+    const assets = assetRegistry(organizationId).filter((asset) => !asset.archived && asset.type !== "vault");
+    const sites = state.workspace.sites.filter((item) => item.organizationId === organizationId && item.status !== "archived");
+    const configurations = state.workspace.configurations.filter((item) => item.organizationId === organizationId && item.status !== "archived");
+    const procedures = state.workspace.procedures.filter((item) => item.organizationId === organizationId && item.status !== "archived");
+    const records = state.workspace.moduleRecords.filter((item) => item.organizationId === organizationId && item.status !== "archived");
+    const sslChecks = records.filter((item) => item.moduleId === "ssl-tracker").flatMap((item) => certificateChecksForRecord(item).map((check) => ({ ...check, recordTitle: item.title })));
+    const attention = dashboardPriorities().categories.flatMap((category) => category.items).filter((item) => assetByRef(item.ref)?.organizationId === organizationId);
+    const moduleCounts = [...new Map(records.map((record) => [record.moduleId, 0])).keys()].map((moduleId) => ({ module: moduleMap.get(moduleId), count: records.filter((record) => record.moduleId === moduleId).length })).sort((a, b) => b.count - a.count || (a.module?.label || "").localeCompare(b.module?.label || "", state.locale));
+    return `<div class="page report-page">${pageHeader(`Rapport — ${organization.name}`, "Synthèse imprimable sans mot de passe, code OTP, note privée ni pièce jointe.", `<div class="page-header-actions no-print"><button class="secondary" type="button" data-action="download-report-json">${icon("download", 15)} JSON</button><button class="primary" type="button" data-action="print-report">${icon("printer", 15)} Imprimer / PDF</button></div>`)}
+      <section class="panel report-cover"><div class="org-mark large">${escapeHtml(organization.code)}</div><div><p class="eyebrow">TRC COMMUNITY ATLAS · RAPPORT LOCAL</p><h2>${escapeHtml(organization.name)}</h2><p>${escapeHtml(organization.industry || "Organisation documentée")} · Généré le ${formatDate(new Date().toISOString())}</p></div><span class="status-badge success">${organization.status === "active" ? "Active" : escapeHtml(organization.status)}</span></section>
+      <section class="metrics-grid report-metrics">${metricCard("pin", sites.length, "Sites", "emplacements actifs", "blue")}${metricCard("server", configurations.length, "Configurations", `${configurations.filter((item) => item.criticality === "critical").length} critiques`, "violet")}${metricCard("file", assets.length, "Fiches", "hors coffre", "cyan")}${metricCard("alert", attention.length, "Points à traiter", "critères explicables", attention.length ? "violet" : "mint")}</section>
+      <div class="report-grid"><section class="panel report-section"><header><div><p class="eyebrow">COUVERTURE</p><h2>Documentation par module</h2></div></header><div class="report-module-list">${moduleCounts.length ? moduleCounts.map((item) => `<div><span>${icon(item.module?.icon || "grid", 15)} ${escapeHtml(item.module?.label || item.module?.id || "Module")}</span><strong>${item.count}</strong></div>`).join("") : emptyState("Aucune fiche de module.")}</div></section>
+      <section class="panel report-section"><header><div><p class="eyebrow">CERTIFICATS</p><h2>Domaines suivis</h2></div><span class="count-pill">${sslChecks.length}</span></header><div class="report-ssl-list">${sslChecks.length ? sslChecks.map((check) => `<div><span><strong>${escapeHtml(check.domain || check.hostname || "Domaine")}</strong><small>${escapeHtml(check.recordTitle)}</small></span><span class="status-badge ${["expired", "error"].includes(check.status) ? "danger" : check.status === "expiring" ? "warning" : "success"}">${Number.isFinite(check.daysRemaining) ? `${check.daysRemaining} j` : escapeHtml(check.status || "À vérifier")}</span></div>`).join("") : emptyState("Aucun domaine SSL suivi.")}</div></section></div>
+      <section class="panel report-section"><header><div><p class="eyebrow">SUIVI</p><h2>Actions documentaires</h2></div><span class="count-pill warning">${attention.length}</span></header>${attention.length ? `<div class="report-attention-list">${attention.slice(0, 50).map((item) => `<div><span>${icon(item.icon || "alert", 15)}<strong>${escapeHtml(item.label)}</strong></span><small>${escapeHtml(item.reason)}</small></div>`).join("")}</div>` : emptyState("Aucun signal documentaire dans cette compagnie.")}</section>
+      <section class="panel report-section report-disclaimer"><strong>${icon("shield", 16)} Limites du rapport</strong><p>Cette synthèse décrit uniquement les données présentes dans Atlas au moment de sa génération. Elle ne constitue pas une supervision en temps réel et exclut volontairement tout secret du coffre.</p></section>
     </div>`;
   }
 
@@ -2904,13 +3053,14 @@
     const items = filteredConfigurations().filter((item) => !query || [item.name, item.type, item.os, item.ip, item.owner, item.location, item.summary, item.notes, ...Object.values(item.details || {}), orgName(item.organizationId), siteName(item.siteId)].join(" ").toLocaleLowerCase(state.locale).includes(query)).sort((a, b) => a.name.localeCompare(b.name, state.locale));
     const page = paginate(items, 25);
     return `<div class="page">${pageHeader(t("configurations"), "Appareils, services et actifs documentés indépendamment de tout agent RMM.", writeButton(`<button class="primary" data-action="new-configuration">${icon("plus")} ${t("addConfiguration")}</button>`))}
-      <div class="toolbar filters scalable-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher une configuration…" value="${escapeHtml(state.listSearch)}" /></label><div class="filter-pills"><button class="${state.filter === "all" || state.workspace.organizations.some((org) => org.id === state.filter) ? "active" : ""}" data-set-filter="all">${t("all")}</button><button class="${state.filter === "critical" ? "active" : ""}" data-set-filter="critical">Critiques</button><button class="${state.filter === "review" ? "active" : ""}" data-set-filter="review">À réviser</button></div><span class="result-count">${items.length} résultat${items.length === 1 ? "" : "s"}</span></div>
-      <section class="table-card configurations-table"><div class="table-scroll"><table><thead><tr><th>Configuration</th><th>${t("site")}</th><th>${t("type")}</th><th>${t("owner")}</th><th>${t("criticality")}</th><th>${t("lastReview")}</th><th></th></tr></thead><tbody>${page.items.map(configurationRow).join("")}</tbody></table></div>${items.length ? paginationMarkup(page) : emptyState(t("empty"))}</section>
+      <div class="toolbar filters scalable-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher une configuration…" value="${escapeHtml(state.listSearch)}" /></label><div class="filter-pills"><button class="${state.filter === "all" || state.workspace.organizations.some((org) => org.id === state.filter) ? "active" : ""}" data-set-filter="all">${t("all")}</button><button class="${state.filter === "critical" ? "active" : ""}" data-set-filter="critical">Critiques</button><button class="${state.filter === "review" ? "active" : ""}" data-set-filter="review">À réviser</button></div><span class="result-count">${items.length} résultat${items.length === 1 ? "" : "s"}</span></div>${savedViewControls("configurations")}${canWrite() ? `<div class="bulk-action-bar ${state.selectedAssetRefs.size ? "visible" : ""}"><span><strong>${state.selectedAssetRefs.size}</strong> configuration${state.selectedAssetRefs.size === 1 ? "" : "s"} sélectionnée${state.selectedAssetRefs.size === 1 ? "" : "s"}</span><div><button class="secondary compact" type="button" data-action="clear-selection">Effacer</button><button class="primary compact" type="button" data-action="open-bulk-edit" ${state.selectedAssetRefs.size ? "" : "disabled"}>${icon("edit", 14)} Modifier en lot</button></div></div>` : ""}
+      <section class="table-card configurations-table"><div class="table-scroll"><table><thead><tr>${canWrite() ? `<th class="selection-column"><input type="checkbox" data-select-page aria-label="Sélectionner les configurations affichées" /></th>` : ""}<th>Configuration</th><th>${t("site")}</th><th>${t("type")}</th><th>${t("owner")}</th><th>${t("criticality")}</th><th>${t("lastReview")}</th><th></th></tr></thead><tbody>${page.items.map(configurationRow).join("")}</tbody></table></div>${items.length ? paginationMarkup(page) : emptyState(t("empty"))}</section>
     </div>`;
   }
 
   function configurationRow(item) {
-    return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="configuration:${item.id}"><span class="type-icon">${icon("server", 16)}</span><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.os || "Système non renseigné")}</small></span></button></td><td>${escapeHtml(siteName(item.siteId))}</td><td>${escapeHtml(item.type)}</td><td>${escapeHtml(item.owner || "—")}</td><td><span class="priority ${item.criticality}">${criticalityLabel(item.criticality)}</span></td><td>${formatDate(item.lastReviewed)}</td><td><button class="icon-button" data-action="open-asset" data-asset-ref="configuration:${item.id}" aria-label="${t("view")}">${icon("chevron", 16)}</button></td></tr>`;
+    const ref = `configuration:${item.id}`;
+    return `<tr class="${state.selectedAssetRefs.has(ref) ? "selected-row" : ""}">${canWrite() ? `<td class="selection-column"><input type="checkbox" data-select-asset-ref="${escapeHtml(ref)}" ${state.selectedAssetRefs.has(ref) ? "checked" : ""} aria-label="Sélectionner ${escapeHtml(item.name)}" /></td>` : ""}<td><button class="table-link" data-action="open-asset" data-asset-ref="${escapeHtml(ref)}"><span class="type-icon">${icon("server", 16)}</span><span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.os || "Système non renseigné")}</small></span></button></td><td>${escapeHtml(siteName(item.siteId))}</td><td>${escapeHtml(item.type)}</td><td>${escapeHtml(item.owner || "—")}</td><td><span class="priority ${item.criticality}">${criticalityLabel(item.criticality)}</span></td><td>${formatDate(item.lastReviewed)}</td><td><button class="icon-button" data-action="open-asset" data-asset-ref="${escapeHtml(ref)}" aria-label="${t("view")}">${icon("chevron", 16)}</button></td></tr>`;
   }
 
   function renderConfigurationDetail(id) {
@@ -2954,12 +3104,16 @@
   function renderActivity() {
     const query = state.listSearch.trim().toLocaleLowerCase(state.locale);
     const source = isAdministrator() && state.auditEntries.length
-      ? state.auditEntries.map((entry) => ({ at: entry.at, actor: entry.actor, action: entry.action, target: entry.details?.title || entry.details?.label || entry.details?.username || entry.assetRef || "Instance Atlas", kind: entry.organizationId ? orgName(entry.organizationId) : "Sécurité / système" }))
-      : state.workspace.activities;
-    const items = source.filter((entry) => !query || [entry.actor, entry.action, entry.target, entry.kind].join(" ").toLocaleLowerCase(state.locale).includes(query)).sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      ? state.auditEntries.map((entry) => ({ at: entry.at, actor: entry.actor, action: entry.action, target: entry.details?.title || entry.details?.label || entry.details?.username || entry.assetRef || "Instance Atlas", kind: entry.organizationId ? orgName(entry.organizationId) : "Sécurité / système", organizationId: entry.organizationId || "", assetRef: entry.assetRef || "" }))
+      : state.workspace.activities.map((entry) => ({ ...entry, organizationId: entry.organizationId || "", assetRef: "" }));
+    const actors = [...new Set(source.map((entry) => entry.actor).filter(Boolean))].sort((a, b) => a.localeCompare(b, state.locale));
+    const actions = [...new Set(source.map((entry) => entry.action).filter(Boolean))].sort((a, b) => a.localeCompare(b, state.locale));
+    const organizations = [...new Set(source.map((entry) => entry.organizationId).filter(Boolean))].sort((a, b) => orgName(a).localeCompare(orgName(b), state.locale));
+    const dateFrom = state.auditDateFrom ? Date.parse(`${state.auditDateFrom}T00:00:00`) : 0;
+    const items = source.filter((entry) => (!query || [entry.actor, entry.action, entry.target, entry.kind].join(" ").toLocaleLowerCase(state.locale).includes(query)) && (state.auditActor === "all" || entry.actor === state.auditActor) && (state.auditAction === "all" || entry.action === state.auditAction) && (state.auditOrganization === "all" || entry.organizationId === state.auditOrganization) && (!dateFrom || Date.parse(entry.at) >= dateFrom)).sort((a, b) => String(b.at).localeCompare(String(a.at)));
     const page = paginate(items, 25);
-    return `<div class="page">${pageHeader(t("activity"), isAdministrator() ? "Journal local complet : documentation, comptes, sessions, MFA et accès au coffre." : "Historique local des changements documentaires accessibles à ce compte.")}
-      <div class="toolbar compact-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans l’activité…" value="${escapeHtml(state.listSearch)}" /></label><div class="toolbar-summary"><strong>${items.length}</strong> sur ${source.length}</div></div>
+    return `<div class="page activity-explorer-page">${pageHeader(t("activity"), isAdministrator() ? "Journal local complet : documentation, comptes, sessions, MFA et accès au coffre." : "Historique local des changements documentaires accessibles à ce compte.", `<button class="secondary" type="button" data-action="export-audit" ${items.length ? "" : "disabled"}>${icon("download", 15)} Exporter CSV</button>`)}
+      <div class="toolbar audit-explorer-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans l’activité…" value="${escapeHtml(state.listSearch)}" /></label><label>Acteur<select data-audit-filter="actor"><option value="all">Tous</option>${actors.map((actor) => `<option value="${escapeHtml(actor)}" ${state.auditActor === actor ? "selected" : ""}>${escapeHtml(actor)}</option>`).join("")}</select></label><label>Action<select data-audit-filter="action"><option value="all">Toutes</option>${actions.map((action) => `<option value="${escapeHtml(action)}" ${state.auditAction === action ? "selected" : ""}>${escapeHtml(action)}</option>`).join("")}</select></label><label>Compagnie<select data-audit-filter="organization"><option value="all">Toutes</option>${organizations.map((id) => `<option value="${escapeHtml(id)}" ${state.auditOrganization === id ? "selected" : ""}>${escapeHtml(orgName(id))}</option>`).join("")}</select></label><label>Depuis<input type="date" data-audit-date value="${escapeHtml(state.auditDateFrom)}" /></label><div class="toolbar-summary"><strong>${items.length}</strong> sur ${source.length}</div></div>
       <section class="table-card"><div class="table-scroll"><table><thead><tr><th>Date</th><th>Acteur</th><th>Action</th><th>Cible</th><th>Type</th></tr></thead><tbody>${page.items.map((entry) => `<tr><td>${formatDateTime(entry.at)}</td><td>${escapeHtml(entry.actor)}</td><td><strong>${escapeHtml(entry.action)}</strong></td><td>${escapeHtml(entry.target)}</td><td><span class="kind-pill">${escapeHtml(entry.kind)}</span></td></tr>`).join("")}</tbody></table></div>${items.length ? paginationMarkup(page) : emptyState(t("empty"))}</section>
     </div>`;
   }
@@ -3466,12 +3620,12 @@
     const notice = module.id === "domain-tracker" ? `<div class="notice secure-module-notice">${icon("globe", 17)} <span><strong>Suivi réel des domaines</strong> Registraire, DNS, titulaire, serveurs de noms, renouvellement automatique et expiration sont conservés dans chaque fiche.</span></div>` : module.id === "ssl-tracker" ? `<div class="notice secure-module-notice">${icon("lock", 17)} <span><strong>Un contrôle indépendant par domaine</strong> Atlas relit le certificat de chaque domaine tous les 5 jours, puis chaque jour sous 30 jours. Aucune clé privée n’est demandée ou conservée.</span></div>` : "";
     const sslDomainCount = module.id === "ssl-tracker" ? records.reduce((total, record) => total + certificateChecksForRecord(record).length, 0) : 0;
     const toolbarSummary = module.id === "ssl-tracker" ? `<strong>${sslDomainCount}</strong> domaine${sslDomainCount === 1 ? "" : "s"} · ${records.length} fiche${records.length === 1 ? "" : "s"}` : `<strong>${records.length}</strong> sur ${scopedRecords.length}`;
-    const recordsMarkup = module.id === "ssl-tracker" ? sslTrackerOverviewMarkup(records) : `<section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr><th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); return `<tr><td><button class="table-link" data-action="open-asset" data-asset-ref="module:${record.id}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="module:${record.id}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>`;
+    const recordsMarkup = module.id === "ssl-tracker" ? sslTrackerOverviewMarkup(records) : `<section class="table-card module-records-table"><div class="table-scroll"><table><thead><tr>${canWrite() ? `<th class="selection-column"><input type="checkbox" data-select-page aria-label="Sélectionner les fiches affichées" /></th>` : ""}<th>${escapeHtml(profile.listLabel)}</th><th>${escapeHtml(profile.referenceLabel)}</th><th>${escapeHtml(profile.ownerLabel)}</th><th>${t("status")}</th><th>${escapeHtml(profile.expiryLabel)}</th><th>Mise à jour</th><th></th></tr></thead><tbody>${page.items.map((record) => { const expiry = expiryPresentation(record); const ref = `module:${record.id}`; return `<tr class="${state.selectedAssetRefs.has(ref) ? "selected-row" : ""}">${canWrite() ? `<td class="selection-column"><input type="checkbox" data-select-asset-ref="${escapeHtml(ref)}" ${state.selectedAssetRefs.has(ref) ? "checked" : ""} aria-label="Sélectionner ${escapeHtml(record.title)}" /></td>` : ""}<td><button class="table-link" data-action="open-asset" data-asset-ref="${escapeHtml(ref)}"><span class="type-icon">${icon(module.icon, 16)}</span><span><strong>${escapeHtml(record.title)}</strong><small>${escapeHtml(moduleRecordSubtitle(record, module))}</small></span></button></td><td>${escapeHtml(record.reference || "—")}</td><td>${escapeHtml(record.owner || "—")}</td><td><span class="status-badge ${expiry.tone}">${escapeHtml(expiry.label)}</span></td><td>${formatDate(record.expiresOn)}</td><td>${formatDate(record.updatedAt)}</td><td><div class="row-actions"><button class="icon-button" data-action="open-asset" data-asset-ref="${escapeHtml(ref)}" aria-label="Aperçu">${icon("eye", 15)}</button>${writeButton(`<button class="icon-button" data-action="edit-module-record" data-id="${record.id}" data-module-id="${module.id}" aria-label="${t("edit")}">${icon("edit", 16)}</button>`)}</div></td></tr>`; }).join("")}</tbody></table></div>${records.length ? paginationMarkup(page) : emptyState("Aucune fiche ne correspond aux filtres.")}</section>`;
     return `<div class="page module-page">
       ${pageHeader(module.label, module.description, writeButton(`<button class="primary" data-action="new-module-record" data-module-id="${module.id}">${icon("plus")} Nouvelle fiche</button>`))}
       ${notice}
       ${moduleRenewalMetrics(records, profile, module)}
-      <div class="toolbar compact-list-toolbar module-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans ${escapeHtml(module.label)}…" value="${escapeHtml(state.listSearch)}" /></label><label>État<select data-list-status><option value="all">Tous</option><option value="active" ${state.listStatus === "active" ? "selected" : ""}>Actives</option><option value="review" ${state.listStatus === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${state.listStatus === "archived" ? "selected" : ""}>Archivées</option></select></label><div class="toolbar-summary">${toolbarSummary}</div></div>
+      <div class="toolbar compact-list-toolbar module-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher dans ${escapeHtml(module.label)}…" value="${escapeHtml(state.listSearch)}" /></label><label>État<select data-list-status><option value="all">Tous</option><option value="active" ${state.listStatus === "active" ? "selected" : ""}>Actives</option><option value="review" ${state.listStatus === "review" ? "selected" : ""}>À réviser</option><option value="archived" ${state.listStatus === "archived" ? "selected" : ""}>Archivées</option></select></label><div class="toolbar-summary">${toolbarSummary}</div></div>${savedViewControls("module", module.id)}${canWrite() && module.id !== "ssl-tracker" ? `<div class="bulk-action-bar ${state.selectedAssetRefs.size ? "visible" : ""}"><span><strong>${state.selectedAssetRefs.size}</strong> fiche${state.selectedAssetRefs.size === 1 ? "" : "s"} sélectionnée${state.selectedAssetRefs.size === 1 ? "" : "s"}</span><div><button class="secondary compact" type="button" data-action="clear-selection">Effacer</button><button class="primary compact" type="button" data-action="open-bulk-edit" ${state.selectedAssetRefs.size ? "" : "disabled"}>${icon("edit", 14)} Modifier en lot</button></div></div>` : ""}
       ${recordsMarkup}
     </div>`;
   }
@@ -3548,6 +3702,7 @@
     const items = state.workspace.templates.filter((template) => { const module = moduleMap.get(template.moduleId); return !query || [template.name, template.defaultSummary, ...(template.defaultTags || []), module?.label].join(" ").toLocaleLowerCase(state.locale).includes(query); }).sort((a, b) => a.name.localeCompare(b.name, state.locale));
     const page = paginate(items, 24);
     return `<div class="page templates-page">${pageHeader("Modèles", "Standardisez les fiches répétitives sans dupliquer manuellement leur structure.", writeButton(`<button class="primary" data-action="new-template">${icon("plus")} Nouveau modèle</button>`))}
+      <section class="panel starter-pack-section"><header><div><p class="eyebrow">DÉMARRAGE RAPIDE</p><h2>Packs d’intégration</h2><p>Ajoutez un ensemble de modèles sans créer automatiquement de fiche ni mélanger les compagnies.</p></div></header><div class="starter-pack-grid">${starterPacks.map((pack) => { const installed = pack.templates.filter(([name]) => state.workspace.templates.some((template) => normalizeSearch(template.name) === normalizeSearch(name))).length; return `<article><span class="module-hero-icon">${icon("layers", 19)}</span><div><strong>${escapeHtml(pack.name)}</strong><small>${escapeHtml(pack.description)}</small><em>${installed}/${pack.templates.length} modèles présents</em></div>${writeButton(`<button class="secondary compact" type="button" data-action="install-starter-pack" data-id="${escapeHtml(pack.id)}" ${installed === pack.templates.length ? "disabled" : ""}>${installed ? "Compléter" : "Installer"}</button>`)}</article>`; }).join("")}</div></section>
       <div class="toolbar compact-list-toolbar"><label class="list-search">${icon("search", 16)}<input type="search" data-list-search placeholder="Rechercher un modèle…" value="${escapeHtml(state.listSearch)}" /></label><div class="toolbar-summary"><strong>${items.length}</strong> sur ${state.workspace.templates.length}</div></div>
       <section class="cards-grid template-grid">${page.items.map((template) => { const module = moduleMap.get(template.moduleId); return `<article class="entity-card template-card"><div class="entity-card-top"><span class="module-hero-icon">${icon(module?.icon || "file", 19)}</span>${writeButton(`<button class="icon-button" data-action="edit-template" data-id="${template.id}" aria-label="Modifier">${icon("edit", 15)}</button>`)}</div><p class="eyebrow">${escapeHtml(module?.label || "Tous modules")}</p><h2>${escapeHtml(template.name)}</h2><p>${escapeHtml(template.defaultSummary || "Aucun résumé par défaut.")}</p><div class="template-tags">${(template.defaultTags || []).map((tag) => `<span>${escapeHtml(tag)}</span>`).join("") || "—"}</div>${writeButton(`<button class="secondary full" data-action="use-template" data-id="${template.id}">Utiliser ce modèle ${icon("arrow", 14)}</button>`)}</article>`; }).join("")}</section>${items.length ? paginationMarkup(page) : emptyState(t("empty"))}
     </div>`;
@@ -3859,9 +4014,9 @@
       ["read:records", "Métadonnées des fiches", "Titres, catégories et dates, sans contenu sensible."],
     ].map(([value, label, description]) => `<label class="permission-switch compact local-api-scope-option"><input type="checkbox" name="scopes" value="${value}"/><span><strong>${label}</strong><small>${description}</small></span></label>`).join("");
     const oneTimeToken = state.createdApiToken ? `<div class="notice success local-api-secret"><div><strong>Copiez ce jeton maintenant.</strong><span>Il ne sera plus affiché après fermeture de ce message.</span><code>${escapeHtml(state.createdApiToken)}</code></div><div><button class="secondary compact" type="button" data-action="copy-local-api-token">${icon("copy", 14)} Copier</button><button class="secondary compact" type="button" data-action="clear-local-api-token">Masquer</button></div></div>` : "";
-    const webhookRows = (apiStatus.webhooks || []).length ? `<div class="local-api-token-list">${apiStatus.webhooks.map((webhook) => `<article><div><strong>${escapeHtml(webhook.label)}</strong><small>${escapeHtml(webhook.url)}</small><small>${escapeHtml((webhook.events || []).join(" · "))}${webhook.lastDeliveryAt ? ` · dernier essai ${formatDateTime(webhook.lastDeliveryAt)} (${webhook.lastStatus || "échec"})` : ""}</small>${webhook.lastError ? `<small class="danger-text">${escapeHtml(webhook.lastError)}</small>` : ""}</div><div class="webhook-actions"><form data-form="local-webhook-test" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="secondary compact" type="submit">Tester</button><p class="form-error" role="alert"></p></form><form data-form="local-webhook-remove" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="danger secondary compact" type="submit">Retirer</button><p class="form-error" role="alert"></p></form></div></article>`).join("")}</div>` : emptyState("Aucun webhook local configuré.");
+    const webhookRows = (apiStatus.webhooks || []).length ? `<div class="local-api-token-list">${apiStatus.webhooks.map((webhook) => `<article><div><strong>${escapeHtml(webhook.label)}</strong><small>${escapeHtml(webhook.url)}</small><small>${escapeHtml((webhook.events || []).join(" · "))}${webhook.lastDeliveryAt ? ` · dernier essai ${formatDateTime(webhook.lastDeliveryAt)} (${webhook.lastStatus || "échec"})` : ""}</small><small>${webhook.deliveryCount || 0} livraison${webhook.deliveryCount === 1 ? "" : "s"} tentée${webhook.deliveryCount === 1 ? "" : "s"}${webhook.lastSuccessAt ? ` · dernière réussite ${formatDateTime(webhook.lastSuccessAt)}` : ""}${webhook.consecutiveFailures ? ` · ${webhook.consecutiveFailures} échec${webhook.consecutiveFailures === 1 ? "" : "s"} consécutif${webhook.consecutiveFailures === 1 ? "" : "s"}` : ""}</small>${webhook.lastError ? `<small class="danger-text">${escapeHtml(webhook.lastError)}</small>` : ""}</div><div class="webhook-actions"><form data-form="local-webhook-test" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="secondary compact" type="submit">Tester</button><p class="form-error" role="alert"></p></form><form data-form="local-webhook-remove" data-id="${escapeHtml(webhook.id)}"><label>Code MFA<input name="adminMfaCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" ${state.workspace.settings.security.privilegedMfaEnabled ? "required" : ""}/></label><button class="danger secondary compact" type="submit">Retirer</button><p class="form-error" role="alert"></p></form></div></article>`).join("")}</div>` : emptyState("Aucun webhook local configuré.");
     const webhookSecret = state.createdWebhookSecret ? `<div class="notice success local-api-secret"><div><strong>Secret de signature affiché une seule fois.</strong><span>Le récepteur doit vérifier l’en-tête <code>x-atlas-signature</code>.</span><code>${escapeHtml(state.createdWebhookSecret)}</code></div><div><button class="secondary compact" type="button" data-action="copy-webhook-secret">${icon("copy", 14)} Copier</button><button class="secondary compact" type="button" data-action="clear-webhook-secret">Masquer</button></div></div>` : "";
-    const webhookSection = `<div class="local-webhook-section"><div><p class="eyebrow">WEBHOOKS LOCAUX</p><h3>Automatisations sur cette VM</h3><p>Les destinations sont strictement limitées à <code>localhost</code>, <code>127.0.0.1</code> ou <code>::1</code>, avec un port explicite. Atlas ne contacte ni le LAN ni Internet.</p></div>${webhookSecret}<div class="local-api-columns"><form data-form="local-webhook-create"><label>Nom du webhook<input name="label" maxlength="80" placeholder="Ex. orchestrateur local" required/></label><label>URL de boucle locale<input name="url" type="url" maxlength="500" placeholder="http://127.0.0.1:9100/atlas" required/></label><fieldset><legend>Événements</legend><label><input type="checkbox" name="events" value="workspace.updated"/> Documentation modifiée</label><label><input type="checkbox" name="events" value="backup.completed"/> Sauvegarde réussie</label><label><input type="checkbox" name="events" value="backup.failed"/> Sauvegarde échouée</label></fieldset>${settingsAdminMfaMarkup("La destination et le secret de signature sont protégés localement.", "local-webhook-create")}<p class="form-error" role="alert"></p><button class="primary" type="submit">Créer le webhook</button></form><div>${webhookRows}</div></div></div>`;
+    const webhookSection = `<div class="local-webhook-section"><div><p class="eyebrow">WEBHOOKS LOCAUX</p><h3>Automatisations sur cette VM</h3><p>Les destinations sont strictement limitées à <code>localhost</code>, <code>127.0.0.1</code> ou <code>::1</code>, avec un port explicite. Atlas ne contacte ni le LAN ni Internet. Une livraison automatique échouée est retentée deux fois avec un court délai.</p></div>${webhookSecret}<div class="local-api-columns"><form data-form="local-webhook-create"><label>Nom du webhook<input name="label" maxlength="80" placeholder="Ex. orchestrateur local" required/></label><label>URL de boucle locale<input name="url" type="url" maxlength="500" placeholder="http://127.0.0.1:9100/atlas" required/></label><fieldset><legend>Événements</legend><label><input type="checkbox" name="events" value="workspace.updated"/> Documentation modifiée</label><label><input type="checkbox" name="events" value="backup.completed"/> Sauvegarde réussie</label><label><input type="checkbox" name="events" value="backup.failed"/> Sauvegarde échouée</label></fieldset>${settingsAdminMfaMarkup("La destination et le secret de signature sont protégés localement.", "local-webhook-create")}<p class="form-error" role="alert"></p><button class="primary" type="submit">Créer le webhook</button></form><div>${webhookRows}</div></div></div>`;
     const localApi = `<section class="panel local-api-settings">
       <header><div><p class="eyebrow">API LOCALE FACULTATIVE</p><h2>Accès en lecture, limité et révocable</h2><p>Activez seulement les fonctions nécessaires. Les jetons n’exposent jamais les secrets du coffre et leur valeur n’est affichée qu’une seule fois.</p></div><span class="status-badge ${apiStatus.enabled || apiStatus.webhooksEnabled ? "success" : "muted"}">${apiStatus.enabled || apiStatus.webhooksEnabled ? "Partiellement active" : "Désactivée"}</span></header>
       ${apiStatus.error ? `<div class="notice danger">${escapeHtml(apiStatus.error)}</div>` : ""}
@@ -3995,6 +4150,31 @@
   function paginationMarkup(page) {
     if (page.pages <= 1) return `<div class="table-pagination single"><span>${page.total} résultat${page.total === 1 ? "" : "s"}</span></div>`;
     return `<div class="table-pagination"><span>${page.start}–${page.end} sur ${page.total}</span><div><button class="secondary compact" data-action="list-page" data-page="${page.page - 1}" ${page.page <= 1 ? "disabled" : ""}>Précédent</button><strong>Page ${page.page} / ${page.pages}</strong><button class="secondary compact" data-action="list-page" data-page="${page.page + 1}" ${page.page >= page.pages ? "disabled" : ""}>Suivant</button></div></div>`;
+  }
+
+  function savedViewControls(page, moduleId = "") {
+    const views = savedViewsFor(page, moduleId);
+    return `<div class="saved-view-controls"><label><span>Vue</span><select data-saved-view-picker><option value="">Vue actuelle</option>${views.map((view) => `<option value="${escapeHtml(view.id)}" ${state.activeSavedViewId === view.id ? "selected" : ""}>${escapeHtml(view.name)}</option>`).join("")}</select></label><button class="secondary compact" type="button" data-action="save-current-view" data-view-page="${escapeHtml(page)}" data-module-id="${escapeHtml(moduleId)}">${icon("plus", 14)} Enregistrer</button>${state.activeSavedViewId && views.some((view) => view.id === state.activeSavedViewId) ? `<button class="icon-button danger" type="button" data-action="delete-saved-view" data-id="${escapeHtml(state.activeSavedViewId)}" aria-label="Supprimer la vue enregistrée">${icon("trash", 14)}</button>` : ""}</div>`;
+  }
+
+  function commandPaletteItems() {
+    const fixed = [
+      ["dashboard", "Vue d’ensemble", "Tableau de bord et priorités", "grid"],
+      ["actions", "Centre d’actions", "Signaux opérationnels à traiter", "activity"],
+      ["organizations", "Organisations", "Compagnies et sous-compagnies", "building"],
+      ["activity", "Journal d’audit", "Activité, sécurité et changements", "history"],
+      ["templates", "Modèles", "Packs d’intégration et modèles", "layers"],
+      ["data-tools", "Import / Export", "Migration et sauvegarde documentaire", "download"],
+      ["settings", "Paramètres", "Administration locale Atlas", "settings"],
+      ["help", "Centre d’aide", "Guides locaux Atlas", "help"],
+    ].filter(([route]) => route !== "settings" || isAdministrator()).map(([route, label, note, iconName]) => ({ route, label, note, icon: iconName }));
+    const contextual = activeOrganizationId() ? [
+      { route: "configurations", label: "Configurations", note: orgName(activeOrganizationId()), icon: "server" },
+      { route: "quality", label: "Qualité documentaire", note: orgName(activeOrganizationId()), icon: "shield" },
+      { route: "reports", label: "Rapport client", note: orgName(activeOrganizationId()), icon: "file" },
+    ] : [];
+    const favorites = favoriteAssetRefs().map((ref) => assetByRef(ref)).filter(Boolean).map((asset) => ({ route: `asset/${encodeURIComponent(asset.ref)}`, label: asset.label, note: `${orgName(asset.organizationId)} · Favori`, icon: asset.icon }));
+    return [...fixed, ...contextual, ...favorites];
   }
 
   function orgName(id) {
@@ -4572,11 +4752,13 @@
           ? (canWrite() ? `<button class="secondary" type="button" data-action="mark-record-reviewed" data-id="${escapeHtml(asset.id)}">${icon("refresh", 15)} Révision terminée</button>` : "")
           : (canWrite() ? `<button class="secondary" type="button" data-action="submit-record-review" data-id="${escapeHtml(asset.id)}">${icon("arrow", 15)} Soumettre</button>` : "")
       : "";
+    const favorite = favoriteAssetRefs().includes(asset.ref);
+    const favoriteButton = `<button class="icon-button asset-favorite-button ${favorite ? "active" : ""}" type="button" data-action="toggle-favorite" data-asset-ref="${escapeHtml(asset.ref)}" aria-pressed="${favorite}" aria-label="${favorite ? "Retirer des favoris" : "Ajouter aux favoris"}">${icon("star", 17)}</button>`;
     const quickRelationControl = canWrite() ? quickRelationPickerMarkup(asset) : "";
     return `<div class="asset-page">
       <header class="asset-page-header">
         <div class="asset-breadcrumbs">${organizationBreadcrumbMarkup(asset.organizationId)}${icon("chevron", 13)}<button type="button" data-route="${escapeHtml(list.route)}">${escapeHtml(list.label)}</button>${icon("chevron", 13)}<span>${escapeHtml(asset.label)}</span></div>
-        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions"><span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${certificateCheck}${reveal}${reviewActions}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
+        <div class="asset-heading"><span class="asset-heading-icon">${icon(asset.icon, 24)}</span><div><p class="eyebrow">${escapeHtml(asset.kind)}</p><h1>${escapeHtml(asset.label)}</h1><p>${escapeHtml(orgName(asset.organizationId))} · ${escapeHtml(asset.subtitle)}</p></div><div class="asset-heading-actions">${favoriteButton}<span class="status-badge ${status.tone}">${escapeHtml(status.label)}</span>${certificateCheck}${reveal}${reviewActions}${edit}${archive}${writeButton(`<button class="primary" type="button" data-action="add-related-item" data-asset-ref="${escapeHtml(asset.ref)}">${icon("link", 15)} Relier</button>`)}</div></div>
       </header>
       <div class="asset-page-layout">
         <div class="asset-page-main">
@@ -4606,6 +4788,23 @@
 
   function modalMarkup(kind, existingId, moduleId) {
     const close = `<button class="icon-button" type="button" data-action="close-modal" aria-label="${t("close")}">${icon("close")}</button>`;
+    if (kind === "command-palette") {
+      const query = normalizeSearch(state.commandPaletteQuery);
+      const items = commandPaletteItems().filter((item) => !query || normalizeSearch([item.label, item.note].join(" ")).includes(query)).slice(0, 30);
+      return `<div class="command-palette"><div class="modal-heading"><div><p class="eyebrow">NAVIGATION RAPIDE</p><h2 id="modal-title">Palette de commandes</h2><p>Recherchez une page ou une fiche favorite sans quitter le clavier.</p></div>${close}</div><label class="command-palette-search">${icon("search", 18)}<input type="search" data-command-query value="${escapeHtml(state.commandPaletteQuery)}" autocomplete="off" placeholder="Rechercher une commande…" autofocus /><kbd>Échap</kbd></label><div class="command-palette-results" role="listbox">${items.length ? items.map((item, index) => `<button type="button" role="option" data-route="${escapeHtml(item.route)}" ${index === 0 ? 'data-command-first="true"' : ""}><span class="type-icon">${icon(item.icon, 16)}</span><span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.note)}</small></span>${icon("chevron", 14)}</button>`).join("") : emptyState("Aucune commande ne correspond à cette recherche.")}</div><div class="command-palette-footer"><span><kbd>↑</kbd><kbd>↓</kbd> naviguer</span><span><kbd>Entrée</kbd> ouvrir</span><span><kbd>Alt K</kbd> ouvrir</span></div></div>`;
+    }
+    if (kind === "saved-view") {
+      const context = state.savedViewContext || { page: state.page, moduleId: state.detailId || "" };
+      return `<form data-form="saved-view"><div class="modal-heading"><div><p class="eyebrow">PRODUCTIVITÉ</p><h2 id="modal-title">Enregistrer cette vue</h2><p>Conservez la recherche, l’état et la compagnie active pour votre compte seulement.</p></div>${close}</div><div class="form-grid"><label class="span-2">Nom de la vue<input name="name" required maxlength="80" placeholder="Ex. Certificats à renouveler" autofocus /></label><div class="saved-view-preview span-2">${icon("filter", 17)}<span><strong>${escapeHtml(context.page === "module" ? moduleMap.get(context.moduleId)?.label || "Module" : context.page)}</strong><small>${escapeHtml(activeOrganizationId() ? orgName(activeOrganizationId()) : "Toutes les compagnies")} · ${escapeHtml(state.listSearch || "Sans recherche")} · ${escapeHtml(context.page === "configurations" ? state.filter : state.listStatus)}</small></span></div></div>${modalActions("Enregistrer la vue")}</form>`;
+    }
+    if (kind === "dashboard-widgets") {
+      const selected = new Set(dashboardWidgets());
+      const options = [["priorities", "Priorités documentaires", "Critères factuels et accès au centre d’actions"], ["metrics", "Indicateurs", "Organisations, sites, configurations et échéances"], ["password-health", "Santé des mots de passe", "Indicateurs autorisés du coffre"], ["quick-access", "Favoris", "Fiches épinglées par votre compte"], ["recent", "Suivi et activité", "Statuts à traiter et dernières modifications"]];
+      return `<form data-form="dashboard-widgets"><div class="modal-heading"><div><p class="eyebrow">VUE PERSONNELLE</p><h2 id="modal-title">Personnaliser la vue d’ensemble</h2><p>Choisissez les blocs visibles. Les organisations restent toujours accessibles.</p></div>${close}</div><fieldset class="dashboard-widget-options"><legend>Blocs du tableau de bord</legend>${options.map(([id, label, note]) => `<label><input type="checkbox" name="widgets" value="${id}" ${selected.has(id) ? "checked" : ""}/><span><strong>${label}</strong><small>${note}</small></span></label>`).join("")}</fieldset>${modalActions("Appliquer")}</form>`;
+    }
+    if (kind === "bulk-edit") {
+      return `<form data-form="bulk-edit"><div class="modal-heading"><div><p class="eyebrow">ACTION EN LOT</p><h2 id="modal-title">Modifier ${state.selectedAssetRefs.size} fiche${state.selectedAssetRefs.size === 1 ? "" : "s"}</h2><p>Atlas crée une seule révision auditée. Aucun secret du coffre ne peut être traité en lot.</p></div>${close}</div><div class="form-grid"><label class="span-2">Action<select name="bulkAction" required><option value="owner">Attribuer un responsable</option><option value="review">Marquer À réviser</option><option value="active">Marquer Active / Documentée</option><option value="archive">Archiver</option></select></label><label class="span-2" data-bulk-owner>Responsable<input name="owner" maxlength="96" placeholder="Nom de la personne ou de l’équipe" /></label><div class="notice span-2">${icon("history", 16)} Un aperçu du nombre de fiches est affiché ici; l’historique permet de revenir à la révision précédente.</div></div>${modalActions("Appliquer aux fiches")}</form>`;
+    }
     if (kind === "priorities") {
       const priorities = dashboardPriorities();
       const selected = priorities.categories.find((category) => category.id === existingId);
@@ -4682,15 +4881,19 @@
         : preview.target === "configurations"
           ? [{ key: "name", label: "Nom", required: true, aliases: ["nom", "name", "hostname", "hote"] }, { key: "type", label: "Type", aliases: ["type", "categorie", "category"] }, { key: "os", label: "Système / OS", aliases: ["os", "systeme", "operating system"] }, { key: "ip", label: "Adresse IP", aliases: ["ip", "adresse ip", "ip address"] }, { key: "owner", label: "Responsable", aliases: ["responsable", "owner"] }, { key: "location", label: "Emplacement", aliases: ["emplacement", "location"] }, { key: "summary", label: "Résumé", aliases: ["resume", "summary", "description"] }, { key: "notes", label: "Notes", aliases: ["notes"] }]
           : [{ key: "title", label: targetModule?.titleLabel || "Titre", required: true, aliases: ["titre", "title", "nom", "name"] }, { key: "owner", label: "Responsable", aliases: ["responsable", "owner"] }, { key: "status", label: "État", aliases: ["etat", "status"] }, { key: "reference", label: "Référence / URL", aliases: ["reference", "url"] }, { key: "expiresOn", label: "Échéance", aliases: ["echeance", "expiration", "expires"] }, { key: "tags", label: "Étiquettes", aliases: ["etiquettes", "tags"] }, { key: "summary", label: "Résumé", aliases: ["resume", "summary", "description"] }, { key: "notes", label: "Notes", aliases: ["notes"] }, ...(moduleProfile(targetModule).fields || []).map((field) => ({ key: `detail_${field.key}`, label: field.label, aliases: [field.label, field.key] }))];
+      const availableProfiles = (userPreferences().importProfiles || []).filter((profile) => profile.target === preview.target);
+      const activeProfile = availableProfiles.find((profile) => profile.id === state.importProfileId) || null;
       const headerOptions = (field) => {
         const normalized = preview.headers.map(normalizeSearch);
-        const match = normalized.findIndex((header) => field.aliases.some((alias) => header === normalizeSearch(alias)));
+        const profileColumn = activeProfile?.mapping?.[field.key] || "";
+        const profileMatch = profileColumn ? preview.headers.findIndex((header) => header === profileColumn) : -1;
+        const match = profileMatch >= 0 ? profileMatch : normalized.findIndex((header) => field.aliases.some((alias) => header === normalizeSearch(alias)));
         return `<option value="">Ignorer</option>${preview.headers.map((header, index) => `<option value="${index}" ${index === match ? "selected" : ""}>${escapeHtml(header)}</option>`).join("")}`;
       };
       const mapping = fields.map((field) => `<label>${escapeHtml(field.label)}${field.required ? " *" : ""}<select name="map_${field.key}" ${field.required ? "required" : ""}>${headerOptions(field)}</select></label>`).join("");
       const organizationField = preview.target === "organizations" ? "" : `<label class="span-2">Organisation de destination<select name="organizationId" required><option value="">Choisir une organisation</option>${state.workspace.organizations.map((organization) => `<option value="${escapeHtml(organization.id)}" ${organization.id === activeOrganizationId() ? "selected" : ""}>${escapeHtml(organizationPathLabel(organization.id))}</option>`).join("")}</select><small>Les lignes sont ajoutées uniquement à cette organisation; aucune portée globale implicite.</small></label>`;
       const sampleRows = preview.rows.slice(0, 5);
-      return `<form data-form="guided-import"><div class="modal-heading"><div><p class="eyebrow">APERÇU CSV</p><h2 id="modal-title">${escapeHtml(preview.fileName)}</h2><p>${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"} vers ${escapeHtml(preview.target === "organizations" ? "Organisations" : preview.target === "configurations" ? "Configurations" : targetModule?.label || "Module")}. Aucun enregistrement n’est encore écrit.</p></div>${close}</div><div class="guided-import-layout"><section><h3>1. Associer les colonnes</h3><div class="form-grid">${organizationField}<label class="span-2">Si une fiche semblable existe<select name="duplicateStrategy"><option value="skip">Ignorer la ligne en double (recommandé)</option><option value="merge">Compléter la fiche existante</option><option value="create">Créer une nouvelle fiche malgré le doublon</option></select><small>Atlas compare le nom, le code, l’adresse IP ou la référence selon le type importé.</small></label>${preview.target === "configurations" ? `<label class="span-2">Site par défaut<select name="siteId"><option value="">Aucun site</option>${siteOptions("", activeOrganizationId())}</select></label>` : ""}${mapping}</div></section><section><h3>2. Vérifier l’aperçu</h3><div class="table-scroll"><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${sampleRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="notice">${icon("history", 16)} Les doublons seront traités selon votre choix. L’import complet reste une seule révision restaurable.</div></section></div><p class="form-error" role="alert"></p>${modalActions(`Importer ${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"}`)}</form>`;
+      return `<form data-form="guided-import"><div class="modal-heading"><div><p class="eyebrow">APERÇU CSV</p><h2 id="modal-title">${escapeHtml(preview.fileName)}</h2><p>${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"} vers ${escapeHtml(preview.target === "organizations" ? "Organisations" : preview.target === "configurations" ? "Configurations" : targetModule?.label || "Module")}. Aucun enregistrement n’est encore écrit.</p></div>${close}</div><div class="guided-import-profile"><label>Profil de correspondance<select data-import-profile><option value="">Détection automatique</option>${availableProfiles.map((profile) => `<option value="${escapeHtml(profile.id)}" ${state.importProfileId === profile.id ? "selected" : ""}>${escapeHtml(profile.name)}</option>`).join("")}</select></label><label>Enregistrer cette correspondance<input name="saveProfileName" maxlength="80" placeholder="Nom facultatif du profil" /></label></div><div class="guided-import-layout"><section><h3>1. Associer les colonnes</h3><div class="form-grid">${organizationField}<label class="span-2">Si une fiche semblable existe<select name="duplicateStrategy"><option value="skip">Ignorer la ligne en double (recommandé)</option><option value="merge">Compléter la fiche existante</option><option value="create">Créer une nouvelle fiche malgré le doublon</option></select><small>Atlas compare le nom, le code, l’adresse IP ou la référence selon le type importé.</small></label>${preview.target === "configurations" ? `<label class="span-2">Site par défaut<select name="siteId"><option value="">Aucun site</option>${siteOptions("", activeOrganizationId())}</select></label>` : ""}${mapping}</div></section><section><h3>2. Vérifier l’aperçu</h3><div class="table-scroll"><table><thead><tr>${preview.headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${sampleRows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><div class="notice">${icon("history", 16)} Les doublons seront traités selon votre choix. L’import complet reste une seule révision restaurable.</div></section></div><p class="form-error" role="alert"></p>${modalActions(`Importer ${preview.rows.length} ligne${preview.rows.length === 1 ? "" : "s"}`)}</form>`;
     }
     if (kind === "user") {
       const item = existingId ? state.users.find((user) => user.id === existingId) : null;
@@ -4799,6 +5002,8 @@
   function toast(message, type = "success") {
     const node = document.createElement("div");
     node.className = `toast ${type}`;
+    node.setAttribute("role", type === "success" ? "status" : "alert");
+    node.setAttribute("aria-live", type === "success" ? "polite" : "assertive");
     node.innerHTML = `${icon(type === "success" ? "check" : "alert", 17)}<span>${escapeHtml(message)}</span>`;
     document.body.append(node);
     setTimeout(() => node.classList.add("visible"), 10);
@@ -4995,6 +5200,8 @@
       state.listSearch = "";
       state.listStatus = "all";
       state.listPage = 1;
+      state.activeSavedViewId = "";
+      state.selectedAssetRefs.clear();
     }
     if (nextPage === "organization" && nextDetail) activateOrganizationContext(nextDetail);
     if (["sites", "configurations", "procedures", "module"].includes(nextPage) && state.searchScope !== "global" && state.workspace.organizations.some((organization) => organization.id === state.searchScope)) state.filter = state.searchScope;
@@ -5046,12 +5253,87 @@
     if (routeTarget) {
       const organizationFilter = routeTarget.dataset.filterOrg;
       if (organizationFilter) { state.filter = organizationFilter; state.searchScope = organizationFilter; }
+      if (overlayRoot.innerHTML) closeModal();
       navigate(routeTarget.dataset.route);
       return;
     }
     const actionTarget = event.target.closest("[data-action]");
     if (!actionTarget || (modal && actionTarget.classList.contains("modal-backdrop"))) return;
     const action = actionTarget.dataset.action;
+    if (action === "open-command-palette") {
+      state.commandPaletteQuery = "";
+      showModal("command-palette");
+      return;
+    }
+    if (action === "dashboard-widgets") { showModal("dashboard-widgets"); return; }
+    if (action === "toggle-favorite") {
+      const ref = actionTarget.dataset.assetRef || "";
+      const current = favoriteAssetRefs();
+      const next = current.includes(ref) ? current.filter((item) => item !== ref) : [...current, ref].slice(-100);
+      try { await saveUserPreferences({ favoriteAssetRefs: next }); render(); toast(current.includes(ref) ? "Fiche retirée des favoris." : "Fiche ajoutée aux favoris."); }
+      catch (error) { toast(error.message, "error"); }
+      return;
+    }
+    if (action === "refresh-action-center") {
+      await Promise.all([loadWorkspace(), loadVault(), isAdministrator() ? loadDeploymentHealth({ renderAfter: false }) : Promise.resolve(), isAdministrator() ? loadBackupStatus({ renderAfter: false }) : Promise.resolve()]);
+      render();
+      toast("Centre d’actions actualisé.");
+      return;
+    }
+    if (action === "snooze-action") {
+      const key = actionTarget.dataset.key || "";
+      const days = Math.min(Math.max(Number(actionTarget.dataset.days) || 1, 1), 30);
+      const remaining = (userPreferences().snoozedActions || []).filter((item) => item.key !== key && Date.parse(item.until) > Date.now());
+      try { await saveUserPreferences({ snoozedActions: [...remaining, { key, until: new Date(Date.now() + days * 86400000).toISOString() }].slice(-100) }); render(); toast(`Action reportée de ${days} jour${days === 1 ? "" : "s"}.`); }
+      catch (error) { toast(error.message, "error"); }
+      return;
+    }
+    if (action === "save-current-view") {
+      state.savedViewContext = { page: actionTarget.dataset.viewPage || state.page, moduleId: actionTarget.dataset.moduleId || "" };
+      showModal("saved-view");
+      return;
+    }
+    if (action === "delete-saved-view") {
+      const id = actionTarget.dataset.id || "";
+      try { await saveUserPreferences({ savedViews: (userPreferences().savedViews || []).filter((view) => view.id !== id) }); state.activeSavedViewId = ""; render(); toast("Vue enregistrée supprimée."); }
+      catch (error) { toast(error.message, "error"); }
+      return;
+    }
+    if (action === "clear-selection") { state.selectedAssetRefs.clear(); render(); return; }
+    if (action === "open-bulk-edit") { if (state.selectedAssetRefs.size) showModal("bulk-edit"); return; }
+    if (action === "install-starter-pack") {
+      if (!canWrite()) { toast("Ce compte est en consultation seulement.", "error"); return; }
+      const pack = starterPacks.find((item) => item.id === actionTarget.dataset.id);
+      if (!pack) return;
+      const additions = pack.templates.filter(([name]) => !state.workspace.templates.some((template) => normalizeSearch(template.name) === normalizeSearch(name))).map(([name, moduleId, tags, summary, notes]) => ({ id: uniqueId("tpl", name, state.workspace.templates), name, moduleId, defaultTags: tags, defaultSummary: summary, defaultNotes: notes }));
+      if (!additions.length) return toast("Ce pack est déjà complet.");
+      await commit((workspace) => workspace.templates.push(...additions), "Pack de modèles installé", `${pack.name} · ${additions.length} modèles`, "template-pack");
+      return;
+    }
+    if (action === "print-report") { window.print(); return; }
+    if (action === "download-report-json") {
+      const organizationId = activeOrganizationId();
+      const organization = state.workspace.organizations.find((item) => item.id === organizationId);
+      if (!organization) return;
+      const payload = {
+        generatedAt: new Date().toISOString(),
+        organization: { id: organization.id, name: organization.name, code: organization.code, industry: organization.industry, status: organization.status },
+        sites: state.workspace.sites.filter((item) => item.organizationId === organizationId && item.status !== "archived").map((item) => ({ id: item.id, name: item.name, address: item.address, timezone: item.timezone, status: item.status })),
+        configurations: state.workspace.configurations.filter((item) => item.organizationId === organizationId && item.status !== "archived").map((item) => ({ id: item.id, name: item.name, type: item.type, operatingSystem: item.os, owner: item.owner, location: item.location, criticality: item.criticality, status: item.status, lastReviewed: item.lastReviewed })),
+        procedures: state.workspace.procedures.filter((item) => item.organizationId === organizationId && item.status !== "archived").map((item) => ({ id: item.id, title: item.title, category: item.category, owner: item.owner, status: item.status, updatedAt: item.updatedAt })),
+        records: state.workspace.moduleRecords.filter((item) => item.organizationId === organizationId && item.status !== "archived").map((item) => ({ id: item.id, moduleId: item.moduleId, title: item.title, owner: item.owner, status: item.status, expiresOn: item.expiresOn, reviewState: item.reviewState, updatedAt: item.updatedAt })),
+        note: "Vault secrets, MFA data, accounts, attachments, free-form notes, detailed fields and private Quick Notes are excluded.",
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `atlas-report-${organization.code.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url); toast("Rapport JSON téléchargé sans secret du coffre.");
+      return;
+    }
+    if (action === "export-audit") {
+      const rows = [...document.querySelectorAll(".activity-explorer-page tbody tr")].map((row) => [...row.cells].map((cell) => cell.textContent.trim()));
+      const csvCell = (value) => `"${String(value || "").replaceAll('"', '""')}"`;
+      const csv = [["Date", "Actor", "Action", "Target", "Type"], ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+      const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `atlas-audit-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url); toast("Page d’audit exportée.");
+      return;
+    }
     if (action === "refresh-quality") {
       state.qualityReport = null;
       await loadQualityReport();
@@ -5587,6 +5869,50 @@
   });
 
   document.addEventListener("change", async (event) => {
+    if (event.target.matches("[data-select-asset-ref]")) {
+      const ref = event.target.dataset.selectAssetRef;
+      if (event.target.checked) state.selectedAssetRefs.add(ref); else state.selectedAssetRefs.delete(ref);
+      render();
+      return;
+    }
+    if (event.target.matches("[data-select-page]")) {
+      document.querySelectorAll("[data-select-asset-ref]").forEach((input) => { if (event.target.checked) state.selectedAssetRefs.add(input.dataset.selectAssetRef); else state.selectedAssetRefs.delete(input.dataset.selectAssetRef); });
+      render();
+      return;
+    }
+    if (event.target.matches("[data-saved-view-picker]")) {
+      const id = event.target.value;
+      const view = (userPreferences().savedViews || []).find((item) => item.id === id);
+      state.activeSavedViewId = id;
+      if (!view) { render(); return; }
+      if (view.organizationId && state.workspace.organizations.some((organization) => organization.id === view.organizationId)) activateOrganizationContext(view.organizationId);
+      navigate(view.page === "module" ? `module/${view.moduleId}` : view.page);
+      state.activeSavedViewId = id;
+      state.listSearch = view.search || "";
+      if (view.page === "configurations") state.filter = view.status || "all"; else state.listStatus = view.status || "all";
+      state.listPage = 1;
+      return;
+    }
+    if (event.target.matches("[data-action-severity]")) { state.actionSeverity = event.target.value; render(); return; }
+    if (event.target.matches("[data-action-organization]")) { state.actionOrganization = event.target.value; render(); return; }
+    if (event.target.matches("[data-audit-filter]")) {
+      const kind = event.target.dataset.auditFilter;
+      if (kind === "actor") state.auditActor = event.target.value;
+      if (kind === "action") state.auditAction = event.target.value;
+      if (kind === "organization") state.auditOrganization = event.target.value;
+      state.listPage = 1; render(); return;
+    }
+    if (event.target.matches("[data-audit-date]")) { state.auditDateFrom = event.target.value; state.listPage = 1; render(); return; }
+    if (event.target.matches("[data-import-profile]")) {
+      state.importProfileId = event.target.value;
+      showModal("guided-import");
+      return;
+    }
+    if (event.target.matches('form[data-form="bulk-edit"] select[name="bulkAction"]')) {
+      const owner = event.target.closest("form")?.querySelector("[data-bulk-owner]");
+      if (owner) owner.hidden = event.target.value !== "owner";
+      return;
+    }
     if (event.target.matches("[data-deployment-access-mode]")) {
       const form = event.target.closest('form[data-form="settings"]');
       const proxy = form?.querySelector("[data-reverse-proxy]");
@@ -5677,6 +6003,20 @@
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.matches("[data-command-query]")) {
+      state.commandPaletteQuery = event.target.value;
+      const caret = state.commandPaletteQuery.length;
+      showModal("command-palette");
+      requestAnimationFrame(() => { const input = document.querySelector("[data-command-query]"); if (input) { input.focus(); input.setSelectionRange(caret, caret); } });
+      return;
+    }
+    if (event.target.matches("[data-action-search]")) {
+      state.actionSearch = event.target.value;
+      const caret = state.actionSearch.length;
+      render();
+      requestAnimationFrame(() => { const input = document.querySelector("[data-action-search]"); if (input) { input.focus(); input.setSelectionRange(caret, caret); } });
+      return;
+    }
     if (event.target.matches("[data-help-search]")) {
       state.helpSearch = event.target.value;
       state.helpCategory = "all";
@@ -5870,11 +6210,31 @@
     const headers = rows[0].map((header, index) => header || `Colonne ${index + 1}`);
     if (new Set(headers.map(normalizeSearch)).size !== headers.length) throw new Error("Chaque colonne du CSV doit avoir un en-tête unique.");
     const target = document.querySelector("[data-guided-import-target]")?.value || "organizations";
+    state.importProfileId = "";
     state.importPreview = { fileName: file.name, target, headers, rows: rows.slice(1) };
     showModal("guided-import");
   }
 
   document.addEventListener("keydown", (event) => {
+    if (event.altKey && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      state.commandPaletteQuery = "";
+      showModal("command-palette");
+      return;
+    }
+    const commandQuery = event.target.closest?.("[data-command-query]");
+    if (commandQuery && ["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+      const options = [...document.querySelectorAll(".command-palette-results [data-route]")];
+      if (!options.length) return;
+      let index = Number(commandQuery.dataset.activeIndex || -1);
+      if (event.key === "Enter") { event.preventDefault(); (index >= 0 ? options[index] : options[0])?.click(); return; }
+      event.preventDefault();
+      index = event.key === "ArrowDown" ? Math.min(index + 1, options.length - 1) : Math.max(index - 1, 0);
+      commandQuery.dataset.activeIndex = String(index);
+      options.forEach((option, optionIndex) => option.classList.toggle("active", optionIndex === index));
+      options[index]?.scrollIntoView({ block: "nearest" });
+      return;
+    }
     if (state.profileMenuOpen && event.key === "Escape") {
       event.preventDefault();
       state.profileMenuOpen = false;
@@ -6017,6 +6377,49 @@
         navigate("dashboard");
         render();
         return;
+      }
+      if (form.dataset.form === "saved-view") {
+        const context = state.savedViewContext || { page: state.page, moduleId: state.detailId || "" };
+        const views = [...(userPreferences().savedViews || [])];
+        const id = `view-${Date.now().toString(36)}`;
+        views.push({ id, name: String(data.name || "").trim(), page: context.page, moduleId: context.moduleId || "", organizationId: activeOrganizationId() || "", status: context.page === "configurations" ? state.filter : state.listStatus, search: state.listSearch });
+        await saveUserPreferences({ savedViews: views.slice(-50) });
+        state.activeSavedViewId = id;
+        state.savedViewContext = null;
+        closeModal(); render(); toast("Vue enregistrée pour votre compte."); return;
+      }
+      if (form.dataset.form === "dashboard-widgets") {
+        await saveUserPreferences({ dashboardWidgets: formData.getAll("widgets") });
+        closeModal(); render(); toast("Vue d’ensemble personnalisée."); return;
+      }
+      if (form.dataset.form === "bulk-edit") {
+        if (!canWrite()) throw new Error("Ce compte ne peut pas modifier les fiches.");
+        const bulkAction = String(data.bulkAction || "");
+        const selectedAssets = [...state.selectedAssetRefs].map((ref) => assetByRef(ref)).filter((asset) => asset && asset.type !== "vault");
+        if (!selectedAssets.length) throw new Error("Sélectionnez au moins une fiche.");
+        if (selectedAssets.length > 1000) throw new Error("Un lot peut contenir au maximum 1 000 fiches.");
+        const collectionForType = { configuration: "configurations", site: "sites", procedure: "procedures", module: "moduleRecords" };
+        const now = new Date().toISOString();
+        const operations = selectedAssets.map((asset) => {
+          const value = structuredClone(asset.raw);
+          if (bulkAction === "owner") {
+            const owner = String(data.owner || "").trim();
+            if (!owner) throw new Error("Saisissez le responsable à attribuer.");
+            value.owner = owner.slice(0, 96);
+          } else if (bulkAction === "review") {
+            value.status = "review";
+            if (asset.type === "module") value.reviewState = "in-review";
+          } else if (bulkAction === "active") {
+            value.status = asset.type === "configuration" ? "documented" : asset.type === "procedure" ? "published" : "active";
+          } else if (bulkAction === "archive") {
+            value.previousStatus = value.status || "active";
+            value.status = "archived";
+          } else throw new Error("Choisissez une action en lot valide.");
+          if (Object.hasOwn(value, "updatedAt")) value.updatedAt = now.slice(0, 10);
+          return { collection: collectionForType[asset.type], id: asset.id, expectedVersion: state.entityVersions[asset.ref] || 0, value };
+        });
+        const document = await api("/api/workspace/changeset", { method: "POST", body: JSON.stringify({ operations, action: `bulk-${bulkAction}`, activity: { action: "Action en lot", target: `${selectedAssets.length} fiches · ${bulkAction}`, kind: "bulk", organizationId: activeOrganizationId() || "" } }) });
+        state.workspace = document.data; state.revision = document.revision; state.entityVersions = document.entityVersions || state.entityVersions; normalizeWorkspace(); state.selectedAssetRefs.clear(); await loadWorkspaceHistory(); closeModal(); render(); toast(`${selectedAssets.length} fiche${selectedAssets.length === 1 ? "" : "s"} mise${selectedAssets.length === 1 ? "" : "s"} à jour.`); return;
       }
       if (form.dataset.form === "organization") {
         const existing = form.dataset.id ? state.workspace.organizations.find((entry) => entry.id === form.dataset.id) : null;
@@ -6184,6 +6587,14 @@
         const updated = [];
         let skipped = 0;
         const duplicateStrategy = ["skip", "merge", "create"].includes(data.duplicateStrategy) ? data.duplicateStrategy : "skip";
+        const profileName = String(data.saveProfileName || "").trim().slice(0, 80);
+        const profileMapping = {};
+        for (const select of form.querySelectorAll('select[name^="map_"]')) {
+          if (select.value === "") continue;
+          const columnIndex = Number(select.value);
+          if (!Number.isInteger(columnIndex) || !preview.headers[columnIndex]) continue;
+          profileMapping[select.name.slice(4)] = preview.headers[columnIndex];
+        }
         if (preview.target === "organizations") {
           const identifiers = [...state.workspace.organizations];
           for (const row of preview.rows) {
@@ -6232,7 +6643,16 @@
           }
           await commit((workspace) => { for (const item of updated) { const index = workspace.moduleRecords.findIndex((entry) => entry.id === item.id); if (index >= 0) workspace.moduleRecords[index] = item; } workspace.moduleRecords.push(...imported); }, "Import CSV terminé", `${imported.length} ajoutées · ${updated.length} complétées · ${skipped} ignorées · ${module.label}`, "import");
         }
+        if (profileName) {
+          const profiles = [...(userPreferences().importProfiles || [])];
+          const existingIndex = profiles.findIndex((profile) => profile.target === preview.target && normalizeSearch(profile.name) === normalizeSearch(profileName));
+          const profile = { id: existingIndex >= 0 ? profiles[existingIndex].id : `import-${Date.now().toString(36)}`, name: profileName, target: preview.target, mapping: profileMapping };
+          if (existingIndex >= 0) profiles[existingIndex] = profile; else profiles.unshift(profile);
+          await saveUserPreferences({ importProfiles: profiles.slice(0, 20) });
+        }
         state.importPreview = null;
+        state.importProfileId = "";
+        render();
         toast(`${imported.length} ajoutée${imported.length === 1 ? "" : "s"}, ${updated.length} complétée${updated.length === 1 ? "" : "s"}, ${skipped} doublon${skipped === 1 ? "" : "s"} ignoré${skipped === 1 ? "" : "s"}.`);
         return;
       }
@@ -6650,10 +7070,23 @@
     if (state.page === "settings" && state.detailId === "backups" && isAdministrator() && !state.backupStatus && !state.backupLoading) void loadBackupStatus();
     if (state.page === "settings" && state.detailId === "updates" && isAdministrator() && !state.updateStatus && !state.updateLoading) void loadUpdateStatus();
     if (state.page === "settings" && state.detailId === "integrations" && isAdministrator() && !state.localApiStatus && !state.localApiLoading) void loadLocalApiStatus();
+    if (state.page === "actions" && isAdministrator()) {
+      if (!state.deploymentHealth && !state.deploymentHealthLoading) void loadDeploymentHealth();
+      if (!state.backupStatus && !state.backupLoading) void loadBackupStatus();
+    }
     if (state.page === "asset" && state.detailId?.startsWith("vault:") && vaultSessionUnlocked() && state.revealedVaultItem?.id !== state.detailId.slice(6)) {
       void revealVaultItem(state.detailId.slice(6), { promptOnLocked: false });
     }
     requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+  });
+  window.addEventListener("online", () => {
+    state.online = true;
+    render();
+    toast("Connexion rétablie. Atlas peut de nouveau enregistrer vos modifications.");
+  });
+  window.addEventListener("offline", () => {
+    state.online = false;
+    render();
   });
   initializePwaInstall();
   if (!window.__ATLAS_TEST_NO_BOOT__) boot();

@@ -46,7 +46,7 @@ function New-CandidateRelease {
 if (-not $NodePath) { $NodePath = (Get-Command node -ErrorAction Stop).Source }
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 $baselineVersion = [string](Get-Content -LiteralPath (Join-Path $sourceRoot 'package.json') -Raw | ConvertFrom-Json).version
-if ($baselineVersion -ne '0.16.2') { throw "Ce scénario QA attend Atlas 0.16.2 comme base; version trouvée : $baselineVersion." }
+if ($baselineVersion -ne '0.17.0') { throw "Ce scénario QA attend Atlas 0.17.0 comme base; version trouvée : $baselineVersion." }
 if (netstat -ano -p tcp | Select-String -Pattern (':{0}\s+.*LISTENING\s+\d+\s*$' -f $Port) | Select-Object -First 1) {
     throw "Le port QA $Port est déjà occupé; aucun test n’a été lancé."
 }

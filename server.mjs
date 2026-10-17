@@ -56,10 +56,12 @@ const MFA_IP_LIMIT = 30;
 const MFA_CHALLENGE_LIMIT = 5;
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const ALLOWED_ATTACHMENT_EXTENSIONS = new Set([".pdf", ".txt", ".md", ".csv", ".json", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".docx", ".xlsx", ".pptx", ".zip", ".7z"]);
-const ATLAS_VERSION = "0.16.2";
+const ATLAS_VERSION = "0.17.0";
 const SSL_TRACKER_MAX_HOSTS = 20;
 const SSL_TRACKER_NORMAL_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000;
 const SSL_TRACKER_URGENT_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DASHBOARD_WIDGET_IDS = new Set(["priorities", "metrics", "password-health", "recent", "quick-access"]);
+const SAVED_VIEW_PAGES = new Set(["configurations", "sites", "procedures", "module"]);
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
@@ -260,6 +262,7 @@ function generateRecoveryCodes() {
 }
 
 function publicUser(user) {
+  const preferences = user.preferences && typeof user.preferences === "object" ? user.preferences : {};
   return {
     id: user.id,
     username: user.username,
@@ -274,9 +277,78 @@ function publicUser(user) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt || user.createdAt,
     preferences: {
-      visibleModules: Array.isArray(user.preferences?.visibleModules) ? user.preferences.visibleModules : null,
+      visibleModules: Array.isArray(preferences.visibleModules) ? preferences.visibleModules : null,
+      favoriteAssetRefs: Array.isArray(preferences.favoriteAssetRefs) ? preferences.favoriteAssetRefs : [],
+      savedViews: Array.isArray(preferences.savedViews) ? preferences.savedViews : [],
+      dashboardWidgets: Array.isArray(preferences.dashboardWidgets) ? preferences.dashboardWidgets : ["priorities", "metrics", "password-health", "recent", "quick-access"],
+      snoozedActions: Array.isArray(preferences.snoozedActions) ? preferences.snoozedActions : [],
+      importProfiles: Array.isArray(preferences.importProfiles) ? preferences.importProfiles : [],
     },
   };
+}
+
+function validatedUserPreferences(body, current = {}) {
+  const next = { ...(current && typeof current === "object" ? current : {}) };
+  if (Object.hasOwn(body, "visibleModules")) {
+    if (!Array.isArray(body.visibleModules) || body.visibleModules.length > 300 || body.visibleModules.some((id) => !isSafeId(id))) {
+      throw Object.assign(new Error("La liste des modules visibles est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    }
+    next.visibleModules = [...new Set(body.visibleModules)];
+  }
+  if (Object.hasOwn(body, "favoriteAssetRefs")) {
+    if (!Array.isArray(body.favoriteAssetRefs) || body.favoriteAssetRefs.length > 100 || body.favoriteAssetRefs.some((ref) => !isSafeAssetRef(ref))) {
+      throw Object.assign(new Error("La liste des favoris est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    }
+    next.favoriteAssetRefs = [...new Set(body.favoriteAssetRefs)];
+  }
+  if (Object.hasOwn(body, "dashboardWidgets")) {
+    if (!Array.isArray(body.dashboardWidgets) || body.dashboardWidgets.length > DASHBOARD_WIDGET_IDS.size || body.dashboardWidgets.some((id) => !DASHBOARD_WIDGET_IDS.has(id))) {
+      throw Object.assign(new Error("La configuration du tableau de bord est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    }
+    next.dashboardWidgets = [...new Set(body.dashboardWidgets)];
+  }
+  if (Object.hasOwn(body, "savedViews")) {
+    if (!Array.isArray(body.savedViews) || body.savedViews.length > 50) throw Object.assign(new Error("La liste des vues enregistrées est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    next.savedViews = body.savedViews.map((view) => {
+      const id = String(view?.id || "").trim();
+      const name = cleanText(view?.name, 80, true);
+      const page = String(view?.page || "").trim();
+      const moduleId = String(view?.moduleId || "").trim();
+      const organizationId = String(view?.organizationId || "").trim();
+      const status = String(view?.status || "all").trim();
+      const search = cleanText(view?.search || "", 200) || "";
+      if (!isSafeId(id) || !name || !SAVED_VIEW_PAGES.has(page) || (moduleId && !isSafeId(moduleId)) || (organizationId && !isSafeId(organizationId)) || !["all", "active", "review", "archived", "critical"].includes(status)) {
+        throw Object.assign(new Error("Une vue enregistrée contient une valeur invalide."), { statusCode: 400, code: "invalid_preferences" });
+      }
+      return { id, name, page, moduleId, organizationId, status, search };
+    });
+  }
+  if (Object.hasOwn(body, "snoozedActions")) {
+    if (!Array.isArray(body.snoozedActions) || body.snoozedActions.length > 100) throw Object.assign(new Error("La liste des actions reportées est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    next.snoozedActions = body.snoozedActions.map((item) => {
+      const key = String(item?.key || "").trim();
+      const until = safeIsoDate(item?.until);
+      if (!/^[a-z0-9:_-]{3,160}$/i.test(key) || !until) throw Object.assign(new Error("Une action reportée est invalide."), { statusCode: 400, code: "invalid_preferences" });
+      return { key, until };
+    });
+  }
+  if (Object.hasOwn(body, "importProfiles")) {
+    if (!Array.isArray(body.importProfiles) || body.importProfiles.length > 20) throw Object.assign(new Error("La liste des profils d’import est invalide."), { statusCode: 400, code: "invalid_preferences" });
+    next.importProfiles = body.importProfiles.map((profile) => {
+      const id = String(profile?.id || "").trim();
+      const name = cleanText(profile?.name, 80, true);
+      const target = String(profile?.target || "").trim();
+      const mapping = profile?.mapping && typeof profile.mapping === "object" && !Array.isArray(profile.mapping) ? profile.mapping : {};
+      if (!isSafeId(id) || !name || !/^(organizations|configurations|module:[a-z0-9-]+)$/i.test(target) || Object.keys(mapping).length > 50) throw Object.assign(new Error("Un profil d’import est invalide."), { statusCode: 400, code: "invalid_preferences" });
+      const cleanMapping = {};
+      for (const [field, column] of Object.entries(mapping)) {
+        if (!/^[a-zA-Z0-9_.-]{1,80}$/.test(field) || typeof column !== "string" || column.length > 120) throw Object.assign(new Error("La correspondance d’un profil d’import est invalide."), { statusCode: 400, code: "invalid_preferences" });
+        cleanMapping[field] = column;
+      }
+      return { id, name, target, mapping: cleanMapping };
+    });
+  }
+  return next;
 }
 
 function normalizedSecuritySettings(settings = {}) {
@@ -1215,9 +1287,13 @@ export function createAtlasServer(options = {}) {
         encryptedSecret: item.encryptedSecret,
         enabled: item.enabled !== false,
         createdAt: String(item.createdAt || ""),
+        lastAttemptAt: String(item.lastAttemptAt || item.lastDeliveryAt || ""),
         lastDeliveryAt: String(item.lastDeliveryAt || ""),
+        lastSuccessAt: String(item.lastSuccessAt || ""),
         lastStatus: Number(item.lastStatus) || 0,
         lastError: String(item.lastError || "").slice(0, 300),
+        deliveryCount: Math.max(0, Number(item.deliveryCount) || 0),
+        consecutiveFailures: Math.max(0, Number(item.consecutiveFailures) || 0),
       })) : [],
       updatedAt: String(source.updatedAt || ""),
     };
@@ -1284,16 +1360,29 @@ export function createAtlasServer(options = {}) {
     const targets = settings.webhooks.filter((item) => item.enabled && item.events.includes(eventName));
     if (!targets.length) return;
     for (const webhook of targets) {
-      try {
-        const result = await sendLocalWebhook(webhook, eventName, payload);
-        webhook.lastDeliveryAt = nowIso();
-        webhook.lastStatus = Number(result?.status) || 200;
-        webhook.lastError = "";
-      } catch (error) {
-        webhook.lastDeliveryAt = nowIso();
-        webhook.lastStatus = Number(error?.status) || 0;
-        webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300);
+      let delivered = false;
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3 && !delivered; attempt += 1) {
+        webhook.lastAttemptAt = nowIso();
+        webhook.deliveryCount += 1;
+        try {
+          const result = await sendLocalWebhook(webhook, eventName, payload);
+          webhook.lastDeliveryAt = nowIso();
+          webhook.lastSuccessAt = webhook.lastDeliveryAt;
+          webhook.lastStatus = Number(result?.status) || 200;
+          webhook.lastError = "";
+          webhook.consecutiveFailures = 0;
+          delivered = true;
+        } catch (error) {
+          lastError = error;
+          webhook.lastDeliveryAt = nowIso();
+          webhook.lastStatus = Number(error?.status) || 0;
+          webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300);
+          webhook.consecutiveFailures += 1;
+          if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
+        }
       }
+      if (!delivered && lastError) webhook.lastError = `${webhook.lastError} · 3 essais`.slice(0, 300);
     }
     await saveLocalApiSettings(settings);
   }
@@ -2146,16 +2235,13 @@ export function createAtlasServer(options = {}) {
         const session = requireSession(request, response, true);
         if (!session) return;
         const body = await readBody(request);
-        const visibleModules = body.visibleModules;
-        if (!Array.isArray(visibleModules) || visibleModules.length > 300 || visibleModules.some((id) => !isSafeId(id))) {
-          return errorResponse(response, 400, "invalid_preferences", "La liste des modules visibles est invalide.");
-        }
         let updatedUser;
         await enqueueWrite(async () => {
           const auth = await readJson(authPath, null);
           const user = auth?.users?.find((entry) => entry.id === session.userId && entry.enabled !== false);
           if (!user) throw Object.assign(new Error("Compte local introuvable."), { statusCode: 401 });
-          user.preferences = { ...(user.preferences || {}), visibleModules: [...new Set(visibleModules)] };
+          user.preferences = validatedUserPreferences(body, user.preferences);
+          user.updatedAt = nowIso();
           await writeJsonAtomic(authPath, auth);
           updatedUser = user;
         });
@@ -3174,7 +3260,7 @@ export function createAtlasServer(options = {}) {
         if (!label || !events.length) return errorResponse(response, 400, "invalid_webhook", "Ajoutez un nom et au moins un événement au webhook.");
         const settings = await readLocalApiSettings();
         const secret = `whsec_${randomBytes(32).toString("base64url")}`;
-        const item = { id: `webhook-${randomBytes(8).toString("hex")}`, label, url: webhookUrl, events, encryptedSecret: encryptPayload({ secret }, await getVaultKey()), enabled: true, createdAt: nowIso(), lastDeliveryAt: "", lastStatus: 0, lastError: "" };
+        const item = { id: `webhook-${randomBytes(8).toString("hex")}`, label, url: webhookUrl, events, encryptedSecret: encryptPayload({ secret }, await getVaultKey()), enabled: true, createdAt: nowIso(), lastAttemptAt: "", lastDeliveryAt: "", lastSuccessAt: "", lastStatus: 0, lastError: "", deliveryCount: 0, consecutiveFailures: 0 };
         settings.webhooks.push(item);
         const saved = await saveLocalApiSettings(settings);
         await recordAudit(context.user, "local-webhook-created", { details: { webhookId: item.id, label, url: webhookUrl, events } });
@@ -3210,10 +3296,11 @@ export function createAtlasServer(options = {}) {
         const webhook = settings.webhooks.find((item) => item.id === localWebhookTestMatch[1]);
         if (!webhook) return errorResponse(response, 404, "webhook_not_found", "Webhook local introuvable.");
         try {
+          webhook.lastAttemptAt = nowIso(); webhook.deliveryCount += 1;
           const delivered = await sendLocalWebhook(webhook, "workspace.updated", { test: true, actor: context.user.displayName });
-          webhook.lastDeliveryAt = nowIso(); webhook.lastStatus = Number(delivered?.status) || 200; webhook.lastError = "";
+          webhook.lastDeliveryAt = nowIso(); webhook.lastSuccessAt = webhook.lastDeliveryAt; webhook.lastStatus = Number(delivered?.status) || 200; webhook.lastError = ""; webhook.consecutiveFailures = 0;
         } catch (error) {
-          webhook.lastDeliveryAt = nowIso(); webhook.lastStatus = Number(error?.status) || 0; webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300);
+          webhook.lastDeliveryAt = nowIso(); webhook.lastStatus = Number(error?.status) || 0; webhook.lastError = String(error?.message || "Échec du webhook local").slice(0, 300); webhook.consecutiveFailures += 1;
           await saveLocalApiSettings(settings);
           await recordAudit(context.user, "local-webhook-tested", { details: { webhookId: webhook.id, success: false, message: webhook.lastError } });
           return errorResponse(response, 502, "webhook_delivery_failed", webhook.lastError);

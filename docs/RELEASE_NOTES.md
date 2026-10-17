@@ -1,5 +1,26 @@
 # TRC Community Atlas release notes
 
+## 0.17.0 — Personal productivity and client reporting
+
+- Added a unified action center that combines documentation, certificate,
+  password-rotation, backup, and instance-health follow-ups with explainable
+  severity and per-user snoozing.
+- Added personal favorites, configurable overview widgets, reusable saved list
+  views, and an `Alt+K` command palette.
+- Added audited bulk editing for configurations and module records without any
+  bulk path into the password vault.
+- Added a printable client report and a deliberately minimized JSON summary
+  that excludes vault data, MFA, attachments, free-form notes, and detailed
+  custom fields.
+- Added reusable CSV column-mapping profiles and three starter template packs
+  for MSP onboarding, Microsoft 365, and core networking.
+- Expanded the audit explorer with actor, action, organization, and date
+  filters plus a CSV export of the visible result page.
+- Added an explicit limited-offline indicator. The service worker continues to
+  cache only the application shell; APIs and business data remain uncached.
+- Added local webhook delivery counters, last-success visibility, and two
+  bounded automatic retries while retaining the loopback-only restriction.
+
 ## 0.16.2 — Compact expandable SSL overview
 
 - Replaced the redundant SSL Tracker record table with one compact expandable

@@ -1,6 +1,6 @@
 # TRC Community Atlas operations guide
 
-Guide version: **0.16.2**
+Guide version: **0.17.0**
 
 ## Instance port and configuration
 
@@ -158,6 +158,20 @@ Never overwrite or delete the source backup during a restore.
 JSON export is documentation-only. It excludes accounts, MFA, sessions, vault
 plaintext, vault keys, and binary attachments. Import replaces the active
 workspace after creating a rollback revision. It is not a full backup.
+
+The client-report JSON is narrower than the full documentation export: it also
+excludes Quick Notes, free-form notes, detailed custom fields, and archived
+records. CSV column-mapping profiles are stored as per-user preferences and do
+not contain imported row content.
+
+## Local webhooks
+
+Local webhooks remain restricted to explicit loopback HTTP URLs with a port.
+Each payload is signed with HMAC-SHA256. Automatic deliveries are attempted at
+most three times with short bounded delays; Atlas records the attempt count,
+last success, response status, consecutive failures, and last error. A manual
+test performs one delivery so operators can diagnose the receiver without
+creating an unbounded retry loop.
 
 ## Signed updates
 

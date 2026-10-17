@@ -1,6 +1,6 @@
 # TRC Community Atlas user guide
 
-Guide version: **0.16.2**
+Guide version: **0.17.0**
 
 ## Monitor public TLS certificates
 
@@ -60,8 +60,25 @@ are filtered and paginated by the local SQLite metadata index, so large
 collections do not require loading every fiche into the browser. Vault secrets
 are never indexed.
 
-Press `Ctrl+K` to focus global search. In the Help Center, press `/` to focus
-documentation search.
+Press `Ctrl+K` to focus global search. Press `Alt+K` to open the command palette
+and navigate to common pages or personal favorites without leaving the
+keyboard. In the Help Center, press `/` to focus documentation search.
+
+## Personal workspace and action center
+
+Select **Personalize** on Overview to choose the blocks shown on your own
+dashboard. Open any record and select its star to add it to personal favorites.
+These preferences do not change another technician's workspace.
+
+Open **Action center** from Overview to combine explicit documentation issues,
+TLS follow-ups, password-rotation reminders, failed backups, and instance-health
+warnings. Every item states its source. **Tomorrow** and **7 days** hide an item
+only for the current account and never change the underlying record.
+
+On configuration and module lists, use **Save view** to preserve the active
+company, text search, and status filter. Use the row checkboxes for audited bulk
+owner, review-state, activation, or archive changes. Password-vault records are
+deliberately excluded from bulk operations.
 
 ## Create and edit records
 
@@ -111,6 +128,25 @@ Atlas compares the appropriate business key for the destination, such as
 company name/code, configuration name/IP, or module title/reference. The whole
 import remains one reversible workspace revision.
 
+Enter a mapping-profile name in the preview to reuse the selected CSV column
+mapping on future imports to the same destination. Profiles belong only to the
+current account and never contain imported row data.
+
+## Starter packs and client reports
+
+The **Templates** page includes starter packs for MSP client onboarding,
+Microsoft 365, and network-core documentation. Installing a pack creates only
+missing templates; it never creates client records or crosses organization
+boundaries.
+
+Open **Client report** under Atlas tools for the active company. The printable
+view can be saved as PDF by the browser. Its JSON option exports minimized
+inventory metadata and excludes the vault, MFA, accounts, attachments, Quick
+Notes, free-form notes, and detailed custom fields.
+
+Administrators can filter Activity by actor, action, company, and starting date,
+then export the currently displayed page as CSV.
+
 ## Documents and procedures
 
 The document editor includes Write, Split, and Preview modes, plus full-screen
@@ -150,6 +186,11 @@ On a supported mobile browser, Atlas offers installation as a Progressive Web
 App. The installation banner does not appear after Atlas is running in the
 installed application. Only the static application shell is cached; APIs and
 business data always come from the Atlas instance.
+
+If connectivity is lost, Atlas displays **Limited offline mode**. Previously
+rendered interface elements may remain visible, but saving, APIs, and the vault
+stay unavailable until reconnection. Atlas never persists editable business
+drafts or secrets in the service-worker cache.
 
 ## Initial configuration and health
 
