@@ -1,5 +1,14 @@
 # TRC Community Atlas release notes
 
+## 0.17.1 — Larger configuration attachments
+
+- Increased the decoded attachment limit from 8 MB to 20 MB and adjusted the
+  endpoint-specific Base64 request envelope without changing other API limits.
+- Added `.conf`, `.ovpn`, `.cfg`, `.ini`, `.yaml`, `.yml`, `.toml`, `.xml`,
+  `.cnf`, and `.properties` to the explicit non-executable attachment allowlist.
+- Kept executable extensions rejected and every attachment download forced with
+  `Content-Disposition: attachment` and `nosniff` protections.
+
 ## 0.17.0 — Personal productivity and client reporting
 
 - Added a unified action center that combines documentation, certificate,

@@ -1,6 +1,6 @@
 # Install TRC Community Atlas on Windows
 
-Guide version: **0.17.0**
+Guide version: **0.17.1**
 
 This guide describes the recommended installation on Windows 10 or Windows 11
 x64. The standalone Release contains its own Node.js runtime. A normal user does

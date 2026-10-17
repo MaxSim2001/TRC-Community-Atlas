@@ -4,7 +4,7 @@
   const app = document.getElementById("app");
   const pwaInstallRoot = document.getElementById("pwa-install-root");
   const overlayRoot = document.getElementById("overlay-root");
-  const ATLAS_VERSION = "0.17.0";
+  const ATLAS_VERSION = "0.17.1";
   const helpCatalog = window.ATLAS_HELP_CATALOG || { categories: [], articles: [] };
   const storageKeys = {
     theme: "trc-atlas-theme",
@@ -4716,8 +4716,8 @@
     const items = state.attachments.filter((item) => item.assetRef === asset.ref).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     const vaultLocked = asset.type === "vault" && state.revealedVaultItem?.id !== asset.id;
     const canManage = canWrite() && !asset.archived && !vaultLocked;
-    const upload = canManage ? `<label class="attachment-upload-control">${icon("plus", 14)} <span>Ajouter un fichier</span><input type="file" data-attachment-input data-asset-ref="${escapeHtml(asset.ref)}" accept=".pdf,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.webp,.docx,.xlsx,.pptx,.zip,.7z" /></label>` : "";
-    const notice = vaultLocked ? `<p class="asset-context-note">Déverrouillez ce mot de passe avec le MFA pour télécharger ou ajouter un fichier.</p>` : asset.archived ? `<p class="asset-context-note">Cette fiche est archivée; ses pièces jointes restent téléchargeables.</p>` : `<p class="asset-context-note">PDF, images, documents Office, texte ou archive · 8 Mo maximum.</p>`;
+    const upload = canManage ? `<label class="attachment-upload-control">${icon("plus", 14)} <span>Ajouter un fichier</span><input type="file" data-attachment-input data-asset-ref="${escapeHtml(asset.ref)}" accept=".pdf,.txt,.md,.csv,.json,.png,.jpg,.jpeg,.gif,.webp,.docx,.xlsx,.pptx,.zip,.7z,.conf,.ovpn,.cfg,.ini,.yaml,.yml,.toml,.xml,.cnf,.properties" /></label>` : "";
+    const notice = vaultLocked ? `<p class="asset-context-note">Déverrouillez ce mot de passe avec le MFA pour télécharger ou ajouter un fichier.</p>` : asset.archived ? `<p class="asset-context-note">Cette fiche est archivée; ses pièces jointes restent téléchargeables.</p>` : `<p class="asset-context-note">PDF, images, Office, texte, configuration ou archive · 20 Mo maximum.</p>`;
     const list = items.length ? `<div class="attachment-list">${items.map((item) => `<article><span class="attachment-file-icon">${icon("file", 16)}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${formatFileSize(item.size)} · ${escapeHtml(item.createdBy || "Utilisateur local")}<br>${formatDateTime(item.createdAt)}</small></div><div class="attachment-actions"><button class="icon-button" type="button" data-action="download-attachment" data-id="${escapeHtml(item.id)}" aria-label="Télécharger ${escapeHtml(item.name)}" ${vaultLocked ? "disabled" : ""}>${icon("download", 15)}</button>${canManage ? `<button class="icon-button danger" type="button" data-action="delete-attachment" data-id="${escapeHtml(item.id)}" data-name="${escapeHtml(item.name)}" aria-label="Retirer ${escapeHtml(item.name)}">${icon("trash", 15)}</button>` : ""}</div></article>`).join("")}</div>` : `<p class="asset-context-empty">Aucune pièce jointe pour cette fiche.</p>`;
     return `<section class="asset-context-card attachment-card"><header><div><p class="eyebrow">FICHIERS</p><h2>Pièces jointes</h2></div><strong class="asset-context-count">${items.length}</strong></header>${upload}${list}${notice}</section>`;
   }
@@ -6123,7 +6123,7 @@
 
   async function uploadAttachment(file, assetRef) {
     if (!file || !assetRef || !canWrite()) return;
-    if (file.size <= 0 || file.size > 8 * 1024 * 1024) throw new Error("La pièce jointe doit contenir entre 1 octet et 8 Mo.");
+    if (file.size <= 0 || file.size > 20 * 1024 * 1024) throw new Error("La pièce jointe doit contenir entre 1 octet et 20 Mo.");
     const data = arrayBufferToBase64(await file.arrayBuffer());
     await api("/api/attachments", { method: "POST", body: JSON.stringify({ assetRef, name: file.name, mimeType: file.type || "application/octet-stream", data }) });
     await loadAttachments();

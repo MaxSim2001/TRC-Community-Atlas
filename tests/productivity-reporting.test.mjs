@@ -87,16 +87,18 @@ test("offline shell and local webhook retries keep security boundaries", async (
   assert.match(server, /hostName === "localhost" \|\| hostName === "127\.0\.0\.1" \|\| hostName === "::1"/);
 });
 
-test("release documentation covers the 0.17.0 workflows", async () => {
+test("release documentation covers the current release and the 0.17.0 workflows", async () => {
   const [readme, notes, guide, help] = await Promise.all([
     readFile(path.join(root, "README.md"), "utf8"),
     readFile(path.join(root, "docs", "RELEASE_NOTES.md"), "utf8"),
     readFile(path.join(root, "docs", "USER_GUIDE.md"), "utf8"),
     readFile(path.join(root, "public", "assets", "help-content.js"), "utf8"),
   ]);
-  assert.match(readme, /Current version: \*\*0\.17\.0\*\*/);
+  assert.match(readme, /Current version: \*\*0\.17\.1\*\*/);
+  assert.match(notes, /0\.17\.1 — Larger configuration attachments/);
   assert.match(notes, /0\.17\.0 — Personal productivity and client reporting/);
   assert.match(guide, /Personal workspace and action center/);
+  assert.match(help, /Version 0\.17\.1/);
   assert.match(help, /Version 0\.17\.0/);
 });
 

@@ -83,7 +83,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.deepEqual(result.payload, { setupRequired: true });
   result = await request("/api/status/details");
   assert.equal(result.payload.initialized, false);
-  assert.equal(result.payload.version, "0.17.0");
+  assert.equal(result.payload.version, "0.17.1");
   assert.equal(result.payload.storage, "uninitialized");
 
   result = await request("/api/setup", { method: "POST", headers: { origin: "https://malicious.invalid" }, body: { displayName: "Intrus", username: "intrus", password: "invalid-password" } });
@@ -183,7 +183,7 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.equal(result.response.status, 401);
   result = await request("/api/v1/health", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
-  assert.equal(result.payload.version, "0.17.0");
+  assert.equal(result.payload.version, "0.17.1");
   result = await request("/api/v1/organizations", { headers: { authorization: `Bearer ${localApiToken}` } });
   assert.equal(result.response.status, 200);
   assert.ok(result.payload.items.length >= 1);
@@ -237,9 +237,29 @@ test("local setup, explicit public origin, mandatory MFA, workspace revision and
   assert.match(attachmentDownload.headers.get("content-disposition"), /validation-atlas\.txt/);
   assert.deepEqual(Buffer.from(await attachmentDownload.arrayBuffer()), attachmentContent);
 
+  const openVpnContent = Buffer.from("client\ndev tun\nremote vpn.example.invalid 1194\n", "utf8");
+  result = await request("/api/attachments", { method: "POST", csrf, body: { assetRef: "configuration:cfg-nsa-dc01", name: "client-test.ovpn", mimeType: "application/x-openvpn-profile", data: openVpnContent.toString("base64") } });
+  assert.equal(result.response.status, 201);
+  assert.equal(result.payload.item.name, "client-test.ovpn");
+  const openVpnAttachmentId = result.payload.item.id;
+  const openVpnDownload = await fetch(`${base}/api/attachments/${openVpnAttachmentId}/download`, { headers: { cookie } });
+  assert.equal(openVpnDownload.status, 200);
+  assert.match(openVpnDownload.headers.get("content-disposition"), /client-test\.ovpn/);
+  assert.deepEqual(Buffer.from(await openVpnDownload.arrayBuffer()), openVpnContent);
+
+  const maximumAttachment = Buffer.alloc(20 * 1024 * 1024, 0x41);
+  result = await request("/api/attachments", { method: "POST", csrf, body: { assetRef: "configuration:cfg-nsa-dc01", name: "maximum-20mb.conf", mimeType: "application/octet-stream", data: maximumAttachment.toString("base64") } });
+  assert.equal(result.response.status, 201);
+  assert.equal(result.payload.item.size, 20 * 1024 * 1024);
+  const maximumAttachmentId = result.payload.item.id;
+
   result = await request("/api/attachments", { method: "POST", csrf, body: { assetRef: "configuration:cfg-nsa-dc01", name: "interdit.exe", mimeType: "application/octet-stream", data: attachmentContent.toString("base64") } });
   assert.equal(result.response.status, 400);
 
+  result = await request(`/api/attachments/${openVpnAttachmentId}`, { method: "DELETE", csrf, body: {} });
+  assert.equal(result.response.status, 200);
+  result = await request(`/api/attachments/${maximumAttachmentId}`, { method: "DELETE", csrf, body: {} });
+  assert.equal(result.response.status, 200);
   result = await request(`/api/attachments/${attachmentId}`, { method: "DELETE", csrf, body: {} });
   assert.equal(result.response.status, 200);
   result = await request("/api/attachments?assetRef=configuration%3Acfg-nsa-dc01");

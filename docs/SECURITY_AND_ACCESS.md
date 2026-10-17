@@ -1,6 +1,6 @@
 # Security and access
 
-Guide version: **0.17.0**
+Guide version: **0.17.1**
 
 ## Autonomous security model
 
@@ -74,7 +74,8 @@ exact IP address of each proxy under **Settings > Initial configuration**.
 Unpublished paths return a real `404`; they never receive the application shell.
 
 Sensitive JSON bodies are limited to 8 KiB, ordinary requests to 256 KiB,
-imports to 16 MiB, and attachment envelopes to 12 MiB.
+imports to 16 MiB, and Base64 attachment envelopes to 28 MiB for a maximum
+decoded file size of 20 MiB.
 
 ## Backup and update trust
 

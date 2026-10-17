@@ -1,6 +1,6 @@
 # TRC Community Atlas user guide
 
-Guide version: **0.17.0**
+Guide version: **0.17.1**
 
 ## Monitor public TLS certificates
 
